@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Bot - Salón de Belleza</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+        }
+        
+        .logo {
+            font-size: 60px;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-weight: bold;
+        }
+        
+        .connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .info-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        
+        .info-title {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 10px;
+        }
+        
+        .refresh-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+            transition: background 0.3s;
+        }
+        
+        .refresh-btn:hover {
+            background: #5a6fd8;
+        }
+        
+        .qr-section {
+            margin-top: 30px;
+        }
+        
+        .qr-link {
+            display: inline-block;
+            background: #28a745;
+            color: white;
+            text-decoration: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            margin-top: 15px;
+            transition: background 0.3s;
+        }
+        
+        .qr-link:hover {
+            background: #218838;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+                margin: 20px;
+            }
+            
+            .logo {
+                font-size: 40px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🤖💅</div>
+        <h1>WhatsApp Bot</h1>
+        <p class="subtitle">Salón de Belleza Premium</p>
+        
+        <div id="status" class="status disconnected">
+            🔄 Cargando estado...
+        </div>
+        
+        <div class="info-card">
+            <div class="info-title">📊 Estadísticas</div>
+            <p>Conversaciones activas: <span id="conversations">-</span></p>
+            <p>Tiempo activo: <span id="uptime">-</span></p>
+        </div>
+        
+        <div class="info-card">
+            <div class="info-title">📱 Funciones del Bot</div>
+            <ul>
+                <li>✅ Agendar citas automáticamente</li>
+                <li>✅ Mostrar servicios y precios</li>
+                <li>✅ Seleccionar manicuristas</li>
+                <li>✅ Confirmar horarios disponibles</li>
+                <li>✅ Información del salón</li>
+            </ul>
+        </div>
+        
+        <div id="qr-section" class="qr-section" style="display: none;">
+            <h3>📱 Conectar WhatsApp</h3>
+            <p>Escanea el código QR para activar el bot</p>
+            <a href="/qr" class="qr-link" target="_blank">Ver Código QR</a>
+        </div>
+        
+        <button onclick="refreshStatus()" class="refresh-btn">
+            🔄 Actualizar Estado
+        </button>
+    </div>
+
+    <script>
+        async function refreshStatus() {
+            try {
+                const response = await fetch('/status');
+                const data = await response.json();
+                
+                const statusDiv = document.getElementById('status');
+                const conversationsSpan = document.getElementById('conversations');
+                const uptimeSpan = document.getElementById('uptime');
+                const qrSection = document.getElementById('qr-section');
+                
+                if (data.connected) {
+                    statusDiv.textContent = '✅ Bot Conectado';
+                    statusDiv.className = 'status connected';
+                    qrSection.style.display = 'none';
+                } else {
+                    statusDiv.textContent = '❌ Bot Desconectado';
+                    statusDiv.className = 'status disconnected';
+                    qrSection.style.display = 'block';
+                }
+                
+                conversationsSpan.textContent = data.activeConversations;
+                
+                const hours = Math.floor(data.uptime / 3600);
+                const minutes = Math.floor((data.uptime % 3600) / 60);
+                uptimeSpan.textContent = `${hours}h ${minutes}m`;
+                
+            } catch (error) {
+                console.error('Error al obtener estado:', error);
+                document.getElementById('status').textContent = '❌ Error de conexión';
+                document.getElementById('status').className = 'status disconnected';
+            }
+        }
+        
+        // Actualizar estado cada 30 segundos
+        setInterval(refreshStatus, 30000);
+        
+        // Cargar estado inicial
+        refreshStatus();
+    </script>
+</body>
+</html>

@@ -1,0 +1,1672 @@
+// ==========================
+// server.js - WhatsApp Bot Salón de Belleza
+// ==========================
+const express = require('express');
+const cors = require('cors');
+const fs = require("fs");
+const { ref, get, set } = require('firebase/database');
+const db = require('./firebase'); // tu archivo firebase.js
+const { v4: uuidv4 } = require("uuid"); // para generar IDs únicos
+const {
+    default: makeWASocket,
+    DisconnectReason,
+    useMultiFileAuthState
+} = require('@whiskeysockets/baileys');
+const pino = require('pino');
+const qrcode = require('qrcode');
+
+// ==========================
+// Configuración del servidor
+// ==========================
+const app = express();
+const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || 'localhost';
+
+app.use(cors());
+app.use(express.json());
+app.use(express.static('public'));
+
+let sock;
+let qrCode = '';
+let isConnected = false;
+let conversacionesActivas = new Map();
+const logger = pino({ level: 'silent' });
+
+
+// ==========================
+// Endpoint QR
+// ==========================
+app.get("/qr", (req, res) => {
+    res.send(`
+    <html>
+    <head>
+        <title>Escanea el QR - JazNails</title>
+        <style>
+            body {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                flex-direction: column;
+                font-family: Arial, sans-serif;
+                background-color: #f8f8f8;
+                text-align: center;
+            }
+            img {
+                margin: 20px 0;
+                border: 2px solid #ddd;
+                border-radius: 10px;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            }
+            h1 { color: #E91E63; }
+        </style>
+    </head>
+    <body>
+        ${isConnected ? `
+            <h1>✅ WhatsApp ya está conectado</h1>
+            <p>No es necesario escanear el código QR.</p>
+        ` : qrCode ? `
+            <h1>📱 Escanea el código QR</h1>
+            <img src="${qrCode}" width="300" />
+            <p>⚠️ Si no funciona, actualiza la página para obtener uno nuevo.</p>
+        ` : `
+            <h1>⏳ Generando código QR...</h1>
+            <p>Por favor, actualiza esta página en unos segundos.</p>
+        `}
+    </body>
+    </html>
+    `);
+});
+
+// ==========================
+// Reiniciar sesión manual
+// ==========================
+app.get("/reiniciar", async (req, res) => {
+    try {
+        // Elimina credenciales anteriores
+        fs.rmSync("baileys_auth", { recursive: true, force: true });
+        isConnected = false;
+        qrCode = null;
+
+        // Llamar la función correcta
+        await startWhatsApp();
+
+        res.send(`
+            <h3>🔄 Sesión reiniciada correctamente.</h3>
+            <p>Ve a <a href='/qr'>/qr</a> para escanear un nuevo código QR.</p>
+        `);
+    } catch (error) {
+        console.error("❌ Error al reiniciar la sesión:", error);
+        res.status(500).send("❌ Error al reiniciar la sesión: " + error.message);
+    }
+});
+
+
+// ==========================
+// Iniciar servidor
+// ==========================
+app.listen(PORT, () => {
+    console.log(`🚀 Servidor iniciado en http://localhost:${PORT}`);
+    startWhatsApp();
+});
+
+
+
+// ==========================
+// Funciones Firebase
+// ==========================
+async function getClientes() {
+    const snapshot = await get(ref(db, 'clientes'));
+    return snapshot.exists() ? snapshot.val() : {};
+}
+
+async function saveCliente(telefono, nombre) {
+    await set(ref(db, `clientes/${telefono}`), { nombre, telefono });
+    console.log(`✅ Cliente registrado: ${nombre} (${telefono})`);
+}
+
+
+
+async function getServicios() {
+    const snapshot = await get(ref(db, 'servicios'));
+    if (!snapshot.exists()) return [];
+    // Convertir objeto a array
+    return Object.values(snapshot.val());
+}
+
+// Guardar cita en Firebase
+async function guardarCitaFirebase(telefono, conversacion) {
+    try {
+        const cita = conversacion.datosTemporales;
+
+        // Validar fecha
+        if (!cita.fechaSeleccionada || !esFechaPermitida(cita.fechaSeleccionada)) {
+            return {
+                exito: false,
+                mensaje: "⚠️ Solo puedes reservar citas para esta semana o la siguiente. Por favor, selecciona otra fecha."
+            };
+        }
+
+        // Validar horario permitido
+        if (!cita.hora || !esHorarioValido(cita.fechaSeleccionada, cita.hora)) {
+            return {
+                exito: false,
+                mensaje: "⚠️ El horario seleccionado no es válido.\n" +
+                         "⏰ Lunes a Viernes: 19:00 - 21:00\n" +
+                         "📅 Sábados y Domingos: 09:00 a 21:00.\n" +
+                         "Por favor selecciona otra hora."
+            };
+        }
+
+        // Verificar disponibilidad de la manicurista
+        const disponible = await verificarDisponibilidad(
+            cita.fechaSeleccionada,
+            cita.hora,
+            cita.manicurista
+        );
+
+        if (!disponible) {
+            return {
+                exito: false,
+                mensaje: `⚠️ Lo siento, la manicurista ya tiene una cita el ${cita.fechaSeleccionada} a las ${cita.hora}.\nPor favor selecciona otro horario.`
+            };
+        }
+
+        // Guardar cita
+        const citaId = uuidv4();
+        const citaData = {
+            clienteId: telefono.replace('@s.whatsapp.net', ''),
+            servicioId: cita.servicioSeleccionado.id,
+            manicuristaId: cita.manicurista,
+            fecha: cita.fechaSeleccionada,
+            hora: cita.hora,
+            estado: "Reservada",
+            notas: cita.notas || "",
+            fechaCreacion: new Date().toISOString(),
+            usuarioCreacion: "chat-bot"
+        };
+
+        await set(ref(db, `citas/${citaId}`), citaData);
+
+        return {
+            exito: true,
+            mensaje: `✅ ¡Cita agendada correctamente!\n\n` +
+                     `📅 Fecha: ${cita.fechaSeleccionada}\n` +
+                     `🕒 Hora: ${cita.hora}\n` +
+                     `💅 Servicio: ${cita.servicioSeleccionado.nombre}\n` +
+                     `👩‍🎨 Manicurista: ${cita.manicurista}\n` +
+                     `🔑 ID de Cita: ${citaId}`
+        };
+
+    } catch (error) {
+        console.error("❌ Error guardando cita en Firebase:", error);
+        return {
+            exito: false,
+            mensaje: "❌ Ocurrió un error al guardar tu cita. Por favor, intenta de nuevo."
+        };
+    }
+}
+
+
+
+// ==========================
+// WhatsApp Bot
+// ==========================
+async function startWhatsApp() {
+    try {
+        const { state, saveCreds } = await useMultiFileAuthState('./baileys_auth');
+
+        sock = makeWASocket({
+            auth: state,
+            printQRInTerminal: true,
+            logger,
+            browser: ['Salón Bot', 'Chrome', '1.0'],
+            syncFullHistory: true
+
+        });
+        // =======================
+        // Manejo de conexión
+        // =======================
+        sock.ev.on('connection.update', async (update) => {
+            const { connection, lastDisconnect, qr } = update;
+
+            if (qr) {
+                qrCode = await qrcode.toDataURL(qr);
+                console.log('📱 Escanea el código QR → http://localhost:3000/qr');
+            }
+
+            if (connection === 'open') {
+                console.log('✅ Bot conectado a WhatsApp');
+                isConnected = true;
+                qrCode = '';
+            }
+
+            if (connection === 'close') {
+                isConnected = false;
+                const statusCode = lastDisconnect?.error?.output?.statusCode;
+                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+                
+                console.log('❌ Conexión cerrada', lastDisconnect?.error);
+
+                if (shouldReconnect) {
+                    console.log('🔄 Reintentando conexión en 5s...');
+                    setTimeout(startWhatsApp, 5000);
+                } else {
+                    console.log('⚠️ Sesión cerrada, eliminando credenciales...');
+                    fs.rmSync("baileys_auth", { recursive: true, force: true });
+                    qrCode = null;
+                }
+            }
+        });
+
+        sock.ev.on('creds.update', saveCreds);
+
+        // =======================
+        // Recibir mensajes
+        // =======================
+        sock.ev.on('messages.upsert', async (m) => {
+            if (!isConnected) return; // Ignorar hasta que esté listo
+            const message = m.messages[0];
+            if (!message.message || message.key.fromMe) return;
+
+            const from = message.key.remoteJid;
+            const texto = extractMessageText(message);
+            if (texto && from) await procesarMensajeWhatsApp(texto, from);
+        });
+
+    } catch (error) {
+        console.error('❌ Error iniciando bot:', error);
+        setTimeout(startWhatsApp, 10000); // Reintentar en 10s si falla
+    }
+}
+
+
+function extractMessageText(message) {
+    return (
+        message.message?.conversation ||
+        message.message?.extendedTextMessage?.text ||
+        message.message?.imageMessage?.caption ||
+        null
+    );
+}
+
+// ==========================
+// Procesar mensajes entrantes
+// ==========================
+async function procesarMensajeWhatsApp(mensaje, telefono) {
+    const clientes = await getClientes();
+    const telSinCodigo = telefono.replace('@s.whatsapp.net', '');
+    let cliente = clientes[telSinCodigo];
+
+    // Si no hay conversación activa, iniciamos una
+    if (!conversacionesActivas.has(telefono)) {
+        conversacionesActivas.set(telefono, {
+            paso: cliente ? 'inicio' : 'registrar_cliente',
+            datosTemporales: {},
+            ultimaActividad: new Date()
+        });
+    }
+
+    const conversacion = conversacionesActivas.get(telefono);
+    conversacion.ultimaActividad = new Date();
+
+    // Si el cliente no existe, pedimos su nombre
+    if (!cliente && conversacion.paso === 'registrar_cliente') {
+        await enviarMensaje(telefono,"👋 ¡Hola! Para registrarte, por favor dime tu nombre:");
+        conversacion.paso = 'capturar_nombre';
+        return;
+    }
+
+    // Si el cliente ya existe, damos la bienvenida y seguimos el flujo
+    if (cliente && conversacion.paso === 'inicio') {
+        await enviarMensaje(telefono,`👋 Hola ${cliente.nombre}, bienvenido de nuevo al *Salón de Belleza* 💅`);
+        conversacion.paso = 'menu_principal';
+    }
+
+    // Procesamos el flujo del cliente
+    await procesarEstadoConversacion(mensaje, telefono, conversacion);
+    conversacionesActivas.set(telefono, conversacion);
+}
+
+
+// ==========================
+// Flujo conversacional
+// ==========================
+async function procesarEstadoConversacion(mensaje, telefono, conversacion) {
+    const mensajeLower = mensaje.toLowerCase().trim();
+
+    switch (conversacion.paso) {
+        case 'capturar_nombre':
+            await saveCliente(telefono.replace('@s.whatsapp.net', ''), mensaje);
+            await enviarMensaje(telefono,`✅ Gracias ${mensaje}, ya estás registrado.`);
+            conversacion.paso = 'menu_principal';
+            await procesarEstadoConversacion('', telefono, conversacion);
+            break;
+
+        case 'menu_principal':
+            await mostrarMenuPrincipal(mensajeLower, telefono, conversacion);
+            break;
+
+        case 'seleccionar_servicio':
+            await manejarSeleccionServicio(mensaje, telefono, conversacion);
+            break;
+
+        case 'seleccionar_fecha':
+            await manejarSeleccionFecha(mensaje, telefono, conversacion);
+            break;
+
+        case 'seleccionar_hora':
+            await manejarSeleccionHora(mensaje, telefono, conversacion);
+            break;
+
+        case 'seleccionar_manicurista':
+            await manejarSeleccionManicurista(mensaje, telefono, conversacion);
+            break;
+
+        case 'confirmar_cita':
+            await manejarConfirmarCita(mensaje, telefono, conversacion);
+            break;
+            case 'gestionar_citas':
+                await gestionarCitas(mensaje, telefono, conversacion);
+                break;
+
+            case 'reprogramar_fecha':
+                await manejarReprogramarFecha(mensaje, telefono, conversacion);
+                break;
+
+            case 'reprogramar_hora':
+                await manejarReprogramarHora(mensaje, telefono, conversacion);
+                break;
+
+        default:
+            await enviarMensaje(telefono,'❌ No entendí tu respuesta. Escribe "Hola" para comenzar.');
+            conversacion.paso = 'inicio';
+    }
+}
+
+// ==========================
+// Menú principal
+// ==========================
+async function mostrarMenuPrincipal(mensajeLower, telefono, conversacion) {
+    switch (mensajeLower) {
+        case '1':
+            await iniciarAgendamiento(telefono, conversacion);
+            break;
+        case '2':
+            await mostrarCitasCliente(telefono, conversacion);
+            break;
+        case '3':
+            await mostrarInfoSalon(telefono);
+            break;
+        default:
+            await enviarMensaje(
+               telefono, `¡Hola! 👋 Selecciona una opción del menú:\n` +
+                `1️⃣ Agendar nueva cita\n` +
+                `2️⃣ Ver mis citas\n` +
+                `3️⃣ Información del salón`
+            );
+    }
+}
+
+// ==========================
+// Agendamiento de citas
+// ==========================
+async function iniciarAgendamiento(telefono, conversacion) {
+    const servicios = await getServicios();
+    if (!servicios.length) {
+        await enviarMensaje( telefono),"⚠️ No hay servicios disponibles ahora.";
+        return;
+    }
+
+    let mensaje = "💅 *Servicios disponibles:*\n\n";
+    servicios.forEach((s, i) => {
+        mensaje += `${i + 1}️⃣ *${s.nombre}* - $${s.precio}\n⏱ Duración: ${s.duracion} min\n\n`;
+    });
+    mensaje += "_Selecciona el número del servicio_";
+
+    conversacion.datosTemporales.servicios = servicios;
+    conversacion.paso = 'seleccionar_servicio';
+    await enviarMensaje(telefono,mensaje);
+}
+
+// ==========================
+// Funciones WhatsApp
+// ==========================
+// ==========================
+
+
+// Función para verificar si es un grupo
+function esGrupo(jid) {
+    // Los grupos en WhatsApp terminan con @g.us
+    return jid && jid.endsWith('@g.us');
+}
+
+// Función para verificar si es un contacto individual válido
+function esContactoIndividual(jid) {
+    // Los contactos individuales terminan con @s.whatsapp.net
+    if (!jid || !jid.endsWith('@s.whatsapp.net')) {
+        return false;
+    }
+    
+    // Extraer el número de teléfono
+    const numero = jid.split('@')[0];
+    
+    // Verificar que sea solo números y tenga longitud válida
+    return /^\d{10,15}$/.test(numero);
+}
+
+
+// Función para limpiar número de teléfono para logs
+function limpiarTelefono(jid) {
+    const numero = jid.split('@')[0];
+    return numero.length > 4 ? 
+        '*'.repeat(numero.length - 4) + numero.slice(-4) : 
+        numero;
+}
+
+// Función para verificar si es un grupo
+function esGrupo(jid) {
+    // Los grupos en WhatsApp terminan con @g.us
+    return jid && jid.endsWith('@g.us');
+}
+
+// Función para verificar si es un contacto individual válido
+function esContactoIndividual(jid) {
+    // Los contactos individuales terminan con @s.whatsapp.net
+    if (!jid || !jid.endsWith('@s.whatsapp.net')) {
+        return false;
+    }
+    
+    // Extraer el número de teléfono
+    const numero = jid.split('@')[0];
+    
+    // Verificar que sea solo números y tenga longitud válida
+    return /^\d{10,15}$/.test(numero);
+}
+
+// Función para limpiar número de teléfono para logs (solo para privacidad)
+function limpiarTelefono(jid) {
+    const numero = jid.split('@')[0];
+    return numero.length > 4 ? 
+        '*'.repeat(numero.length - 4) + numero.slice(-4) : 
+        numero;
+}
+
+async function enviarMensaje(jid, mensaje, reintentos = 3) {
+    // ✅ VALIDACIÓN: No enviar mensajes si WhatsApp no está conectado
+    if (!sock || !isConnected) {
+        console.log(`⚠️ WhatsApp no conectado. Mensaje para ${jid}: ${mensaje}`);
+        return false;
+    }
+
+    try {
+        // ✅ VALIDACIÓN: JID debe ser una cadena válida
+        if (typeof jid !== 'string' || !jid.includes('@')) {
+            console.error(`❌ JID inválido: ${jid}`);
+            return false;
+        }
+
+        // ✅ FILTRO PRINCIPAL: No enviar mensajes a grupos
+        if (esGrupo(jid)) {
+            console.log(`🚫 Mensaje bloqueado - No se envían mensajes a grupos: ${jid}`);
+            return false;
+        }
+
+        // ✅ FILTRO: Solo enviar a contactos individuales válidos
+        if (!esContactoIndividual(jid)) {
+            console.log(`🚫 Mensaje bloqueado - Tipo de contacto no válido: ${jid}`);
+            return false;
+        }
+
+        // ✅ VALIDACIÓN: El mensaje no debe estar vacío
+        if (!mensaje || mensaje.trim().length === 0) {
+            console.log(`⚠️ Mensaje vacío no enviado a ${jid}`);
+            return false;
+        }
+
+        console.log(`💬 Enviando mensaje a ${limpiarTelefono(jid)}:`);
+        console.log(`📝 Contenido: ${mensaje.substring(0, 100)}${mensaje.length > 100 ? '...' : ''}`);
+
+        // Enviar el mensaje original sin limpiar
+        await sock.sendMessage(jid, { text: mensaje });
+        console.log(`✅ Mensaje enviado exitosamente a ${limpiarTelefono(jid)}`);
+        return true;
+
+    } catch (error) {
+        console.error(`❌ Error enviando mensaje a ${limpiarTelefono(jid)}:`, error.message || error);
+
+        // Reintentar solo en casos específicos de error de red/timeout
+        const shouldRetry = reintentos > 0 && (
+            error?.output?.statusCode === 408 || // Request timeout
+            error?.output?.statusCode === 440 || // Session timeout
+            error?.code === 'ECONNRESET' ||      // Connection reset
+            error?.code === 'ENOTFOUND' ||       // DNS resolution failed
+            error?.code === 'ETIMEDOUT' ||       // Connection timeout
+            error?.message?.includes('timeout') ||
+            error?.message?.includes('connection')
+        );
+
+        if (shouldRetry) {
+            console.log(`🔄 Reintentando enviar mensaje a ${limpiarTelefono(jid)} (${reintentos} intentos restantes)...`);
+            
+            // Esperar antes de reintentar (backoff exponencial)
+            const delay = (4 - reintentos) * 2000; // 2s, 4s, 6s
+            await new Promise(r => setTimeout(r, delay));
+            
+            return enviarMensaje(jid, mensaje, reintentos - 1);
+        }
+
+        // Para errores no recuperables, no reintenta pero tampoco crashea
+        console.error(`❌ Error definitivo enviando mensaje a ${limpiarTelefono(jid)}. No se reintentará.`);
+        return false;
+    }
+}
+
+// ==========================
+// Manejo de selección de servicio
+// ==========================
+async function manejarSeleccionServicio(mensaje, telefono, conversacion) {
+    const seleccion = parseInt(mensaje) - 1;
+    const servicios = conversacion.datosTemporales.servicios;
+
+    if (!servicios || servicios.length === 0) {
+        await enviarMensaje(telefono,"⚠️ No hay servicios cargados. Por favor, intenta más tarde.");
+        conversacion.paso = 'menu_principal';
+        return;
+    }
+
+    if (isNaN(seleccion) || seleccion < 0 || seleccion >= servicios.length) {
+        await enviarMensaje(telefono,"❌ Selección inválida. Por favor, escribe el número correspondiente al servicio.");
+        return;
+    }
+
+    const servicioSeleccionado = servicios[seleccion];
+    conversacion.datosTemporales.servicioSeleccionado = servicioSeleccionado;
+    conversacion.paso = 'seleccionar_fecha';
+
+    await enviarMensaje(
+         telefono,`Has seleccionado: *${servicioSeleccionado.nombre}* - $${servicioSeleccionado.precio}\n` +
+        `⏱ Duración: ${servicioSeleccionado.duracion} min\n\n` +
+        `Por favor, indica la fecha que deseas (ejemplo: 25/08/2025 (dia-mes-año)).`
+       
+    );
+}
+
+// ==========================
+// Manejo de selección de fecha
+// ==========================
+async function manejarSeleccionFecha(mensaje, telefono, conversacion) {
+    const fecha = mensaje.trim(); // Formato esperado: DD/MM/YYYY
+
+    // Validación simple
+    const regexFecha = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+    if (!regexFecha.test(fecha)) {
+        await enviarMensaje(
+                telefono,"❌ Formato de fecha inválido. Por favor escribe la fecha en formato DD/MM/AAAA (ejemplo: 25/08/2025)."
+        
+        );
+        return;
+    }
+
+    conversacion.datosTemporales.fechaSeleccionada = fecha;
+    conversacion.paso = 'seleccionar_hora';
+
+    await enviarMensaje(
+        telefono, `✅ Fecha seleccionada: ${fecha}\n` +
+        `Por favor, indica la hora que deseas (ejemplo: 15:30).`
+       
+    );
+}
+// Manejar selección de servicio
+async function manejarSeleccionServicio(mensaje, telefono, conversacion) {
+    const seleccion = parseInt(mensaje) - 1;
+    const servicios = conversacion.datosTemporales.servicios;
+    
+    if (isNaN(seleccion) || seleccion < 0 || seleccion >= servicios.length) {
+        await enviarMensaje( telefono,'❌ Opción inválida. Selecciona el número correcto del servicio.');
+        return;
+    }
+
+    conversacion.datosTemporales.servicioSeleccionado = servicios[seleccion];
+    await enviarMensaje(telefono,`Has seleccionado: ${servicios[seleccion].nombre}\n📅 Ingresa la fecha de la cita (formato DD/MM/AAAA):`);
+    conversacion.paso = 'seleccionar_fecha';
+}
+
+// Manejar selección de fecha
+async function manejarSeleccionFecha(mensaje, telefono, conversacion) {
+    const fecha = mensaje.trim(); // Formato esperado: DD/MM/YYYY
+    const regexFecha = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+
+    if (!regexFecha.test(fecha)) {
+        await enviarMensaje(
+            telefono,"❌ Formato de fecha inválido. Escribe la fecha en formato DD/MM/AAAA (ejemplo: 25/08/2025)."
+        );
+        return;
+    }
+
+    const [dia, mes, anio] = fecha.split("/").map(Number);
+    const fechaSeleccionada = new Date(anio, mes - 1, dia);
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0); // ignorar hora
+
+    const maxFecha = new Date();
+    maxFecha.setDate(hoy.getDate() + 14); // máximo 2 semanas
+
+    if (fechaSeleccionada < hoy) {
+        await enviarMensaje(
+          
+            telefono , "❌ La fecha no puede ser anterior a hoy. Por favor selecciona otra fecha."
+        );
+        return;
+    }
+
+    if (fechaSeleccionada > maxFecha) {
+        await enviarMensaje(
+            telefono, "❌ Solo se pueden agendar citas hasta 2 semanas desde hoy. Por favor selecciona otra fecha.",
+           
+        );
+        return;
+    }
+
+    // Guardar la fecha válida y continuar
+    conversacion.datosTemporales.fechaSeleccionada = fecha;
+    conversacion.paso = 'seleccionar_hora';
+    await enviarMensaje(
+         telefono,`✅ Fecha seleccionada: ${fecha}\nPor favor, indica la hora que deseas (ejemplo: 15:30).`
+       
+    );
+}
+
+
+//Manejar la fecha y horarios del salon
+async function manejarSeleccionHora(mensaje, telefono, conversacion) {
+    const hora = mensaje.trim(); // formato HH:MM
+    const regexHora = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+
+    // Si hay sugerencias pendientes, verificar si es una selección de sugerencia
+    if (conversacion.datosTemporales.sugerenciasHorarios) {
+        const procesadoComoSugerencia = await manejarSugerenciaHorario(mensaje, telefono, conversacion);
+        if (procesadoComoSugerencia) {
+            return; // Se procesó como sugerencia, salir de la función
+        }
+    }
+
+    if (!regexHora.test(hora)) {
+        await enviarMensaje(
+            telefono, "❌ Formato de hora inválido. Escribe la hora en formato HH:MM (ejemplo: 15:30)."
+        );
+        return;
+    }
+
+    const fechaSeleccionada = conversacion.datosTemporales.fechaSeleccionada;
+    const servicioSeleccionado = conversacion.datosTemporales.servicioSeleccionado;
+
+    if (!fechaSeleccionada || !servicioSeleccionado) {
+        await enviarMensaje(
+            telefono, "❌ Faltan datos de la reserva. Por favor vuelve al menú principal e intenta de nuevo."
+        );
+        conversacion.paso = 'inicio';
+        return;
+    }
+
+    // Validar horario del salón
+    if (!esHorarioValido(fechaSeleccionada, hora)) {
+        await enviarMensaje(
+            telefono, "❌ La hora seleccionada no está dentro del horario permitido del salón.\n" +
+            "⏰ Lunes a Viernes: 19:00 - 21:00\n" +
+            "📅 Sábados y Domingos: 09:00 - 21:00\n" +
+            "Por favor selecciona otra hora."
+        );
+        return;
+    }
+
+    // Validar que el servicio termine dentro del horario de trabajo
+    if (!validarHorarioConDuracion(fechaSeleccionada, hora, servicioSeleccionado.duracion)) {
+        await enviarMensaje(
+            telefono, "❌ El servicio se extendería más allá del horario de cierre del salón.\n" +
+            `⏱ Tu servicio dura ${servicioSeleccionado.duracion} minutos.\n` +
+            "Por favor selecciona una hora más temprana."
+        );
+        return;
+    }
+
+    // Verificar disponibilidad de las manicuristas considerando duración
+    const manicuristas = ['Jazmín Leon'];
+    const manicuristasDisponibles = [];
+    const conflictosDetallados = {};
+
+    for (let manicurista of manicuristas) {
+        const disponible = await verificarDisponibilidad(
+            fechaSeleccionada, 
+            hora, 
+            manicurista, 
+            servicioSeleccionado.duracion
+        );
+
+        if (disponible) {
+            manicuristasDisponibles.push(manicurista);
+        } else {
+            // Obtener detalles del conflicto
+            const conflictos = await obtenerDetallesConflictos(
+                fechaSeleccionada, 
+                hora, 
+                manicurista, 
+                servicioSeleccionado.duracion
+            );
+            conflictosDetallados[manicurista] = conflictos;
+        }
+    }
+
+    if (manicuristasDisponibles.length === 0) {
+        // No hay disponibilidad, mostrar conflictos y sugerir horarios alternativos
+        let mensajeConflicto = "⚠️ Lo siento, no hay disponibilidad en el horario solicitado.\n\n";
+        
+        // Mostrar por qué no está disponible
+        for (let [manicurista, conflictos] of Object.entries(conflictosDetallados)) {
+            if (conflictos.length > 0) {
+                const conflicto = conflictos[0];
+                mensajeConflicto += `💅 ${manicurista} tiene una cita de ${conflicto.horaInicio} a ${conflicto.horaFin}\n`;
+            }
+        }
+
+        // Sugerir horarios alternativos
+        const sugerencias = await sugerirHorariosAlternativos(
+            fechaSeleccionada, 
+            hora, 
+            manicuristas[0], // Usar la primera manicurista para las sugerencias
+            servicioSeleccionado.duracion
+        );
+
+        if (sugerencias.length > 0) {
+            mensajeConflicto += "\n🕒 *Horarios disponibles sugeridos:*\n";
+            sugerencias.forEach((sugerencia, index) => {
+                mensajeConflicto += `${index + 1}️⃣ ${sugerencia.hora}\n`;
+            });
+            mensajeConflicto += "\nEscribe el número del horario que prefieras o indica otra hora:";
+            
+            // Guardar sugerencias para procesarlas si el usuario elige una
+            conversacion.datosTemporales.sugerenciasHorarios = sugerencias;
+        } else {
+            mensajeConflicto += "\n❌ No hay otros horarios disponibles para esta fecha. Por favor elige otra fecha.";
+            conversacion.paso = 'seleccionar_fecha';
+        }
+
+        await enviarMensaje(telefono, mensajeConflicto);
+        return;
+    }
+
+    // Si hay disponibilidad, continuar con el flujo normal
+    conversacion.datosTemporales.hora = hora;
+    conversacion.datosTemporales.manicuristasDisponibles = manicuristasDisponibles;
+
+    let mensajeManicuristas = "💅 Selecciona la manicurista disponible:\n";
+    manicuristasDisponibles.forEach((m, i) => {
+        mensajeManicuristas += `${i + 1}️⃣ ${m}\n`;
+    });
+
+    await enviarMensaje(telefono, mensajeManicuristas);
+    conversacion.paso = 'seleccionar_manicurista';
+}
+
+
+
+
+// Manejar selección de manicurista
+async function manejarSeleccionManicurista(mensaje, telefono, conversacion) {
+    const disponibles = conversacion.datosTemporales.manicuristasDisponibles || [];
+    const seleccion = parseInt(mensaje) - 1;
+
+    if (isNaN(seleccion) || seleccion < 0 || seleccion >= disponibles.length) {
+        await enviarMensaje(
+            
+            telefono,'❌ Opción inválida. Selecciona el número correcto de la manicurista disponible.'
+        );
+        return;
+    }
+
+    conversacion.datosTemporales.manicurista = disponibles[seleccion];
+    await enviarMensaje(telefono,'✅ Confirmar cita? (sí/no)');
+    conversacion.paso = 'confirmar_cita';
+}
+async function listarGrupos() {
+    try {
+        // Devuelve un objeto con todos los grupos en los que participa
+        const grupos = await sock.groupFetchAllParticipating();
+
+        // Recorremos cada grupo
+        Object.keys(grupos).forEach(jid => {
+            const grupo = grupos[jid];
+            console.log(`Nombre: ${grupo.subject}, JID: ${jid}`);
+        });
+
+        return grupos;
+    } catch (error) {
+        console.error("❌ Error listando grupos:", error);
+        return {};
+    }
+}
+
+// Manejar confirmación de cita
+async function manejarConfirmarCita(mensaje, telefono, conversacion) {
+    const mensajeLower = mensaje.toLowerCase();
+    
+    if (mensajeLower !== 'sí' && mensajeLower !== 'si') {
+        await enviarMensaje(telefono, "Cita cancelada. Volviendo al menú principal.");
+        conversacion.paso = 'menu_principal';
+        return;
+    }
+
+    try {
+        const resultado = await guardarCitaFirebase(telefono, conversacion);
+
+        const telefonoNumerico = telefono.replace(/@.*$/, '');
+        let nombreCliente = conversacion.datosTemporales.nombreCliente;
+        if (!nombreCliente) {
+            const clienteSnap = await get(ref(db, `clientes/${telefonoNumerico}`));
+            nombreCliente = clienteSnap.exists() ? clienteSnap.val().nombre : 'Desconocido';
+        }
+
+        await set(ref(db, `clientes/${telefonoNumerico}`), {
+            nombre: nombreCliente,
+            telefono: telefonoNumerico
+        });
+
+        await enviarMensaje(telefono, resultado.mensaje);
+
+        // ✅ Enviar mensaje a la manicurista correcta
+        if (resultado.exito) {
+            const manicuristaNombre = conversacion.datosTemporales.manicurista;
+            const manicuristaJid = MANICURISTAS[manicuristaNombre];
+
+            if (!manicuristaJid) {
+                console.error(`❌ No se encontró la manicurista: ${manicuristaNombre}`);
+            } else {
+                await enviarMensajeManicurista(
+                    manicuristaJid,
+                    {
+                        id: resultado.mensaje.match(/ID de Cita: (.+)/)[1],
+                        fecha: conversacion.datosTemporales.fechaSeleccionada,
+                        hora: conversacion.datosTemporales.hora,
+                        servicio: conversacion.datosTemporales.servicioSeleccionado.nombre
+                    },
+                    nombreCliente
+                );
+            }
+        }
+
+        conversacion.paso = resultado.exito ? 'inicio' : 'seleccionar_hora';
+    } catch (error) {
+        console.error("❌ Error guardando cita:", error);
+        await enviarMensaje(telefono, "Error al guardar cita. Intenta escribiendo 'Hola'.");
+        conversacionesActivas.set(telefono, {
+            paso: 'inicio',
+            datosTemporales: {},
+            ultimaActividad: new Date()
+        });
+    }
+}
+
+const MANICURISTAS = {
+    "Jazmín Leon": "5216442570491@s.whatsapp.net"
+};
+async function enviarMensajeManicurista(jid, citaData, nombreCliente) {
+    if (!sock || !isConnected) {
+        console.log(`⚠️ WhatsApp no conectado. Mensaje para ${jid}: ${JSON.stringify(citaData)}`);
+        return;
+    }
+
+    if (!jid) {
+        console.error("❌ No se proporcionó JID de la manicurista.");
+        return;
+    }
+
+    const mensaje = `💅 Nueva cita agendada\n\n` +
+                    `Cliente: ${nombreCliente}\n` +
+                    `Servicio: ${citaData.servicio}\n` +
+                    `Fecha: ${citaData.fecha}\n` +
+                    `Hora: ${citaData.hora}\n` +
+                    `ID Cita: ${citaData.id}`;
+
+    try {
+        await sock.sendMessage(jid, { text: mensaje });
+        console.log(`✅ Notificación enviada a la manicurista: ${jid}`);
+    } catch (error) {
+        console.error(`❌ Error enviando mensaje a ${jid}:`, error.message);
+    }
+}
+
+
+// Verifica si el horario solicitado está disponible
+async function verificarDisponibilidad(fecha, hora, manicuristaId, duracionServicio = null) {
+    try {
+        const snapshot = await get(ref(db, "citas"));
+        if (!snapshot.exists()) return true;
+
+        const citas = Object.values(snapshot.val()).filter(cita => 
+            cita.fecha === fecha && 
+            cita.manicuristaId === manicuristaId &&
+            cita.estado !== "Cancelada"
+        );
+
+        if (citas.length === 0) return true;
+
+        // Si no se proporciona duración, usar 60 minutos por defecto
+        const duracionSolicitud = duracionServicio || 60;
+
+        // Convertir hora solicitada a minutos
+        const horaInicioSolicitud = horaAMinutos(hora);
+        const horaFinSolicitud = horaInicioSolicitud + parseInt(duracionSolicitud);
+
+        for (let cita of citas) {
+            // Obtener duración del servicio existente
+            const duracionExistente = await obtenerDuracionServicio(cita.servicioId);
+            
+            const horaInicioCita = horaAMinutos(cita.hora);
+            const horaFinCita = horaInicioCita + duracionExistente;
+
+            // Verificar si hay conflicto de horarios
+            const hayConflicto = (
+                (horaInicioSolicitud >= horaInicioCita && horaInicioSolicitud < horaFinCita) ||
+                (horaFinSolicitud > horaInicioCita && horaFinSolicitud <= horaFinCita) ||
+                (horaInicioSolicitud <= horaInicioCita && horaFinSolicitud >= horaFinCita)
+            );
+
+            if (hayConflicto) {
+                return false; // Hay conflicto
+            }
+        }
+
+        return true; // No hay conflictos
+
+    } catch (error) {
+        console.error("❌ Error verificando disponibilidad:", error);
+        return false;
+    }
+}
+
+async function obtenerDetallesConflictos(fecha, hora, manicuristaId, duracionServicio = 60) {
+    try {
+        const snapshot = await get(ref(db, "citas"));
+        if (!snapshot.exists()) return [];
+
+        const citas = Object.values(snapshot.val()).filter(cita => 
+            cita.fecha === fecha && 
+            cita.manicuristaId === manicuristaId &&
+            cita.estado !== "Cancelada"
+        );
+
+        if (citas.length === 0) return [];
+
+        const horaInicioSolicitud = horaAMinutos(hora);
+        const horaFinSolicitud = horaInicioSolicitud + parseInt(duracionServicio);
+        const conflictos = [];
+
+        for (let cita of citas) {
+            const duracionExistente = await obtenerDuracionServicio(cita.servicioId);
+            const horaInicioCita = horaAMinutos(cita.hora);
+            const horaFinCita = horaInicioCita + duracionExistente;
+
+            const hayConflicto = (
+                (horaInicioSolicitud >= horaInicioCita && horaInicioSolicitud < horaFinCita) ||
+                (horaFinSolicitud > horaInicioCita && horaFinSolicitud <= horaFinCita) ||
+                (horaInicioSolicitud <= horaInicioCita && horaFinSolicitud >= horaFinCita)
+            );
+
+            if (hayConflicto) {
+                conflictos.push({
+                    horaInicio: cita.hora,
+                    horaFin: minutosAHora(horaFinCita),
+                    duracion: duracionExistente
+                });
+            }
+        }
+
+        return conflictos;
+    } catch (error) {
+        console.error("❌ Error obteniendo conflictos:", error);
+        return [];
+    }
+}
+
+// Función mejorada para validar horario con duración (NUEVA)
+function validarHorarioConDuracion(fecha, hora, duracionMinutos) {
+    const [dia, mes, anio] = fecha.split("/");
+    const fechaObj = new Date(`${anio}-${mes}-${dia}`);
+    const diaSemana = fechaObj.getDay();
+    
+    const horaInicio = horaAMinutos(hora);
+    const horaFin = horaInicio + parseInt(duracionMinutos);
+    
+    let horaCierre;
+    if (diaSemana >= 1 && diaSemana <= 5) {
+        // Lunes a Viernes: cierra a las 21:00
+        horaCierre = 21 * 60;
+    } else {
+        // Sábados y Domingos: cierra a las 21:00
+        horaCierre = 21 * 60;
+    }
+    
+    return horaFin <= horaCierre;
+}
+
+function esFechaPermitida(fecha) {
+    const [dia, mes, anio] = fecha.split("/");
+    const seleccionada = new Date(`${anio}-${mes}-${dia}`);
+    const hoy = new Date();
+    const maxFecha = new Date();
+    maxFecha.setDate(hoy.getDate() + 14); // solo hasta 2 semanas
+
+    return seleccionada >= hoy && seleccionada <= maxFecha;
+}
+
+
+
+function esHorarioValido(fecha, hora) {
+    const [dia, mes, anio] = fecha.split("/");
+    const [h, m] = hora.split(":");
+    const date = new Date(`${anio}-${mes}-${dia}T${hora}:00`);
+    const diaSemana = date.getDay(); // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
+    const horaEntera = parseInt(h);
+
+    if (diaSemana >= 1 && diaSemana <= 5) {
+        // Lunes a Viernes → 19:00 a 21:00
+        return horaEntera >= 19 && horaEntera < 21;
+    } else if (diaSemana === 0 || diaSemana === 6) {
+        // Domingo y Sábado → 09:00 a 21:00
+        return horaEntera >= 9 && horaEntera < 21;
+    }
+
+    return false;
+}
+// ==========================
+// Funciones mejoradas de disponibilidad
+// ==========================
+
+// Convierte hora HH:MM a minutos desde medianoche
+function horaAMinutos(hora) {
+    const [h, m] = hora.split(':').map(Number);
+    return h * 60 + m;
+}
+
+// Convierte minutos a formato HH:MM
+function minutosAHora(minutos) {
+    const h = Math.floor(minutos / 60);
+    const m = minutos % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}
+
+// Verifica si el horario solicitado está disponible considerando duración del servicio
+async function verificarDisponibilidadConDuracion(fecha, hora, manicuristaId, duracionServicio = 60) {
+    try {
+        const snapshot = await get(ref(db, "citas"));
+        if (!snapshot.exists()) return { disponible: true, conflictos: [] };
+
+        const citas = Object.values(snapshot.val()).filter(cita => 
+            cita.fecha === fecha && 
+            cita.manicuristaId === manicuristaId &&
+            cita.estado !== "Cancelada"
+        );
+
+        if (citas.length === 0) return { disponible: true, conflictos: [] };
+
+        // Convertir hora solicitada a minutos
+        const horaInicioSolicitud = horaAMinutos(hora);
+        const horaFinSolicitud = horaInicioSolicitud + parseInt(duracionServicio);
+
+        const conflictos = [];
+
+        for (let cita of citas) {
+            // Obtener duración del servicio existente
+            const servicioSnapshot = await get(ref(db, `servicios/${cita.servicioId}`));
+            const duracionExistente = servicioSnapshot.exists() ? 
+                parseInt(servicioSnapshot.val().duracion) : 60;
+
+            const horaInicioCita = horaAMinutos(cita.hora);
+            const horaFinCita = horaInicioCita + duracionExistente;
+
+            // Verificar si hay conflicto de horarios
+            const hayConflicto = (
+                (horaInicioSolicitud >= horaInicioCita && horaInicioSolicitud < horaFinCita) ||
+                (horaFinSolicitud > horaInicioCita && horaFinSolicitud <= horaFinCita) ||
+                (horaInicioSolicitud <= horaInicioCita && horaFinSolicitud >= horaFinCita)
+            );
+
+            if (hayConflicto) {
+                conflictos.push({
+                    horaInicio: cita.hora,
+                    horaFin: minutosAHora(horaFinCita),
+                    servicio: cita.servicioId,
+                    duracion: duracionExistente
+                });
+            }
+        }
+
+        return {
+            disponible: conflictos.length === 0,
+            conflictos: conflictos
+        };
+
+    } catch (error) {
+        console.error("❌ Error verificando disponibilidad:", error);
+        return { disponible: false, conflictos: [] };
+    }
+}
+
+// Obtiene la duración de un servicio desde Firebase
+async function obtenerDuracionServicio(servicioId) {
+    try {
+        const snapshot = await get(ref(db, `servicios`));
+        if (!snapshot.exists()) return 60; // duración por defecto
+        
+        const servicios = Object.values(snapshot.val());
+        const servicio = servicios.find(s => s.id === servicioId);
+        return servicio ? parseInt(servicio.duracion) : 60;
+    } catch (error) {
+        console.error("❌ Error obteniendo duración del servicio:", error);
+        return 60; // duración por defecto
+    }
+}
+
+// Función para manejar selección de sugerencias de horario
+async function manejarSugerenciaHorario(mensaje, telefono, conversacion) {
+    const seleccion = parseInt(mensaje) - 1;
+    const sugerencias = conversacion.datosTemporales.sugerenciasHorarios || [];
+
+    if (!isNaN(seleccion) && seleccion >= 0 && seleccion < sugerencias.length) {
+        // El usuario seleccionó una de las sugerencias
+        const horarioSeleccionado = sugerencias[seleccion].hora;
+        
+        // Procesar la hora seleccionada
+        conversacion.datosTemporales.hora = horarioSeleccionado;
+        
+        // Limpiar las sugerencias
+        delete conversacion.datosTemporales.sugerenciasHorarios;
+        
+        // Continuar con selección de manicurista
+        const manicuristas = ['Jazmín Leon'];
+        const manicuristasDisponibles = [];
+
+        for (let m of manicuristas) {
+            if (await verificarDisponibilidad(
+                conversacion.datosTemporales.fechaSeleccionada, 
+                horarioSeleccionado, 
+                m, 
+                conversacion.datosTemporales.servicioSeleccionado.duracion
+            )) {
+                manicuristasDisponibles.push(m);
+            }
+        }
+
+        conversacion.datosTemporales.manicuristasDisponibles = manicuristasDisponibles;
+
+        let mensajeManicuristas = `✅ Hora seleccionada: ${horarioSeleccionado}\n\n💅 Selecciona la manicurista disponible:\n`;
+        manicuristasDisponibles.forEach((m, i) => {
+            mensajeManicuristas += `${i + 1}️⃣ ${m}\n`;
+        });
+
+        await enviarMensaje(telefono, mensajeManicuristas);
+        conversacion.paso = 'seleccionar_manicurista';
+        
+        return true; // Indica que se procesó la sugerencia
+    }
+    
+    return false; // No era una selección de sugerencia válida
+}
+
+// Sugiere horarios alternativos disponibles
+async function sugerirHorariosAlternativos(fecha, horaDeseada, manicuristaId, duracionServicio = 60) {
+    try {
+        const sugerencias = [];
+        const horaDeseadaMinutos = horaAMinutos(horaDeseada);
+        
+        // Obtener horarios de trabajo según el día
+        const [dia, mes, anio] = fecha.split("/");
+        const fechaObj = new Date(`${anio}-${mes}-${dia}`);
+        const diaSemana = fechaObj.getDay();
+        
+        let horaInicio, horaFin;
+        if (diaSemana >= 1 && diaSemana <= 5) {
+            // Lunes a Viernes: 19:00 - 21:00
+            horaInicio = 19 * 60; // 19:00 en minutos
+            horaFin = 21 * 60;    // 21:00 en minutos
+        } else {
+            // Sábados y Domingos: 09:00 - 21:00
+            horaInicio = 9 * 60;  // 09:00 en minutos
+            horaFin = 21 * 60;    // 21:00 en minutos
+        }
+
+        // Generar slots de 30 minutos
+        const intervalos = [];
+        for (let minutos = horaInicio; minutos < horaFin; minutos += 30) {
+            if (minutos + parseInt(duracionServicio) <= horaFin) {
+                intervalos.push(minutos);
+            }
+        }
+
+        // Verificar disponibilidad para cada intervalo
+        for (let minutos of intervalos) {
+            const horaIntervalo = minutosAHora(minutos);
+            const resultado = await verificarDisponibilidadConDuracion(
+                fecha, horaIntervalo, manicuristaId, duracionServicio
+            );
+
+            if (resultado.disponible) {
+                const diferencia = Math.abs(minutos - horaDeseadaMinutos);
+                sugerencias.push({
+                    hora: horaIntervalo,
+                    diferencia: diferencia
+                });
+            }
+        }
+
+        // Ordenar por proximidad a la hora deseada
+        sugerencias.sort((a, b) => a.diferencia - b.diferencia);
+        
+        // Devolver máximo 5 sugerencias
+        return sugerencias.slice(0, 5);
+
+    } catch (error) {
+        console.error("❌ Error sugiriendo horarios:", error);
+        return [];
+    }
+}
+
+// ==========================
+// Función para mostrar citas del cliente - Agregar a server.js
+// ==========================
+
+async function mostrarCitasCliente(telefono, conversacion) {
+    try {
+        // Obtener el número de teléfono sin el formato de WhatsApp
+        const telefonoLimpio = telefono.replace('@s.whatsapp.net', '');
+        
+        // Obtener todas las citas de Firebase
+        const citasSnapshot = await get(ref(db, 'citas'));
+        
+        if (!citasSnapshot.exists()) {
+            await enviarMensaje(telefono, "📅 No tienes citas agendadas aún.\n\n¿Te gustaría agendar una nueva cita? Escribe *1* para continuar.");
+            conversacion.paso = 'menu_principal';
+            return;
+        }
+
+        const todasLasCitas = citasSnapshot.val();
+        
+        // Filtrar citas del cliente específico
+        const citasDelCliente = Object.entries(todasLasCitas)
+            .filter(([id, cita]) => cita.clienteId === telefonoLimpio)
+            .map(([id, cita]) => ({ id, ...cita }));
+
+        if (citasDelCliente.length === 0) {
+            await enviarMensaje(telefono, "📅 No tienes citas agendadas aún.\n\n¿Te gustaría agendar una nueva cita? Escribe *1* para continuar.");
+            conversacion.paso = 'menu_principal';
+            return;
+        }
+
+        // Separar citas por estado y ordenar por fecha
+        const citasActivas = citasDelCliente
+            .filter(cita => cita.estado !== 'Cancelada' && cita.estado !== 'Completada')
+            .sort((a, b) => compararFechas(a.fecha, b.fecha));
+
+        const citasHistoricas = citasDelCliente
+            .filter(cita => cita.estado === 'Cancelada' || cita.estado === 'Completada')
+            .sort((a, b) => compararFechas(b.fecha, a.fecha)); // Más recientes primero
+
+        // Construir mensaje con las citas
+        let mensaje = "📅 *TUS CITAS AGENDADAS*\n\n";
+
+        if (citasActivas.length > 0) {
+            mensaje += "🔹 *CITAS PRÓXIMAS:*\n";
+            for (let i = 0; i < citasActivas.length; i++) {
+                const cita = citasActivas[i];
+                const servicioInfo = await obtenerInfoServicio(cita.servicioId);
+                const estadoEmoji = obtenerEmojiEstado(cita.estado);
+                
+                mensaje += `\n${i + 1}. ${estadoEmoji} *${servicioInfo.nombre}*\n`;
+                mensaje += `   📅 ${formatearFecha(cita.fecha)}\n`;
+                mensaje += `   🕒 ${cita.hora}\n`;
+                mensaje += `   👩‍🎨 ${cita.manicuristaId}\n`;
+                mensaje += `   💰 $${servicioInfo.precio}\n`;
+                mensaje += `   ⏱ ${servicioInfo.duracion} min\n`;
+                if (cita.notas && cita.notas.trim()) {
+                    mensaje += `   📝 ${cita.notas}\n`;
+                }
+                mensaje += `   🔑 ID: ${cita.id.substring(0, 8)}...\n`;
+            }
+        }
+
+        if (citasHistoricas.length > 0) {
+            mensaje += "\n🔹 *HISTORIAL (últimas 3):*\n";
+            const citasRecientes = citasHistoricas.slice(0, 3);
+            
+            for (let cita of citasRecientes) {
+                const servicioInfo = await obtenerInfoServicio(cita.servicioId);
+                const estadoEmoji = obtenerEmojiEstado(cita.estado);
+                
+                mensaje += `\n• ${estadoEmoji} ${servicioInfo.nombre} - ${formatearFecha(cita.fecha)} ${cita.hora}\n`;
+            }
+        }
+
+        // Opciones disponibles
+        if (citasActivas.length > 0) {
+            mensaje += "\n🔧 *OPCIONES:*\n";
+            mensaje += "• Escribe *C* seguido del número para cancelar (ej: C1)\n";
+            mensaje += "• Escribe *R* seguido del número para reprogramar (ej: R1)\n";
+        }
+        
+        mensaje += "• Escribe *1* para agendar nueva cita\n";
+        mensaje += "• Escribe *0* para volver al menú principal";
+
+        await enviarMensaje(telefono, mensaje);
+        
+        // Guardar las citas activas en la conversación para manejar acciones
+        conversacion.datosTemporales.citasActivas = citasActivas;
+        conversacion.paso = 'gestionar_citas';
+
+    } catch (error) {
+        console.error("❌ Error obteniendo citas del cliente:", error);
+        await enviarMensaje(telefono, "❌ Ocurrió un error al obtener tus citas. Por favor, intenta de nuevo más tarde.");
+        conversacion.paso = 'menu_principal';
+    }
+}
+
+// ==========================
+// Funciones auxiliares para mostrar citas
+// ==========================
+
+// Obtener información del servicio desde Firebase
+async function obtenerInfoServicio(servicioId) {
+    try {
+        const serviciosSnapshot = await get(ref(db, 'servicios'));
+        if (!serviciosSnapshot.exists()) {
+            return { nombre: 'Servicio no encontrado', precio: '0', duracion: '60' };
+        }
+
+        const servicios = Object.values(serviciosSnapshot.val());
+        const servicio = servicios.find(s => s.id === servicioId);
+        
+        return servicio || { nombre: 'Servicio no encontrado', precio: '0', duracion: '60' };
+    } catch (error) {
+        console.error("❌ Error obteniendo info del servicio:", error);
+        return { nombre: 'Error al cargar', precio: '0', duracion: '60' };
+    }
+}
+
+// Obtener emoji según el estado de la cita
+function obtenerEmojiEstado(estado) {
+    const emojis = {
+        'Reservada': '✅',
+        'Confirmada': '🔔',
+        'En Proceso': '⏳',
+        'Completada': '✨',
+        'Cancelada': '❌',
+        'Reprogramada': '🔄'
+    };
+    return emojis[estado] || '📅';
+}
+
+// Formatear fecha para mostrar más amigable
+function formatearFecha(fecha) {
+    const [dia, mes, anio] = fecha.split('/');
+    const fechaObj = new Date(parseInt(anio), parseInt(mes) - 1, parseInt(dia));
+    
+    const diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    
+    const diaSemana = diasSemana[fechaObj.getDay()];
+    const nombreMes = meses[fechaObj.getMonth()];
+    
+    return `${diaSemana} ${dia}/${mes} (${nombreMes})`;
+}
+
+// Comparar fechas en formato DD/MM/YYYY
+function compararFechas(fecha1, fecha2) {
+    const [dia1, mes1, anio1] = fecha1.split('/').map(Number);
+    const [dia2, mes2, anio2] = fecha2.split('/').map(Number);
+    
+    const date1 = new Date(anio1, mes1 - 1, dia1);
+    const date2 = new Date(anio2, mes2 - 1, dia2);
+    
+    return date1 - date2;
+}
+
+// ==========================
+// Función para gestionar acciones sobre las citas
+// ==========================
+async function gestionarCitas(mensaje, telefono, conversacion) {
+    const mensajeLower = mensaje.toLowerCase().trim();
+    
+    // Volver al menú principal
+    if (mensajeLower === '0') {
+        conversacion.paso = 'menu_principal';
+        await procesarEstadoConversacion('', telefono, conversacion);
+        return;
+    }
+    
+    // Agendar nueva cita
+    if (mensajeLower === '1') {
+        await iniciarAgendamiento(telefono, conversacion);
+        return;
+    }
+    
+    // Cancelar cita (C1, C2, etc.)
+    if (mensajeLower.startsWith('c') && mensajeLower.length > 1) {
+        const numCita = parseInt(mensajeLower.substring(1)) - 1;
+        await cancelarCita(numCita, telefono, conversacion);
+        return;
+    }
+    
+    // Reprogramar cita (R1, R2, etc.)
+    if (mensajeLower.startsWith('r') && mensajeLower.length > 1) {
+        const numCita = parseInt(mensajeLower.substring(1)) - 1;
+        await reprogramarCita(numCita, telefono, conversacion);
+        return;
+    }
+    
+    // Opción no reconocida
+    await enviarMensaje(telefono, "❌ Opción no válida. Por favor:\n" +
+        "• Escribe *C* + número para cancelar (ej: C1)\n" +
+        "• Escribe *R* + número para reprogramar (ej: R1)\n" +
+        "• Escribe *1* para nueva cita\n" +
+        "• Escribe *0* para menú principal");
+}
+
+// ==========================
+// Funciones para cancelar y reprogramar citas
+// ==========================
+
+async function cancelarCita(indiceCita, telefono, conversacion) {
+    const citasActivas = conversacion.datosTemporales.citasActivas || [];
+    
+    if (indiceCita < 0 || indiceCita >= citasActivas.length) {
+        await enviarMensaje(telefono, "❌ Número de cita inválido. Por favor verifica el número correcto.");
+        return;
+    }
+    
+    const cita = citasActivas[indiceCita];
+    
+    try {
+        // Actualizar estado de la cita a "Cancelada"
+        await set(ref(db, `citas/${cita.id}/estado`), 'Cancelada');
+        await set(ref(db, `citas/${cita.id}/fechaCancelacion`), new Date().toISOString());
+        
+        const servicioInfo = await obtenerInfoServicio(cita.servicioId);
+        
+        const mensaje = `✅ *Cita cancelada exitosamente*\n\n` +
+                       `📅 Fecha: ${formatearFecha(cita.fecha)}\n` +
+                       `🕒 Hora: ${cita.hora}\n` +
+                       `💅 Servicio: ${servicioInfo.nombre}\n` +
+                       `🔑 ID: ${cita.id.substring(0, 8)}...\n\n` +
+                       `Si deseas agendar otra cita, escribe *1*`;
+        
+        await enviarMensaje(telefono, mensaje);
+        
+        // Notificar a la manicurista
+        const manicuristaJid = MANICURISTAS[cita.manicuristaId];
+        if (manicuristaJid) {
+            const telefonoCliente = telefono.replace('@s.whatsapp.net', '');
+            const clienteSnapshot = await get(ref(db, `clientes/${telefonoCliente}`));
+            const nombreCliente = clienteSnapshot.exists() ? clienteSnapshot.val().nombre : 'Cliente';
+            
+            await enviarMensaje(manicuristaJid, 
+                `❌ *Cita cancelada por el cliente*\n\n` +
+                `👤 Cliente: ${nombreCliente}\n` +
+                `📅 Fecha: ${formatearFecha(cita.fecha)}\n` +
+                `🕒 Hora: ${cita.hora}\n` +
+                `💅 Servicio: ${servicioInfo.nombre}\n` +
+                `🔑 ID: ${cita.id.substring(0, 8)}...`
+            );
+        }
+        
+        conversacion.paso = 'menu_principal';
+        
+    } catch (error) {
+        console.error("❌ Error cancelando cita:", error);
+        await enviarMensaje(telefono, "❌ Error al cancelar la cita. Por favor, intenta de nuevo.");
+    }
+}
+
+async function reprogramarCita(indiceCita, telefono, conversacion) {
+    const citasActivas = conversacion.datosTemporales.citasActivas || [];
+    
+    if (indiceCita < 0 || indiceCita >= citasActivas.length) {
+        await enviarMensaje(telefono, "❌ Número de cita inválido. Por favor verifica el número correcto.");
+        return;
+    }
+    
+    const cita = citasActivas[indiceCita];
+    const servicioInfo = await obtenerInfoServicio(cita.servicioId);
+    
+    // Guardar datos de la cita a reprogramar
+    conversacion.datosTemporales.citaAReprogramar = cita;
+    conversacion.datosTemporales.servicioSeleccionado = servicioInfo;
+    
+    await enviarMensaje(telefono, 
+        `🔄 *Reprogramando cita:*\n\n` +
+        `💅 Servicio: ${servicioInfo.nombre}\n` +
+        `📅 Fecha actual: ${formatearFecha(cita.fecha)}\n` +
+        `🕒 Hora actual: ${cita.hora}\n\n` +
+        `Por favor, indica la nueva fecha que deseas (formato DD/MM/AAAA):`
+    );
+    
+    conversacion.paso = 'reprogramar_fecha';
+}
+
+
+
+// Funciones para manejar reprogramación
+async function manejarReprogramarFecha(mensaje, telefono, conversacion) {
+    const fecha = mensaje.trim();
+    const regexFecha = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+
+    if (!regexFecha.test(fecha)) {
+        await enviarMensaje(telefono, "❌ Formato de fecha inválido. Escribe la fecha en formato DD/MM/AAAA (ejemplo: 25/08/2025).");
+        return;
+    }
+
+    if (!esFechaPermitida(fecha)) {
+        await enviarMensaje(telefono, "❌ Solo puedes reprogramar citas para esta semana o la siguiente. Por favor, selecciona otra fecha.");
+        return;
+    }
+
+    conversacion.datosTemporales.nuevaFecha = fecha;
+    conversacion.paso = 'reprogramar_hora';
+    
+    await enviarMensaje(telefono, 
+        `✅ Nueva fecha seleccionada: ${formatearFecha(fecha)}\n\n` +
+        `Por favor, indica la nueva hora que deseas (ejemplo: 15:30):`
+    );
+}
+
+async function manejarReprogramarHora(mensaje, telefono, conversacion) {
+    const hora = mensaje.trim();
+    const regexHora = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+
+    if (!regexHora.test(hora)) {
+        await enviarMensaje(telefono, "❌ Formato de hora inválido. Escribe la hora en formato HH:MM (ejemplo: 15:30).");
+        return;
+    }
+
+    const nuevaFecha = conversacion.datosTemporales.nuevaFecha;
+    const servicioSeleccionado = conversacion.datosTemporales.servicioSeleccionado;
+    const citaOriginal = conversacion.datosTemporales.citaAReprogramar;
+
+    if (!esHorarioValido(nuevaFecha, hora)) {
+        await enviarMensaje(telefono, 
+            "❌ La hora seleccionada no está dentro del horario permitido.\n" +
+            "⏰ Lunes a Viernes: 19:00 - 21:00\n" +
+            "📅 Sábados y Domingos: 09:00 - 21:00"
+        );
+        return;
+    }
+
+    // Verificar disponibilidad
+    const disponible = await verificarDisponibilidad(
+        nuevaFecha, 
+        hora, 
+        citaOriginal.manicuristaId, 
+        servicioSeleccionado.duracion
+    );
+
+    if (!disponible) {
+        const conflictos = await obtenerDetallesConflictos(nuevaFecha, hora, citaOriginal.manicuristaId, servicioSeleccionado.duracion);
+        let mensaje = "⚠️ No hay disponibilidad en el nuevo horario.\n";
+        if (conflictos.length > 0) {
+            mensaje += `Ya hay una cita de ${conflictos[0].horaInicio} a ${conflictos[0].horaFin}\n`;
+        }
+        mensaje += "Por favor selecciona otra hora:";
+        await enviarMensaje(telefono, mensaje);
+        return;
+    }
+
+    // Actualizar la cita en Firebase
+    try {
+        await set(ref(db, `citas/${citaOriginal.id}/fecha`), nuevaFecha);
+        await set(ref(db, `citas/${citaOriginal.id}/hora`), hora);
+        await set(ref(db, `citas/${citaOriginal.id}/estado`), 'Reprogramada');
+        await set(ref(db, `citas/${citaOriginal.id}/fechaReprogramacion`), new Date().toISOString());
+
+        const mensaje = `✅ *Cita reprogramada exitosamente*\n\n` +
+                       `💅 Servicio: ${servicioSeleccionado.nombre}\n` +
+                       `📅 Nueva fecha: ${formatearFecha(nuevaFecha)}\n` +
+                       `🕒 Nueva hora: ${hora}\n` +
+                       `👩‍🎨 Manicurista: ${citaOriginal.manicuristaId}\n` +
+                       `🔑 ID: ${citaOriginal.id.substring(0, 8)}...`;
+
+        await enviarMensaje(telefono, mensaje);
+
+        // Notificar a la manicurista
+        const manicuristaJid = MANICURISTAS[citaOriginal.manicuristaId];
+        if (manicuristaJid) {
+            const telefonoCliente = telefono.replace('@s.whatsapp.net', '');
+            const clienteSnapshot = await get(ref(db, `clientes/${telefonoCliente}`));
+            const nombreCliente = clienteSnapshot.exists() ? clienteSnapshot.val().nombre : 'Cliente';
+            
+            await enviarMensaje(manicuristaJid, 
+                `🔄 *Cita reprogramada*\n\n` +
+                `👤 Cliente: ${nombreCliente}\n` +
+                `💅 Servicio: ${servicioSeleccionado.nombre}\n` +
+                `📅 Nueva fecha: ${formatearFecha(nuevaFecha)}\n` +
+                `🕒 Nueva hora: ${hora}\n` +
+                `🔑 ID: ${citaOriginal.id.substring(0, 8)}...`
+            );
+        }
+
+        conversacion.paso = 'menu_principal';
+
+    } catch (error) {
+        console.error("❌ Error reprogramando cita:", error);
+        await enviarMensaje(telefono, "❌ Error al reprogramar la cita. Por favor, intenta de nuevo.");
+    }
+}
+// ==========================
+// API REST
+// ==========================
+app.get('/', (req, res) => {
+    res.send(`<h1>🤖 Bot activo</h1><p>Estado: ${isConnected ? "✅ Conectado" : "❌ Desconectado"}</p>`);
+});
+
+app.get('/qr', (req, res) => {
+    if (qrCode) res.send(`<img src="${qrCode}" style="width:300px;">`);
+    else res.send("<h3>No hay código QR disponible</h3>");
+});
+
