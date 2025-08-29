@@ -4,7 +4,7 @@
   "description": "Bot de WhatsApp para salón de belleza",
   "main": "server.js",
   "scripts": {
-     "start": "node app/server.js",
+    "start": "node app/server.js",
     "dev": "nodemon server.js"
   },
   "dependencies": {

@@ -310,6 +310,12 @@ async function procesarMensajeWhatsApp(mensaje, telefono) {
     const conversacion = conversacionesActivas.get(telefono);
     conversacion.ultimaActividad = new Date();
 
+    // ✅ NUEVO: Verificar comandos de cancelación/menú en cualquier paso
+    const mensajeLower = mensaje.toLowerCase().trim();
+    if (verificarComandosCancelacion(mensajeLower, telefono, conversacion)) {
+        return; // Se procesó un comando de cancelación
+    }
+
     // Si el cliente no existe, pedimos su nombre
     if (!cliente && conversacion.paso === 'registrar_cliente') {
         await enviarMensaje(telefono,"👋 ¡Hola! Para registrarte, por favor dime tu nombre:");
@@ -326,6 +332,61 @@ async function procesarMensajeWhatsApp(mensaje, telefono) {
     // Procesamos el flujo del cliente
     await procesarEstadoConversacion(mensaje, telefono, conversacion);
     conversacionesActivas.set(telefono, conversacion);
+}
+
+function verificarComandosCancelacion(mensajeLower, telefono, conversacion) {
+    const comandosCancelacion = [
+        'cancelar', 'cancel', 'salir', 'exit', 'menu', 
+        'inicio', 'volver', 'atras', 'atrás', 'back',
+        'principal', 'home', 'reset', 'reiniciar'
+    ];
+    
+    const esComandoCancelacion = comandosCancelacion.includes(mensajeLower) || 
+                                mensajeLower === '0' ||
+                                mensajeLower === 'hola';
+
+    if (esComandoCancelacion) {
+        // Limpiar datos temporales y volver al menú principal
+        conversacion.datosTemporales = {};
+        conversacion.paso = 'menu_principal';
+        
+        // Enviar mensaje de confirmación y mostrar menú
+        enviarMensajeCancelacion(telefono, mensajeLower);
+        return true;
+    }
+    
+    return false;
+}
+
+async function enviarMensajeCancelacion(telefono, comando) {
+    let mensaje;
+    
+    if (comando === 'hola') {
+        mensaje = "👋 ¡Hola! Te he llevado al menú principal.";
+    } else if (comando === 'cancelar' || comando === 'cancel') {
+        mensaje = "❌ Proceso cancelado. Has vuelto al menú principal.";
+    } else if (['salir', 'exit'].includes(comando)) {
+        mensaje = "👋 Has salido del proceso actual. Aquí tienes el menú principal:";
+    } else if (['menu', 'principal', 'home'].includes(comando)) {
+        mensaje = "🏠 Has vuelto al menú principal:";
+    } else if (['volver', 'atras', 'atrás', 'back'].includes(comando)) {
+        mensaje = "↩️ Has vuelto al menú principal:";
+    } else if (['reset', 'reiniciar'].includes(comando)) {
+        mensaje = "🔄 Proceso reiniciado. Menú principal:";
+    } else if (comando === '0') {
+        mensaje = "🏠 Menú principal:";
+    } else {
+        mensaje = "📋 Menú principal:";
+    }
+    
+    // Agregar el menú después del mensaje
+    mensaje += `\n\n` +
+               `1️⃣ Agendar nueva cita\n` +
+               `2️⃣ Ver mis citas\n` +
+               `3️⃣ Información del salón\n\n` +
+               `💡 *Tip:* Puedes escribir "cancelar", "menu" o "0" en cualquier momento para volver aquí.`;
+    
+    await enviarMensaje(telefono, mensaje);
 }
 
 
@@ -366,23 +427,26 @@ async function procesarEstadoConversacion(mensaje, telefono, conversacion) {
         case 'confirmar_cita':
             await manejarConfirmarCita(mensaje, telefono, conversacion);
             break;
-            case 'gestionar_citas':
-                await gestionarCitas(mensaje, telefono, conversacion);
-                break;
 
-            case 'reprogramar_fecha':
-                await manejarReprogramarFecha(mensaje, telefono, conversacion);
-                break;
+        case 'gestionar_citas':
+            await gestionarCitas(mensaje, telefono, conversacion);
+            break;
 
-            case 'reprogramar_hora':
-                await manejarReprogramarHora(mensaje, telefono, conversacion);
-                break;
+        case 'reprogramar_fecha':
+            await manejarReprogramarFecha(mensaje, telefono, conversacion);
+            break;
+
+        case 'reprogramar_hora':
+            await manejarReprogramarHora(mensaje, telefono, conversacion);
+            break;
 
         default:
-            await enviarMensaje(telefono,'❌ No entendí tu respuesta. Escribe "Hola" para comenzar.');
-            conversacion.paso = 'inicio';
+            await enviarMensaje(telefono,'❌ No entendí tu respuesta. Escribe "menu" para ir al menú principal.');
+            conversacion.paso = 'menu_principal';
+            await procesarEstadoConversacion('', telefono, conversacion);
     }
 }
+
 
 // ==========================
 // Menú principal
@@ -397,13 +461,15 @@ async function mostrarMenuPrincipal(mensajeLower, telefono, conversacion) {
             break;
         case '3':
             await mostrarInfoSalon(telefono);
+            conversacion.paso = 'menu_principal';
             break;
         default:
             await enviarMensaje(
                telefono, `¡Hola! 👋 Selecciona una opción del menú:\n` +
                 `1️⃣ Agendar nueva cita\n` +
                 `2️⃣ Ver mis citas\n` +
-                `3️⃣ Información del salón`
+                `3️⃣ Información del salón`+
+                `💡 *Tip:* Puedes escribir el número de la opción que desees.`
             );
     }
 }
@@ -422,17 +488,64 @@ async function iniciarAgendamiento(telefono, conversacion) {
     servicios.forEach((s, i) => {
         mensaje += `${i + 1}️⃣ *${s.nombre}* - $${s.precio}\n⏱ Duración: ${s.duracion} min\n\n`;
     });
-    mensaje += "_Selecciona el número del servicio_";
+    mensaje += "_Selecciona el número del servicio_\n\n";
+    mensaje += "💡 *Tip:* Escribe 'cancelar' o '0' en cualquier momento para volver al menú principal.";
+
 
     conversacion.datosTemporales.servicios = servicios;
     conversacion.paso = 'seleccionar_servicio';
     await enviarMensaje(telefono,mensaje);
 }
 
+
+
+
 // ==========================
 // Funciones WhatsApp
 // ==========================
 // ==========================
+
+async function mostrarInfoSalon(telefono) {
+    const mensaje = `🏢 *INFORMACIÓN DEL SALÓN DE BELLEZA*\n\n` +
+                   `📍 *UBICACIÓN:*\n` +
+                   `C. Kiliwas 8829,\n` +
+                   `Matamoros Norte-Centro-Sur\n` +
+                   `Matamoros Norte-Centro-Sur\n` +
+                   `Tijuana, B.C\n` +
+                   `CP 22234\n\n` +
+                   
+                   `⏰ *HORARIOS DE ATENCIÓN:*\n` +
+                   `🗓️ Lunes a Viernes: 19:00 - 21:00\n` +
+                   `📅 Sábados y Domingos: 09:00 - 21:00\n\n` +
+                   
+                   `💅 *SERVICIOS DESTACADOS:*\n` +
+                   `• Uñas acrílicas chicas o medianas a 1 tono o francés $200\n` +
+                   `• Uñas acrílicas diferente diseño mandar foto para cotización\n` +
+                   `• Baño de acrílico un tono o francés $180\n` +
+                   `• Gel semipermanente $120\n\n` +
+                   `• Acripie $200\n\n` +
+                   
+                   `📱 *CONTACTO:*\n` +
+                   `📞 Teléfono: (xxx) xxx-xxxx\n` +
+                   `💬 WhatsApp: Este mismo número\n\n` +
+                   
+                   `📋 *POLÍTICAS:*\n` +
+                   `• Las citas se pueden agendar hasta 2 semanas\n` +
+                   `• Puedes cancelar o reprogramar tu cita\n` +
+                   `• Llega 10 minutos antes de tu cita\n\n` +
+                   `• dependiendo el servicio deseado, tiene un tiempo aproximado de dos horas\n\n` +
+                   `• sin acompañantes, no hay excepciones\n\n` +
+                   `• acudir con cambio de preferencia, en caso que no puedas conseguirlo avisarme asi preparo el efectivo\n\n` +
+                     `• tolerancia de 10min en caso que se exceda, queda cancelado el servicio
+* la cita se debe confirmar dos veces: un dia antes y el mismo dia de la cita\n\n` +
+
+
+
+                   `💡 Para agendar una cita, escribe *1*\n` +
+                   `📱 Para ver tus citas, escribe *2*`;
+
+    await enviarMensaje(telefono, mensaje);
+}
 
 
 // Función para verificar si es un grupo
@@ -576,7 +689,10 @@ async function manejarSeleccionServicio(mensaje, telefono, conversacion) {
     }
 
     if (isNaN(seleccion) || seleccion < 0 || seleccion >= servicios.length) {
-        await enviarMensaje(telefono,"❌ Selección inválida. Por favor, escribe el número correspondiente al servicio.");
+        await enviarMensaje(telefono,
+            "❌ Selección inválida. Por favor, escribe el número correspondiente al servicio.\n\n" +
+            "💡 *Tip:* Escribe 'cancelar' o '0' para volver al menú principal."
+        );
         return;
     }
 
@@ -585,10 +701,11 @@ async function manejarSeleccionServicio(mensaje, telefono, conversacion) {
     conversacion.paso = 'seleccionar_fecha';
 
     await enviarMensaje(
-         telefono,`Has seleccionado: *${servicioSeleccionado.nombre}* - $${servicioSeleccionado.precio}\n` +
+        telefono,
+        `Has seleccionado: *${servicioSeleccionado.nombre}* - $${servicioSeleccionado.precio}\n` +
         `⏱ Duración: ${servicioSeleccionado.duracion} min\n\n` +
-        `Por favor, indica la fecha que deseas (ejemplo: 25/08/2025 (dia-mes-año)).`
-       
+        `Por favor, indica la fecha que deseas (ejemplo: 25/08/2025).\n\n` +
+        `💡 *Tip:* Escribe 'cancelar' para cancelar o 'atrás' para volver al menú.`
     );
 }
 
@@ -596,34 +713,65 @@ async function manejarSeleccionServicio(mensaje, telefono, conversacion) {
 // Manejo de selección de fecha
 // ==========================
 async function manejarSeleccionFecha(mensaje, telefono, conversacion) {
-    const fecha = mensaje.trim(); // Formato esperado: DD/MM/YYYY
-
-    // Validación simple
+    const fecha = mensaje.trim();
     const regexFecha = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+
     if (!regexFecha.test(fecha)) {
         await enviarMensaje(
-                telefono,"❌ Formato de fecha inválido. Por favor escribe la fecha en formato DD/MM/AAAA (ejemplo: 25/08/2025)."
-        
+            telefono,
+            "❌ Formato de fecha inválido. Escribe la fecha en formato DD/MM/AAAA (ejemplo: 25/08/2025).\n\n" +
+            "💡 *Tip:* Escribe 'cancelar' para cancelar el proceso."
+        );
+        return;
+    }
+
+    const [dia, mes, anio] = fecha.split("/").map(Number);
+    const fechaSeleccionada = new Date(anio, mes - 1, dia);
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+
+    const maxFecha = new Date();
+    maxFecha.setDate(hoy.getDate() + 14);
+
+    if (fechaSeleccionada < hoy) {
+        await enviarMensaje(
+            telefono,
+            "❌ La fecha no puede ser anterior a hoy. Por favor selecciona otra fecha.\n\n" +
+            "💡 *Tip:* Escribe 'menu' para volver al inicio."
+        );
+        return;
+    }
+
+    if (fechaSeleccionada > maxFecha) {
+        await enviarMensaje(
+            telefono,
+            "❌ Solo se pueden agendar citas hasta 2 semanas desde hoy. Por favor selecciona otra fecha.\n\n" +
+            "💡 *Tip:* Escribe 'cancelar' para cancelar el proceso."
         );
         return;
     }
 
     conversacion.datosTemporales.fechaSeleccionada = fecha;
     conversacion.paso = 'seleccionar_hora';
-
+    
     await enviarMensaje(
-        telefono, `✅ Fecha seleccionada: ${fecha}\n` +
-        `Por favor, indica la hora que deseas (ejemplo: 15:30).`
-       
+        telefono,
+        `✅ Fecha seleccionada: ${fecha}\n` +
+        `Por favor, indica la hora que deseas (ejemplo: 15:30).\n\n` +
+        `💡 *Tip:* Escribe 'atrás' para cambiar la fecha o 'cancelar' para cancelar.`
     );
 }
+
 // Manejar selección de servicio
 async function manejarSeleccionServicio(mensaje, telefono, conversacion) {
     const seleccion = parseInt(mensaje) - 1;
     const servicios = conversacion.datosTemporales.servicios;
     
     if (isNaN(seleccion) || seleccion < 0 || seleccion >= servicios.length) {
-        await enviarMensaje( telefono,'❌ Opción inválida. Selecciona el número correcto del servicio.');
+        await enviarMensaje( telefono,'❌ Opción inválida. Selecciona el número correcto del servicio. '+
+              "💡 *Tip:* Escribe 'menu' para volver al inicio"
+        );
+        
         return;
     }
 
@@ -639,7 +787,8 @@ async function manejarSeleccionFecha(mensaje, telefono, conversacion) {
 
     if (!regexFecha.test(fecha)) {
         await enviarMensaje(
-            telefono,"❌ Formato de fecha inválido. Escribe la fecha en formato DD/MM/AAAA (ejemplo: 25/08/2025)."
+            telefono,"❌ Formato de fecha inválido. Escribe la fecha en formato DD/MM/AAAA (ejemplo: 25/08/2025)."+
+              "💡 *Tip:* Escribe 'menu' para volver al inicio."
         );
         return;
     }
@@ -655,14 +804,16 @@ async function manejarSeleccionFecha(mensaje, telefono, conversacion) {
     if (fechaSeleccionada < hoy) {
         await enviarMensaje(
           
-            telefono , "❌ La fecha no puede ser anterior a hoy. Por favor selecciona otra fecha."
+            telefono , "❌ La fecha no puede ser anterior a hoy. Por favor selecciona otra fecha."+
+              "💡 *Tip:* Escribe 'menu' para volver al inicio."
         );
         return;
     }
 
     if (fechaSeleccionada > maxFecha) {
         await enviarMensaje(
-            telefono, "❌ Solo se pueden agendar citas hasta 2 semanas desde hoy. Por favor selecciona otra fecha.",
+            telefono, "❌ Solo se pueden agendar citas hasta 2 semanas desde hoy. Por favor selecciona otra fecha."+
+              "💡 *Tip:* Escribe 'menu' para volver al inicio.",
            
         );
         return;
@@ -673,6 +824,8 @@ async function manejarSeleccionFecha(mensaje, telefono, conversacion) {
     conversacion.paso = 'seleccionar_hora';
     await enviarMensaje(
          telefono,`✅ Fecha seleccionada: ${fecha}\nPor favor, indica la hora que deseas (ejemplo: 15:30).`
+         +
+              "💡 *Tip:* Escribe 'menu' para volver al inicio."
        
     );
 }
@@ -684,16 +837,18 @@ async function manejarSeleccionHora(mensaje, telefono, conversacion) {
     const regexHora = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
 
     // Si hay sugerencias pendientes, verificar si es una selección de sugerencia
-    if (conversacion.datosTemporales.sugerenciasHorarios) {
+      if (conversacion.datosTemporales.sugerenciasHorarios) {
         const procesadoComoSugerencia = await manejarSugerenciaHorario(mensaje, telefono, conversacion);
         if (procesadoComoSugerencia) {
-            return; // Se procesó como sugerencia, salir de la función
+            return;
         }
     }
 
     if (!regexHora.test(hora)) {
         await enviarMensaje(
-            telefono, "❌ Formato de hora inválido. Escribe la hora en formato HH:MM (ejemplo: 15:30)."
+            telefono,
+            "❌ Formato de hora inválido. Escribe la hora en formato HH:MM (ejemplo: 15:30).\n\n" +
+            "💡 *Tip:* Escribe 'menu' para volver al inicio o 'atrás' para cambiar la fecha."
         );
         return;
     }
@@ -703,7 +858,9 @@ async function manejarSeleccionHora(mensaje, telefono, conversacion) {
 
     if (!fechaSeleccionada || !servicioSeleccionado) {
         await enviarMensaje(
-            telefono, "❌ Faltan datos de la reserva. Por favor vuelve al menú principal e intenta de nuevo."
+            telefono, "❌ Faltan datos de la reserva. Por favor vuelve al menú principal e intenta de nuevo."+
+            
+              "💡 *Tip:* Escribe 'menu' para volver al inicio."
         );
         conversacion.paso = 'inicio';
         return;
@@ -715,7 +872,8 @@ async function manejarSeleccionHora(mensaje, telefono, conversacion) {
             telefono, "❌ La hora seleccionada no está dentro del horario permitido del salón.\n" +
             "⏰ Lunes a Viernes: 19:00 - 21:00\n" +
             "📅 Sábados y Domingos: 09:00 - 21:00\n" +
-            "Por favor selecciona otra hora."
+            "Por favor selecciona otra hora."+
+              "💡 *Tip:* Escribe 'menu' para volver al inicio."
         );
         return;
     }
@@ -725,7 +883,8 @@ async function manejarSeleccionHora(mensaje, telefono, conversacion) {
         await enviarMensaje(
             telefono, "❌ El servicio se extendería más allá del horario de cierre del salón.\n" +
             `⏱ Tu servicio dura ${servicioSeleccionado.duracion} minutos.\n` +
-            "Por favor selecciona una hora más temprana."
+            "Por favor selecciona una hora más temprana."+
+              "💡 *Tip:* Escribe 'menu' para volver al inicio."
         );
         return;
     }
@@ -759,7 +918,8 @@ async function manejarSeleccionHora(mensaje, telefono, conversacion) {
 
     if (manicuristasDisponibles.length === 0) {
         // No hay disponibilidad, mostrar conflictos y sugerir horarios alternativos
-        let mensajeConflicto = "⚠️ Lo siento, no hay disponibilidad en el horario solicitado.\n\n";
+        let mensajeConflicto = "⚠️ Lo siento, no hay disponibilidad en el horario solicitado.\n\n"+
+              "💡 *Tip:* Escribe 'menu' para volver al inicio.";
         
         // Mostrar por qué no está disponible
         for (let [manicurista, conflictos] of Object.entries(conflictosDetallados)) {
@@ -778,16 +938,20 @@ async function manejarSeleccionHora(mensaje, telefono, conversacion) {
         );
 
         if (sugerencias.length > 0) {
-            mensajeConflicto += "\n🕒 *Horarios disponibles sugeridos:*\n";
+            mensajeConflicto += "\n🕒 *Horarios disponibles sugeridos:*\n"+
+              "💡 *Tip:* Escribe 'menu' para volver al inicio.";
             sugerencias.forEach((sugerencia, index) => {
                 mensajeConflicto += `${index + 1}️⃣ ${sugerencia.hora}\n`;
             });
-            mensajeConflicto += "\nEscribe el número del horario que prefieras o indica otra hora:";
+            mensajeConflicto += "\nEscribe el número del horario que prefieras o indica otra hora:"+
+              "💡 *Tip:* Escribe 'menu' para volver al inicio.";
             
             // Guardar sugerencias para procesarlas si el usuario elige una
             conversacion.datosTemporales.sugerenciasHorarios = sugerencias;
         } else {
-            mensajeConflicto += "\n❌ No hay otros horarios disponibles para esta fecha. Por favor elige otra fecha.";
+            mensajeConflicto += "\n❌ No hay otros horarios disponibles para esta fecha. Por favor elige otra fecha."
+            +
+              "💡 *Tip:* Escribe 'menu' para volver al inicio.";
             conversacion.paso = 'seleccionar_fecha';
         }
 
@@ -799,7 +963,8 @@ async function manejarSeleccionHora(mensaje, telefono, conversacion) {
     conversacion.datosTemporales.hora = hora;
     conversacion.datosTemporales.manicuristasDisponibles = manicuristasDisponibles;
 
-    let mensajeManicuristas = "💅 Selecciona la manicurista disponible:\n";
+    let mensajeManicuristas = "💅 Selecciona la manicurista disponible:\n"+
+              "💡 *Tip:* Escribe 'menu' para volver al inicio.";
     manicuristasDisponibles.forEach((m, i) => {
         mensajeManicuristas += `${i + 1}️⃣ ${m}\n`;
     });
@@ -816,34 +981,20 @@ async function manejarSeleccionManicurista(mensaje, telefono, conversacion) {
     const disponibles = conversacion.datosTemporales.manicuristasDisponibles || [];
     const seleccion = parseInt(mensaje) - 1;
 
+   
     if (isNaN(seleccion) || seleccion < 0 || seleccion >= disponibles.length) {
         await enviarMensaje(
-            
-            telefono,'❌ Opción inválida. Selecciona el número correcto de la manicurista disponible.'
+            telefono,
+            '❌ Opción inválida. Selecciona el número correcto de la manicurista disponible.\n\n' +
+            '💡 *Tip:* Escribe "cancelar" para cancelar el agendamiento.'
         );
         return;
     }
 
     conversacion.datosTemporales.manicurista = disponibles[seleccion];
-    await enviarMensaje(telefono,'✅ Confirmar cita? (sí/no)');
+    await enviarMensaje(telefono,'✅ Confirmar cita? (sí/no)'+
+              "💡 *Tip:* Escribe 'menu' para volver al inicio.");
     conversacion.paso = 'confirmar_cita';
-}
-async function listarGrupos() {
-    try {
-        // Devuelve un objeto con todos los grupos en los que participa
-        const grupos = await sock.groupFetchAllParticipating();
-
-        // Recorremos cada grupo
-        Object.keys(grupos).forEach(jid => {
-            const grupo = grupos[jid];
-            console.log(`Nombre: ${grupo.subject}, JID: ${jid}`);
-        });
-
-        return grupos;
-    } catch (error) {
-        console.error("❌ Error listando grupos:", error);
-        return {};
-    }
 }
 
 // Manejar confirmación de cita
@@ -879,7 +1030,8 @@ async function manejarConfirmarCita(mensaje, telefono, conversacion) {
             const manicuristaJid = MANICURISTAS[manicuristaNombre];
 
             if (!manicuristaJid) {
-                console.error(`❌ No se encontró la manicurista: ${manicuristaNombre}`);
+                console.error(`❌ No se encontró la manicurista: ${manicuristaNombre}`+
+              "💡 *Tip:* Escribe 'menu' para volver al inicio.");
             } else {
                 await enviarMensajeManicurista(
                     manicuristaJid,
@@ -1272,11 +1424,12 @@ async function sugerirHorariosAlternativos(fecha, horaDeseada, manicuristaId, du
 }
 
 // ==========================
-// Función para mostrar citas del cliente - Agregar a server.js
+// Función para mostrar citas del cliente
 // ==========================
-
 async function mostrarCitasCliente(telefono, conversacion) {
     try {
+        console.log("🔍 [mostrarCitasCliente] Iniciando para:", telefono);
+        
         // Obtener el número de teléfono sin el formato de WhatsApp
         const telefonoLimpio = telefono.replace('@s.whatsapp.net', '');
         
@@ -1284,7 +1437,7 @@ async function mostrarCitasCliente(telefono, conversacion) {
         const citasSnapshot = await get(ref(db, 'citas'));
         
         if (!citasSnapshot.exists()) {
-            await enviarMensaje(telefono, "📅 No tienes citas agendadas aún.\n\n¿Te gustaría agendar una nueva cita? Escribe *1* para continuar.");
+            await enviarMensaje(telefono, "📅 No tienes citas agendadas aún.\n\n¿Te gustaría agendar una nueva cita? Escribe *A* para continuar.");
             conversacion.paso = 'menu_principal';
             return;
         }
@@ -1297,7 +1450,7 @@ async function mostrarCitasCliente(telefono, conversacion) {
             .map(([id, cita]) => ({ id, ...cita }));
 
         if (citasDelCliente.length === 0) {
-            await enviarMensaje(telefono, "📅 No tienes citas agendadas aún.\n\n¿Te gustaría agendar una nueva cita? Escribe *1* para continuar.");
+            await enviarMensaje(telefono, "📅 No tienes citas agendadas aún.\n\n¿Te gustaría agendar una nueva cita? Escribe *A* para continuar.");
             conversacion.paso = 'menu_principal';
             return;
         }
@@ -1349,24 +1502,162 @@ async function mostrarCitasCliente(telefono, conversacion) {
         // Opciones disponibles
         if (citasActivas.length > 0) {
             mensaje += "\n🔧 *OPCIONES:*\n";
-            mensaje += "• Escribe *C* seguido del número para cancelar (ej: C1)\n";
-            mensaje += "• Escribe *R* seguido del número para reprogramar (ej: R1)\n";
+            mensaje += "• Para CANCELAR una cita, escribe *C* + número:\n";
+            citasActivas.forEach((cita, i) => {
+                mensaje += `  - *C${i + 1}* para cancelar la cita del ${formatearFecha(cita.fecha)}\n`;
+            });
+            mensaje += "\n";
         }
         
-        mensaje += "• Escribe *1* para agendar nueva cita\n";
+        mensaje += "• Escribe *A* para agendar nueva cita\n";
         mensaje += "• Escribe *0* para volver al menú principal";
 
+        console.log("📤 [mostrarCitasCliente] Enviando mensaje con citas para:", telefono);
+        console.log("📤 [mostrarCitasCliente] Citas activas encontradas:", citasActivas.length);
+        
         await enviarMensaje(telefono, mensaje);
         
         // Guardar las citas activas en la conversación para manejar acciones
+        conversacion.datosTemporales = conversacion.datosTemporales || {};
         conversacion.datosTemporales.citasActivas = citasActivas;
         conversacion.paso = 'gestionar_citas';
+
+        console.log("✅ [mostrarCitasCliente] Paso cambiado a: gestionar_citas");
+        console.log("✅ [mostrarCitasCliente] Citas guardadas:", citasActivas.length);
 
     } catch (error) {
         console.error("❌ Error obteniendo citas del cliente:", error);
         await enviarMensaje(telefono, "❌ Ocurrió un error al obtener tus citas. Por favor, intenta de nuevo más tarde.");
         conversacion.paso = 'menu_principal';
     }
+}
+
+async function gestionarCitas(mensaje, telefono, conversacion) {
+    console.log("🔍 [gestionarCitas] ===== INICIANDO FUNCIÓN =====");
+    console.log("🔍 [gestionarCitas] Mensaje recibido:", mensaje);
+    console.log("🔍 [gestionarCitas] Paso actual:", conversacion.paso);
+    console.log("🔍 [gestionarCitas] Datos temporales:", conversacion.datosTemporales);
+    console.log("🔍 [gestionarCitas] Citas activas disponibles:", conversacion.datosTemporales?.citasActivas?.length || 0);
+    
+    const mensajeLower = mensaje.toLowerCase().trim();
+    const citasActivas = conversacion.datosTemporales?.citasActivas || [];
+    
+    console.log("🔍 [gestionarCitas] Mensaje procesado:", mensajeLower);
+    console.log("🔍 [gestionarCitas] Citas activas:", citasActivas.map((cita, i) => `${i+1}: ${cita.id} - ${cita.fecha}`));
+    
+    // Volver al menú principal
+    if (mensajeLower === '0') {
+        console.log("✅ [gestionarCitas] Usuario eligió volver al menú principal");
+        conversacion.paso = 'menu_principal';
+        await procesarEstadoConversacion('', telefono, conversacion);
+        return;
+    }
+    
+    // Agendar nueva cita
+    if (mensajeLower === 'a') {
+        console.log("✅ [gestionarCitas] Usuario eligió agendar nueva cita");
+        await iniciarAgendamiento(telefono, conversacion);
+        return;
+    }
+    
+    // Verificar si es un comando para cancelar cita (C1, C2, C3, etc.)
+    if (mensajeLower.startsWith('c') && mensajeLower.length > 1) {
+        const numeroStr = mensajeLower.substring(1); // Quitar la 'C'
+        const numeroCita = parseInt(numeroStr);
+        
+        console.log("🔍 [gestionarCitas] Comando de cancelación detectado");
+        console.log("🔍 [gestionarCitas] Número parseado:", numeroCita, "| isNaN:", isNaN(numeroCita));
+        
+        if (!isNaN(numeroCita) && numeroCita >= 1 && numeroCita <= citasActivas.length) {
+            const indiceCita = numeroCita - 1; // Ajustar índice (1 se convierte en 0, 2 en 1, etc.)
+            console.log("✅ [gestionarCitas] Cancelando cita en índice:", indiceCita);
+            console.log("✅ [gestionarCitas] Datos de la cita a cancelar:", citasActivas[indiceCita]);
+            await cancelarCita(indiceCita, telefono, conversacion);
+            return;
+        } else {
+            console.log("❌ [gestionarCitas] Número de cita inválido:", numeroCita);
+        }
+    }
+    
+    // Opción no reconocida
+    console.log("❌ [gestionarCitas] Opción no válida recibida:", mensaje);
+    
+    let mensajeAyuda = "❌ Opción no válida.\n\n";
+    
+    if (citasActivas.length > 0) {
+        mensajeAyuda += "Para cancelar una cita, escribe *C* + número:\n";
+        citasActivas.forEach((cita, i) => {
+            mensajeAyuda += `• *C${i + 1}* para cancelar la cita del ${formatearFecha(cita.fecha)}\n`;
+        });
+        mensajeAyuda += "\nOtras opciones:\n";
+    }
+    
+    mensajeAyuda += "• *A* para agendar nueva cita\n";
+    mensajeAyuda += "• *0* para volver al menú principal";
+    
+    console.log("📤 [gestionarCitas] Enviando mensaje de ayuda:", mensajeAyuda);
+    await enviarMensaje(telefono, mensajeAyuda);
+}
+
+async function gestionarCitas(mensaje, telefono, conversacion) {
+    console.log("🔍 [gestionarCitas] Iniciando con mensaje:", mensaje);
+    console.log("🔍 [gestionarCitas] Citas activas disponibles:", conversacion.datosTemporales.citasActivas?.length || 0);
+    
+    const mensajeLower = mensaje.toLowerCase().trim();
+    const citasActivas = conversacion.datosTemporales.citasActivas || [];
+    
+    console.log("🔍 [gestionarCitas] Mensaje procesado:", mensajeLower);
+    console.log("🔍 [gestionarCitas] Citas activas:", citasActivas.map((cita, i) => `${i+1}: ${cita.id} - ${cita.fecha}`));
+    
+    // Volver al menú principal
+    if (mensajeLower === '0') {
+        console.log("✅ [gestionarCitas] Usuario eligió volver al menú principal");
+        conversacion.paso = 'menu_principal';
+        await procesarEstadoConversacion('', telefono, conversacion);
+        return;
+    }
+    
+    // Agendar nueva cita
+    if (mensajeLower === '1') {
+        console.log("✅ [gestionarCitas] Usuario eligió agendar nueva cita");
+        await iniciarAgendamiento(telefono, conversacion);
+        return;
+    }
+    
+    // Verificar si es un número de cita para cancelar (1, 2, 3, etc.)
+    const numeroCita = parseInt(mensaje);
+    console.log("🔍 [gestionarCitas] Número parseado:", numeroCita, "| isNaN:", isNaN(numeroCita));
+    
+    if (!isNaN(numeroCita) && numeroCita >= 1 && numeroCita <= citasActivas.length) {
+        const indiceCita = numeroCita - 1; // Ajustar índice (1 se convierte en 0, 2 en 1, etc.)
+        console.log("✅ [gestionarCitas] Cancelando cita en índice:", indiceCita);
+        console.log("✅ [gestionarCitas] Datos de la cita a cancelar:", citasActivas[indiceCita]);
+        await cancelarCita(indiceCita, telefono, conversacion);
+        return;
+    }
+    
+    // Opción no reconocida
+    console.log("❌ [gestionarCitas] Opción no válida recibida:", mensaje);
+    
+    let mensajeAyuda = "❌ Opción no válida.\n\n";
+    
+    
+        // Opciones disponibles
+        if (citasActivas.length > 0) {
+            mensaje += "\n🔧 *OPCIONES:*\n";
+            mensaje += "• Para CANCELAR, escribe el número de la cita:\n";
+            citasActivas.forEach((cita, i) => {
+                mensaje += `  - Escribe *${i + 1}* para cancelar la cita del ${formatearFecha(cita.fecha)}\n`;
+            });
+        }
+        
+        mensaje += "\n• Escribe *1* para agendar nueva cita\n";
+        mensaje += "• Escribe *0* para volver al menú principal";
+
+        console.log("📤 [mostrarCitasCliente] Enviando mensaje con citas para:", telefono);
+        console.log("📤 [mostrarCitasCliente] Citas activas encontradas:", citasActivas.length);
+        
+        await enviarMensaje(telefono, mensaje);
 }
 
 // ==========================
@@ -1398,8 +1689,7 @@ function obtenerEmojiEstado(estado) {
         'Confirmada': '🔔',
         'En Proceso': '⏳',
         'Completada': '✨',
-        'Cancelada': '❌',
-        'Reprogramada': '🔄'
+        'Cancelada': '❌'
     };
     return emojis[estado] || '📅';
 }
