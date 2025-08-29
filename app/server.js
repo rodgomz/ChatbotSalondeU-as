@@ -381,9 +381,10 @@ async function enviarMensajeCancelacion(telefono, comando) {
     
     // Agregar el menú después del mensaje
     mensaje += `\n\n` +
-               `1️⃣ Agendar nueva cita\n` +
-               `2️⃣ Ver mis citas\n` +
-               `3️⃣ Información del salón\n\n` +
+               `1️⃣ ➕ Agendar nueva cita\n` +
+               `2️⃣ 📅 Ver mis citas\n` +
+               `3️⃣ ℹ️ Información de contacto\n\n` +
+               `4️⃣ 📍 Ver ubicación\n\n` +
                `💡 *Tip:* Puedes escribir "cancelar", "menu" o "0" en cualquier momento para volver aquí.`;
     
     await enviarMensaje(telefono, mensaje);
@@ -463,12 +464,17 @@ async function mostrarMenuPrincipal(mensajeLower, telefono, conversacion) {
             await mostrarInfoSalon(telefono);
             conversacion.paso = 'menu_principal';
             break;
+              case '4':
+            await mostrarUbicacionSalon(telefono);
+           
+            break;
         default:
             await enviarMensaje(
                telefono, `¡Hola! 👋 Selecciona una opción del menú:\n` +
-                `1️⃣ Agendar nueva cita\n` +
-                `2️⃣ Ver mis citas\n` +
-                `3️⃣ Información del salón`+
+                `1️⃣ ➕ Agendar nueva cita\n` +
+                `2️⃣ 📅 Ver mis citas\n` +
+                `3️⃣ ℹ️ Información de contacto\n\n` +
+                `4️⃣ 📍 Ver ubicación\n\n` +
                 `💡 *Tip:* Puedes escribir el número de la opción que desees.`
             );
     }
@@ -510,43 +516,92 @@ async function mostrarInfoSalon(telefono) {
                    `📍 *UBICACIÓN:*\n` +
                    `C. Kiliwas 8829,\n` +
                    `Matamoros Norte-Centro-Sur\n` +
-                   `Matamoros Norte-Centro-Sur\n` +
-                   `Tijuana, B.C\n` +
+                   `Tijuana, B.C.\n` +
                    `CP 22234\n\n` +
+                   `🗺️ *Ver ubicación en Google Maps:*\n` +
+                   `https://maps.app.goo.gl/Ft82Gy6BraiNay438?g_st=com.google.maps.preview.copy\n\n` +
                    
                    `⏰ *HORARIOS DE ATENCIÓN:*\n` +
-                   `🗓️ Lunes a Viernes: 19:00 - 21:00\n` +
-                   `📅 Sábados y Domingos: 09:00 - 21:00\n\n` +
+                   `🗓️ Lunes a Viernes: 7:00 PM - 9:00 PM\n` +
+                   `📅 Sábados y Domingos: 9:00 AM - 9:00 PM\n\n` +
                    
-                   `💅 *SERVICIOS DESTACADOS:*\n` +
-                   `• Uñas acrílicas chicas o medianas a 1 tono o francés $200\n` +
-                   `• Uñas acrílicas diferente diseño mandar foto para cotización\n` +
-                   `• Baño de acrílico un tono o francés $180\n` +
-                   `• Gel semipermanente $120\n\n` +
-                   `• Acripie $200\n\n` +
+                   `💅 *SERVICIOS Y PRECIOS:*\n` +
+                   `• Uñas acrílicas chicas o medianas (1 tono o francés): $200\n` +
+                   `• Uñas acrílicas con diseño personalizado: *Cotización*\n` +
+                   `  _(Enviar foto para cotizar precio)_\n` +
+                   `• Baño de acrílico (1 tono o francés): $180\n` +
+                   `• Gel semipermanente: $120\n` +
+                   `• Acrílico en pies: $200\n\n` +
+                   
+                   `💳 *FORMAS DE PAGO:*\n` +
+                   `• 💵 Efectivo únicamente\n` +
+                   `• 🏦 Transferencia bancaria\n\n` +
                    
                    `📱 *CONTACTO:*\n` +
                    `📞 Teléfono: (xxx) xxx-xxxx\n` +
                    `💬 WhatsApp: Este mismo número\n\n` +
                    
-                   `📋 *POLÍTICAS:*\n` +
-                   `• Las citas se pueden agendar hasta 2 semanas\n` +
-                   `• Puedes cancelar o reprogramar tu cita\n` +
-                   `• Llega 10 minutos antes de tu cita\n\n` +
-                   `• dependiendo el servicio deseado, tiene un tiempo aproximado de dos horas\n\n` +
-                   `• sin acompañantes, no hay excepciones\n\n` +
-                   `• acudir con cambio de preferencia, en caso que no puedas conseguirlo avisarme asi preparo el efectivo\n\n` +
-                     `• tolerancia de 10min en caso que se exceda, queda cancelado el servicio
-* la cita se debe confirmar dos veces: un dia antes y el mismo dia de la cita\n\n` +
-
-
-
+                   `📋 *POLÍTICAS IMPORTANTES:*\n\n` +
+                   `📅 *Agendamiento:*\n` +
+                   `• Las citas se pueden agendar hasta 2 semanas por adelantado\n` +
+                   `• Puedes cancelar tu cita con anticipación\n\n` +
+                   
+                   `⏰ *Puntualidad:*\n` +
+                   `• Llega 10 minutos antes de tu cita\n` +
+                   `• Tolerancia máxima: 10 minutos\n` +
+                   `• Si excedes este tiempo, tu cita quedará cancelada\n\n` +
+                   
+                   `⏳ *Duración del servicio:*\n` +
+                   `• Tiempo aproximado: 2 horas (dependiendo del servicio)\n\n` +
+                   
+                   `👥 *Acompañantes:*\n` +
+                   `• Sin acompañantes, no hay excepciones\n\n` +
+                   
+                   `💰 *Cambio:*\n` +
+                   `• Acudir con cambio de preferencia\n` +
+                   `• Si no puedes conseguirlo, avísame para preparar efectivo\n\n` +
+                   
+                   `✅ *Confirmación:*\n` +
+                   `• La cita se debe confirmar 2 veces:\n` +
+                   `  - Un día antes de la cita\n` +
+                   `  - El mismo día de la cita\n\n` +
+                   
+                   `🎯 *OPCIONES:*\n` +
                    `💡 Para agendar una cita, escribe *1*\n` +
                    `📱 Para ver tus citas, escribe *2*`;
-
+    
     await enviarMensaje(telefono, mensaje);
 }
 
+async function mostrarUbicacionSalon(telefono) {
+   const SALON_CONFIG = {
+    nombre: "Salón JazNails", // Cambia por el nombre real de tu salón
+    direccion: "C. Kiliwas 8829,Matamoros Norte-Centro-Sur,Matamoros Norte-Centro-Sur,Tijuana, B.C,CP 22234", // Cambia por tu dirección real
+    googleMapsUrl: "https://maps.app.goo.gl/Ft82Gy6BraiNay438?g_st=com.google.maps.preview.copy", // Cambia por tus coordenadas reales
+    telefono: "+52 664 718 4077", // Cambia por tu teléfono real
+    horarios: "Lun-Vie: 7:00 PM - 9:00 PM\n Sab-Dom: 09:00 AM - 09:00 PM" // Cambia por tus horarios reales
+};
+   
+    try {
+        console.log("📍 [mostrarUbicacionSalon] Enviando ubicación a:", telefono);
+        
+        const mensaje = `📍 *UBICACIÓN DEL SALÓN*\n\n` +
+                       `🏢 *${SALON_CONFIG.nombre}*\n` +
+                       `📍 ${SALON_CONFIG.direccion}\n\n` +
+                       `🗺️ *Ver en Google Maps:*\n${SALON_CONFIG.googleMapsUrl}\n\n` +
+                       `📞 Teléfono: ${SALON_CONFIG.telefono}\n\n` +
+                       `🕒 *Horarios de atención:*\n${SALON_CONFIG.horarios}\n\n` +
+                       `¡Te esperamos! 💅✨`;
+        
+        await enviarMensaje(telefono, mensaje);
+        
+        console.log("✅ [mostrarUbicacionSalon] Ubicación enviada exitosamente");
+        
+    } catch (error) {
+        console.error("❌ Error enviando ubicación del salón:", error);
+        await enviarMensaje(telefono, "❌ Error al obtener la ubicación. Intenta de nuevo más tarde.");
+    }
+}
 
 // Función para verificar si es un grupo
 function esGrupo(jid) {
