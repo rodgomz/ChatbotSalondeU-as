@@ -1715,8 +1715,6 @@ let mensajesEnviados = 0;
 let mensajesRecibidos = 0;
 let chatsActivos = new Set();
 
-// Aquí deberías tener tu instancia de Baileys
-import makeWASocket, { useMultiFileAuthState } from "@whiskeysockets/baileys";
 // Iniciar WhatsApp Bot
 async function iniciarBot() {
     const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
