@@ -1,21 +1,14 @@
 // ==========================
 // server.js - WhatsApp Bot Salón de Belleza
 // ==========================
+
 const express = require('express');
 const cors = require('cors');
-import path from "path";
-import { fileURLToPath } from "url";
-const fs = require("fs");
-const { ref, get, set } = require('firebase/database');
-const db = require('./firebase'); // tu archivo firebase.js
-const { v4: uuidv4 } = require("uuid"); // para generar IDs únicos
-const {
-    default: makeWASocket,
-    DisconnectReason,
-    useMultiFileAuthState
-} = require('@whiskeysockets/baileys');
-const pino = require('pino');
+const fs = require('fs');
+const path = require('path');
 const qrcode = require('qrcode');
+const { v4: uuidv4 } = require('uuid');
+const { useMultiFileAuthState, makeWASocket } = require('@whiskeysockets/baileys');
 
 // ==========================
 // Configuración del servidor
@@ -25,92 +18,169 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));
+app.use("/servicios", express.static(path.join(__dirname, "servicios")));
 
+// ==========================
+// Variables globales
+// ==========================
 let sock;
-let qrCode = '';
 let isConnected = false;
-let conversacionesActivas = new Map();
-const logger = pino({ level: 'silent' });
-
+let qrCode = '';
+let mensajesEnviados = 0;
+let mensajesRecibidos = 0;
+let chatsActivos = new Set();
 
 // ==========================
-// Endpoint QR
+// Función para iniciar el bot
 // ==========================
-app.get("/qr", (req, res) => {
+async function iniciarBot() {
+    const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
+
+    sock = makeWASocket({
+        auth: state,
+        printQRInTerminal: true
+    });
+
+    sock.ev.on("connection.update", async ({ connection, qr }) => {
+        isConnected = connection === "open";
+        if (qr) {
+            qrCode = await qrcode.toDataURL(qr); // QR en base64 para mostrar en web
+        }
+        console.log(isConnected ? "✅ Bot conectado" : "❌ Bot desconectado");
+    });
+
+    sock.ev.on("messages.upsert", (m) => {
+        mensajesRecibidos += m.messages.length;
+        m.messages.forEach(msg => chatsActivos.add(msg.key.remoteJid));
+    });
+
+    sock.ev.on("messages.update", () => mensajesEnviados++);
+    sock.ev.on("creds.update", saveCreds);
+}
+
+// Iniciar bot
+iniciarBot();
+
+// ==========================
+// Rutas
+// ==========================
+
+// Dashboard principal
+app.get("/", (req, res) => {
+    const statusBot = isConnected ? "✅ Conectado" : "❌ Desconectado";
+
     res.send(`
-    <html>
+    <!DOCTYPE html>
+    <html lang="es">
     <head>
-        <title>Escanea el QR - JazNails</title>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Dashboard Bot WhatsApp</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
         <style>
-            body {
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                flex-direction: column;
-                font-family: Arial, sans-serif;
-                background-color: #f8f8f8;
-                text-align: center;
-            }
-            img {
-                margin: 20px 0;
-                border: 2px solid #ddd;
-                border-radius: 10px;
-                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            }
-            h1 { color: #E91E63; }
+            body { background-color: #f5f7fa; font-family: Arial, sans-serif; }
+            .card { border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: transform 0.2s, box-shadow 0.2s; }
+            .card:hover { transform: scale(1.05); box-shadow: 0 6px 18px rgba(0,0,0,0.2); cursor:pointer; }
+            .status { font-size:1.2rem; font-weight:bold; }
+            .qr-img { max-width:250px; border:3px solid #eee; border-radius:8px; }
         </style>
     </head>
     <body>
-        ${isConnected ? `
-            <h1>✅ WhatsApp ya está conectado</h1>
-            <p>No es necesario escanear el código QR.</p>
-        ` : qrCode ? `
-            <h1>📱 Escanea el código QR</h1>
-            <img src="${qrCode}" width="300" />
-            <p>⚠️ Si no funciona, actualiza la página para obtener uno nuevo.</p>
-        ` : `
-            <h1>⏳ Generando código QR...</h1>
-            <p>Por favor, actualiza esta página en unos segundos.</p>
-        `}
+        <div class="container py-5">
+            <h1 class="text-center mb-4">🤖 Dashboard Bot WhatsApp</h1>
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="card text-center p-3">
+                        <h5>Estado del Bot</h5>
+                        <p class="status">${statusBot}</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card text-center p-3">
+                        <h5>Chats Activos</h5>
+                        <p class="status text-primary">${chatsActivos.size}</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card text-center p-3">
+                        <h5>Código QR</h5>
+                        ${qrCode ? `<img src="${qrCode}" class="qr-img" alt="QR para conectar">` : `<p class="text-muted">QR aún no generado</p>`}
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4 mt-3">
+                <div class="col-md-4">
+                    <div class="card text-center p-3">
+                        <h5>Mensajes Enviados</h5>
+                        <p class="status text-success">${mensajesEnviados}</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card text-center p-3">
+                        <h5>Mensajes Recibidos</h5>
+                        <p class="status text-info">${mensajesRecibidos}</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card text-center p-3" onclick="window.location.href='/servicios/servicios.html'">
+                        <h5>Administrar Servicios</h5>
+                        <p class="status text-warning">Gestiona los servicios del salón</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center mt-5">
+                <button class="btn btn-primary me-2" onclick="reconectarBot()">🔄 Reconectar Bot</button>
+                <button class="btn btn-danger" onclick="reiniciarServidor()">⚡ Reiniciar Servidor</button>
+            </div>
+        </div>
+
+        <script>
+            function reconectarBot() {
+                Swal.fire({ title:"Reconectando bot...", text:"Espera un momento", icon:"info", timer:2000, showConfirmButton:false });
+                fetch('/reiniciar');
+            }
+            function reiniciarServidor() {
+                Swal.fire({
+                    title:"¿Reiniciar servidor?",
+                    icon:"warning",
+                    showCancelButton:true,
+                    confirmButtonText:"Sí, reiniciar"
+                }).then(result=>{
+                    if(result.isConfirmed) fetch('/reiniciar');
+                });
+            }
+        </script>
     </body>
     </html>
     `);
 });
 
-// ==========================
 // Reiniciar sesión manual
-// ==========================
 app.get("/reiniciar", async (req, res) => {
     try {
-        // Elimina credenciales anteriores
-        fs.rmSync("baileys_auth", { recursive: true, force: true });
+        fs.rmSync("auth_info_baileys", { recursive: true, force: true });
         isConnected = false;
-        qrCode = null;
-
-        // Llamar la función correcta
-        await startWhatsApp();
-
-        res.send(`
-            <h3>🔄 Sesión reiniciada correctamente.</h3>
-            <p>Ve a <a href='/qr'>/qr</a> para escanear un nuevo código QR.</p>
-        `);
-    } catch (error) {
-        console.error("❌ Error al reiniciar la sesión:", error);
-        res.status(500).send("❌ Error al reiniciar la sesión: " + error.message);
+        qrCode = '';
+        mensajesEnviados = 0;
+        mensajesRecibidos = 0;
+        chatsActivos = new Set();
+        await iniciarBot();
+        res.send("<h3>🔄 Sesión reiniciada correctamente. Ve a / para ver el QR.</h3>");
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("❌ Error al reiniciar sesión");
     }
 });
-
 
 // ==========================
 // Iniciar servidor
 // ==========================
 app.listen(PORT, () => {
     console.log(`🚀 Servidor iniciado en http://localhost:${PORT}`);
-    startWhatsApp();
 });
-
 
 
 // ==========================
@@ -1704,208 +1774,3 @@ async function manejarReprogramarFecha(mensaje, telefono, conversacion) {
         `Por favor, indica la nueva hora que deseas (ejemplo: 15:30):`
     );
 }
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Variables globales para estadísticas
-let mensajesEnviados = 0;
-let mensajesRecibidos = 0;
-let chatsActivos = new Set();
-
-// Iniciar WhatsApp Bot
-async function iniciarBot() {
-    const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
-
-    sock = makeWASocket({
-        auth: state,
-        printQRInTerminal: true,
-    });
-
-    // Escuchar conexión
-    sock.ev.on("connection.update", ({ connection }) => {
-        isConnected = connection === "open";
-        console.log(isConnected ? "✅ Bot conectado" : "❌ Bot desconectado");
-    });
-
-    // Contar mensajes recibidos y enviados
-    sock.ev.on("messages.upsert", (m) => {
-        mensajesRecibidos += m.messages.length;
-        m.messages.forEach(msg => {
-            chatsActivos.add(msg.key.remoteJid);
-        });
-    });
-
-    sock.ev.on("messages.update", () => {
-        mensajesEnviados++;
-    });
-
-    sock.ev.on("creds.update", saveCreds);
-}
-
-iniciarBot();
-
-// Middleware para archivos estáticos (servicios)
-app.use("/servicios", express.static(path.join(__dirname, "servicios")));
-
-// Ruta para QR dinámico
-app.get("/qr", (req, res) => {
-    const qrPath = path.join(__dirname, "qr.png");
-    if (fs.existsSync(qrPath)) {
-        res.sendFile(qrPath);
-    } else {
-        res.status(404).json({ error: "QR aún no generado, intenta más tarde" });
-    }
-});
-
-// Ruta principal: dashboard
-app.get("/", async (req, res) => {
-    const statusBot = isConnected ? "✅ Conectado" : "❌ Desconectado";
-    const qrPath = path.join(__dirname, "qr.png");
-    const qrExists = fs.existsSync(qrPath);
-
-    res.send(`
-    <!DOCTYPE html>
-    <html lang="es">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Dashboard Bot WhatsApp</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-        <style>
-            body {
-                background-color: #f5f7fa;
-                font-family: Arial, sans-serif;
-            }
-            .card {
-                border-radius: 16px;
-                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-                transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-            }
-            .card:hover {
-                transform: scale(1.05);
-                box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
-                cursor: pointer;
-            }
-            .status {
-                font-size: 1.2rem;
-                font-weight: bold;
-            }
-            .qr-img {
-                max-width: 250px;
-                border: 3px solid #eee;
-                border-radius: 8px;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container py-5">
-            <h1 class="text-center mb-4">🤖 Dashboard Bot WhatsApp</h1>
-            
-            <div class="row g-4">
-                <!-- Estado del bot -->
-                <div class="col-md-4">
-                    <div class="card text-center p-3">
-                        <h5>Estado del Bot</h5>
-                        <p class="status">${statusBot}</p>
-                    </div>
-                </div>
-
-                <!-- Chats activos -->
-                <div class="col-md-4">
-                    <div class="card text-center p-3">
-                        <h5>Chats Activos</h5>
-                        <p class="status text-primary">${chatsActivos.size}</p>
-                    </div>
-                </div>
-
-                <!-- QR para reconexión -->
-                <div class="col-md-4">
-                    <div class="card text-center p-3">
-                        <h5>Código QR</h5>
-                        ${
-                            qrExists
-                                ? `<img src="/qr" class="qr-img" alt="QR para conectar">`
-                                : `<p class="text-muted">No es necesario reconectar</p>`
-                        }
-                    </div>
-                </div>
-            </div>
-
-            <!-- Estadísticas y administración -->
-            <div class="row g-4 mt-3">
-                <div class="col-md-4">
-                    <div class="card text-center p-3">
-                        <h5>Mensajes Enviados</h5>
-                        <p class="status text-success">${mensajesEnviados}</p>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card text-center p-3">
-                        <h5>Mensajes Recibidos</h5>
-                        <p class="status text-info">${mensajesRecibidos}</p>
-                    </div>
-                </div>
-                <!-- Nueva card para administrar servicios -->
-                <div class="col-md-4">
-                    <div class="card text-center p-3" onclick="irServicios()">
-                        <h5>Administrar Servicios</h5>
-                        <p class="status text-warning">Gestiona los servicios del salón</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Botones de control -->
-            <div class="text-center mt-5">
-                <button class="btn btn-primary me-2" onclick="reconectarBot()">🔄 Reconectar Bot</button>
-                <button class="btn btn-danger" onclick="reiniciarServidor()">⚡ Reiniciar Servidor</button>
-            </div>
-        </div>
-
-        <script>
-            function reconectarBot() {
-                Swal.fire({
-                    title: "Reconectando bot...",
-                    text: "Espera mientras intentamos reconectar",
-                    icon: "info",
-                    timer: 3000,
-                    showConfirmButton: false
-                });
-                fetch('/reconnect', { method: 'POST' });
-            }
-
-            function reiniciarServidor() {
-                Swal.fire({
-                    title: "¿Seguro que quieres reiniciar?",
-                    icon: "warning",
-                    showCancelButton: true,
-                    confirmButtonText: "Sí, reiniciar",
-                    cancelButtonText: "Cancelar"
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        fetch('/restart', { method: 'POST' });
-                        Swal.fire("Servidor reiniciado", "", "success");
-                    }
-                });
-            }
-
-            function irServicios() {
-                window.location.href = "/servicios/servicios.html";
-            }
-        </script>
-    </body>
-    </html>
-    `);
-});
-
-// Puerto dinámico para Render
-app.listen(PORT, () => {
-    console.log(`🚀 Servidor iniciado en http://localhost:${PORT}`);
-});
-
-app.get('/qr', (req, res) => {
-    if (qrCode) res.send(`<img src="${qrCode}" style="width:300px;">`);
-    else res.send("<h3>No hay código QR disponible</h3>");
-});
-
