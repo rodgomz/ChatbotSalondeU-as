@@ -791,73 +791,7 @@ async function manejarSeleccionFecha(mensaje, telefono, conversacion) {
     );
 }
 
-// Manejar selección de servicio
-async function manejarSeleccionServicio(mensaje, telefono, conversacion) {
-    const seleccion = parseInt(mensaje) - 1;
-    const servicios = conversacion.datosTemporales.servicios;
-    
-    if (isNaN(seleccion) || seleccion < 0 || seleccion >= servicios.length) {
-        await enviarMensaje( telefono,'❌ Opción inválida. Selecciona el número correcto del servicio. '+
-              "💡 *Tip:* Escribe 'menu' para volver al inicio"
-        );
-        
-        return;
-    }
 
-    conversacion.datosTemporales.servicioSeleccionado = servicios[seleccion];
-    await enviarMensaje(telefono,`Has seleccionado: ${servicios[seleccion].nombre}\n📅 Ingresa la fecha de la cita (formato DD/MM/AAAA):`);
-    conversacion.paso = 'seleccionar_fecha';
-}
-
-// Manejar selección de fecha
-async function manejarSeleccionFecha(mensaje, telefono, conversacion) {
-    const fecha = mensaje.trim(); // Formato esperado: DD/MM/YYYY
-    const regexFecha = /^(\d{2})\/(\d{2})\/(\d{4})$/;
-
-    if (!regexFecha.test(fecha)) {
-        await enviarMensaje(
-            telefono,"❌ Formato de fecha inválido. Escribe la fecha en formato DD/MM/AAAA (ejemplo: 25/08/2025)."+
-              "💡 *Tip:* Escribe 'menu' para volver al inicio."
-        );
-        return;
-    }
-
-    const [dia, mes, anio] = fecha.split("/").map(Number);
-    const fechaSeleccionada = new Date(anio, mes - 1, dia);
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0); // ignorar hora
-
-    const maxFecha = new Date();
-    maxFecha.setDate(hoy.getDate() + 14); // máximo 2 semanas
-
-    if (fechaSeleccionada < hoy) {
-        await enviarMensaje(
-          
-            telefono , "❌ La fecha no puede ser anterior a hoy. Por favor selecciona otra fecha."+
-              "💡 *Tip:* Escribe 'menu' para volver al inicio."
-        );
-        return;
-    }
-
-    if (fechaSeleccionada > maxFecha) {
-        await enviarMensaje(
-            telefono, "❌ Solo se pueden agendar citas hasta 2 semanas desde hoy. Por favor selecciona otra fecha."+
-              "💡 *Tip:* Escribe 'menu' para volver al inicio.",
-           
-        );
-        return;
-    }
-
-    // Guardar la fecha válida y continuar
-    conversacion.datosTemporales.fechaSeleccionada = fecha;
-    conversacion.paso = 'seleccionar_hora';
-    await enviarMensaje(
-         telefono,`✅ Fecha seleccionada: ${fecha}\nPor favor, indica la hora que deseas (ejemplo: 15:30).`
-         +
-              "💡 *Tip:* Escribe 'menu' para volver al inicio."
-       
-    );
-}
 
 
 //Manejar la fecha y horarios del salon
