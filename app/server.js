@@ -40,8 +40,9 @@ let conversacionesActivas = new Map();
 const logger = pino({ level: 'silent' });
 const AUTH_FOLDER = 'auth_info_baileys';
 
+
 // ==========================
-// Función principal para iniciar el bot
+// Función para iniciar el bot
 // ==========================
 async function iniciarBot() {
     try {
@@ -58,26 +59,30 @@ async function iniciarBot() {
         // =======================
         // Manejo de conexión
         // =======================
-        sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
+        sock.ev.on('connection.update', async (update) => {
+            const { connection, lastDisconnect, qr } = update;
+
             if (qr) qrCode = await qrcode.toDataURL(qr);
+
             if (connection === 'open') {
-                console.log('✅ Bot conectado a WhatsApp');
                 isConnected = true;
                 qrCode = '';
+                console.log('✅ Bot conectado a WhatsApp');
             }
+
             if (connection === 'close') {
                 isConnected = false;
                 const code = lastDisconnect?.error?.output?.statusCode;
-                const shouldReconnect = code !== DisconnectReason.loggedOut;
-
                 console.log('❌ Conexión cerrada', lastDisconnect?.error);
-                if (shouldReconnect) {
+
+                // Reconectar automáticamente salvo que sea sesión inválida
+                if (code !== DisconnectReason.loggedOut) {
                     console.log('🔄 Reintentando conexión en 5s...');
                     setTimeout(iniciarBot, 5000);
                 } else {
                     console.log('⚠️ Sesión cerrada, eliminando credenciales...');
                     fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
-                    qrCode = null;
+                    qrCode = '';
                 }
             }
         });
@@ -85,26 +90,28 @@ async function iniciarBot() {
         sock.ev.on('creds.update', saveCreds);
 
         // =======================
-        // Contar mensajes
+        // Contar mensajes y chats
         // =======================
         sock.ev.on('messages.upsert', async (m) => {
             if (!isConnected) return;
-            mensajesRecibidos += m.messages.length;
-            m.messages.forEach(msg => {
-                chatsActivos.add(msg.key.remoteJid);
-            });
-
             const message = m.messages[0];
             if (!message.message || message.key.fromMe) return;
+
             const from = message.key.remoteJid;
-            const texto = extractMessageText(message);
-            if (texto && from) await procesarMensajeWhatsApp(texto, from);
+            if (!from || from.endsWith('@broadcast') || from.endsWith('@status')) return;
+
+            mensajesRecibidos += 1;
+            chatsActivos.add(from);
+
+            const texto = message.message.conversation || message.message.extendedTextMessage?.text || message.message.imageMessage?.caption;
+            if (texto) await procesarMensajeWhatsApp(texto, from);
         });
 
         sock.ev.on('messages.update', () => mensajesEnviados++);
+
     } catch (error) {
         console.error('❌ Error iniciando bot:', error);
-        setTimeout(iniciarBot, 10000); // Reintentar si falla
+        setTimeout(iniciarBot, 10000);
     }
 }
 
@@ -141,9 +148,7 @@ async function procesarMensajeWhatsApp(mensaje, telefono) {
 
     const conversacion = conversacionesActivas.get(telefono);
     conversacion.ultimaActividad = new Date();
-
-    // TODO: implementar comandos de cancelación si se desea
-    // if (verificarComandosCancelacion(mensaje, telefono, conversacion)) return;
+     if (verificarComandosCancelacion(mensaje, telefono, conversacion)) return;
 
     if (!cliente && conversacion.paso === 'registrar_cliente') {
         await enviarMensaje(telefono, "👋 ¡Hola! Para registrarte, por favor dime tu nombre:");
