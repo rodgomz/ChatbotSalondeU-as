@@ -632,11 +632,7 @@ function limpiarTelefono(jid) {
         numero;
 }
 
-// Función para verificar si es un grupo
-function esGrupo(jid) {
-    // Los grupos en WhatsApp terminan con @g.us
-    return jid && jid.endsWith('@g.us');
-}
+
 
 // Función para verificar si es un contacto individual válido
 function esContactoIndividual(jid) {
