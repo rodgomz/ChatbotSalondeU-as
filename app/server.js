@@ -4,11 +4,18 @@
 
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
 const path = require('path');
-const qrcode = require('qrcode');
+const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { useMultiFileAuthState, makeWASocket } = require('@whiskeysockets/baileys');
+const pino = require('pino');
+const qrcode = require('qrcode');
+const { ref, get, set } = require('firebase/database');
+const db = require('./firebase'); // tu archivo firebase.js
+const {
+    default: makeWASocket,
+    DisconnectReason,
+    useMultiFileAuthState
+} = require('@whiskeysockets/baileys');
 
 // ==========================
 // Configuración del servidor
@@ -18,7 +25,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-app.use("/servicios", express.static(path.join(__dirname, "servicios")));
+app.use(express.static('public'));
 
 // ==========================
 // Variables globales
@@ -29,43 +36,153 @@ let qrCode = '';
 let mensajesEnviados = 0;
 let mensajesRecibidos = 0;
 let chatsActivos = new Set();
+let conversacionesActivas = new Map();
+const logger = pino({ level: 'silent' });
+const AUTH_FOLDER = 'auth_info_baileys';
 
 // ==========================
-// Función para iniciar el bot
+// Función principal para iniciar el bot
 // ==========================
 async function iniciarBot() {
-    const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
+    try {
+        const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
 
-    sock = makeWASocket({
-        auth: state,
-        printQRInTerminal: true
-    });
+        sock = makeWASocket({
+            auth: state,
+            printQRInTerminal: true,
+            logger,
+            browser: ['Salón Bot', 'Chrome', '1.0'],
+            syncFullHistory: true
+        });
 
-    sock.ev.on("connection.update", async ({ connection, qr }) => {
-        isConnected = connection === "open";
-        if (qr) {
-            qrCode = await qrcode.toDataURL(qr); // QR en base64 para mostrar en web
-        }
-        console.log(isConnected ? "✅ Bot conectado" : "❌ Bot desconectado");
-    });
+        // =======================
+        // Manejo de conexión
+        // =======================
+        sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
+            if (qr) qrCode = await qrcode.toDataURL(qr);
+            if (connection === 'open') {
+                console.log('✅ Bot conectado a WhatsApp');
+                isConnected = true;
+                qrCode = '';
+            }
+            if (connection === 'close') {
+                isConnected = false;
+                const code = lastDisconnect?.error?.output?.statusCode;
+                const shouldReconnect = code !== DisconnectReason.loggedOut;
 
-    sock.ev.on("messages.upsert", (m) => {
-        mensajesRecibidos += m.messages.length;
-        m.messages.forEach(msg => chatsActivos.add(msg.key.remoteJid));
-    });
+                console.log('❌ Conexión cerrada', lastDisconnect?.error);
+                if (shouldReconnect) {
+                    console.log('🔄 Reintentando conexión en 5s...');
+                    setTimeout(iniciarBot, 5000);
+                } else {
+                    console.log('⚠️ Sesión cerrada, eliminando credenciales...');
+                    fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
+                    qrCode = null;
+                }
+            }
+        });
 
-    sock.ev.on("messages.update", () => mensajesEnviados++);
-    sock.ev.on("creds.update", saveCreds);
+        sock.ev.on('creds.update', saveCreds);
+
+        // =======================
+        // Contar mensajes
+        // =======================
+        sock.ev.on('messages.upsert', async (m) => {
+            if (!isConnected) return;
+            mensajesRecibidos += m.messages.length;
+            m.messages.forEach(msg => {
+                chatsActivos.add(msg.key.remoteJid);
+            });
+
+            const message = m.messages[0];
+            if (!message.message || message.key.fromMe) return;
+            const from = message.key.remoteJid;
+            const texto = extractMessageText(message);
+            if (texto && from) await procesarMensajeWhatsApp(texto, from);
+        });
+
+        sock.ev.on('messages.update', () => mensajesEnviados++);
+    } catch (error) {
+        console.error('❌ Error iniciando bot:', error);
+        setTimeout(iniciarBot, 10000); // Reintentar si falla
+    }
 }
 
-// Iniciar bot
+// Inicia el bot
 iniciarBot();
 
 // ==========================
-// Rutas
+// Función para extraer texto de mensaje
 // ==========================
+function extractMessageText(message) {
+    return (
+        message.message?.conversation ||
+        message.message?.extendedTextMessage?.text ||
+        message.message?.imageMessage?.caption ||
+        null
+    );
+}
 
-// Dashboard principal
+// ==========================
+// Procesar mensajes entrantes
+// ==========================
+async function procesarMensajeWhatsApp(mensaje, telefono) {
+    const clientes = await getClientes();
+    const telSinCodigo = telefono.replace('@s.whatsapp.net', '');
+    let cliente = clientes[telSinCodigo];
+
+    if (!conversacionesActivas.has(telefono)) {
+        conversacionesActivas.set(telefono, {
+            paso: cliente ? 'inicio' : 'registrar_cliente',
+            datosTemporales: {},
+            ultimaActividad: new Date()
+        });
+    }
+
+    const conversacion = conversacionesActivas.get(telefono);
+    conversacion.ultimaActividad = new Date();
+
+    // TODO: implementar comandos de cancelación si se desea
+    // if (verificarComandosCancelacion(mensaje, telefono, conversacion)) return;
+
+    if (!cliente && conversacion.paso === 'registrar_cliente') {
+        await enviarMensaje(telefono, "👋 ¡Hola! Para registrarte, por favor dime tu nombre:");
+        conversacion.paso = 'capturar_nombre';
+        return;
+    }
+
+    if (cliente && conversacion.paso === 'inicio') {
+        await enviarMensaje(telefono, `👋 Hola ${cliente.nombre}, bienvenido de nuevo al *Salón de Belleza* 💅`);
+        conversacion.paso = 'menu_principal';
+    }
+
+    // TODO: procesar estado de la conversación
+    conversacionesActivas.set(telefono, conversacion);
+}
+
+// ==========================
+// Funciones Firebase
+// ==========================
+async function getClientes() {
+    const snapshot = await get(ref(db, 'clientes'));
+    return snapshot.exists() ? snapshot.val() : {};
+}
+
+async function saveCliente(telefono, nombre) {
+    await set(ref(db, `clientes/${telefono}`), { nombre, telefono });
+    console.log(`✅ Cliente registrado: ${nombre} (${telefono})`);
+}
+
+async function getServicios() {
+    const snapshot = await get(ref(db, 'servicios'));
+    return snapshot.exists() ? Object.values(snapshot.val()) : [];
+}
+
+// ==========================
+// Dashboard y rutas
+// ==========================
+app.use("/servicios", express.static(path.join(__dirname, "servicios")));
+
 app.get("/", (req, res) => {
     const statusBot = isConnected ? "✅ Conectado" : "❌ Desconectado";
 
@@ -80,8 +197,8 @@ app.get("/", (req, res) => {
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
         <style>
             body { background-color: #f5f7fa; font-family: Arial, sans-serif; }
-            .card { border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: transform 0.2s, box-shadow 0.2s; }
-            .card:hover { transform: scale(1.05); box-shadow: 0 6px 18px rgba(0,0,0,0.2); cursor:pointer; }
+            .card { border-radius:16px; box-shadow:0 4px 15px rgba(0,0,0,0.1); transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; }
+            .card:hover { transform: scale(1.05); box-shadow:0 6px 18px rgba(0,0,0,0.2); cursor:pointer; }
             .status { font-size:1.2rem; font-weight:bold; }
             .qr-img { max-width:250px; border:3px solid #eee; border-radius:8px; }
         </style>
@@ -89,6 +206,7 @@ app.get("/", (req, res) => {
     <body>
         <div class="container py-5">
             <h1 class="text-center mb-4">🤖 Dashboard Bot WhatsApp</h1>
+            
             <div class="row g-4">
                 <div class="col-md-4">
                     <div class="card text-center p-3">
@@ -96,16 +214,18 @@ app.get("/", (req, res) => {
                         <p class="status">${statusBot}</p>
                     </div>
                 </div>
+
                 <div class="col-md-4">
                     <div class="card text-center p-3">
                         <h5>Chats Activos</h5>
                         <p class="status text-primary">${chatsActivos.size}</p>
                     </div>
                 </div>
+
                 <div class="col-md-4">
                     <div class="card text-center p-3">
                         <h5>Código QR</h5>
-                        ${qrCode ? `<img src="${qrCode}" class="qr-img" alt="QR para conectar">` : `<p class="text-muted">QR aún no generado</p>`}
+                        ${qrCode ? `<img src="${qrCode}" class="qr-img">` : `<p class="text-muted">QR no generado</p>`}
                     </div>
                 </div>
             </div>
@@ -138,271 +258,40 @@ app.get("/", (req, res) => {
         </div>
 
         <script>
-            function reconectarBot() {
-                Swal.fire({ title:"Reconectando bot...", text:"Espera un momento", icon:"info", timer:2000, showConfirmButton:false });
-                fetch('/reiniciar');
-            }
-            function reiniciarServidor() {
-                Swal.fire({
-                    title:"¿Reiniciar servidor?",
-                    icon:"warning",
-                    showCancelButton:true,
-                    confirmButtonText:"Sí, reiniciar"
-                }).then(result=>{
-                    if(result.isConfirmed) fetch('/reiniciar');
-                });
-            }
+            function reconectarBot() { fetch('/reiniciar'); Swal.fire('Reconectando...', '', 'info'); }
+            function reiniciarServidor() { fetch('/reiniciar'); Swal.fire('Servidor reiniciado', '', 'success'); }
         </script>
     </body>
     </html>
     `);
 });
 
-// Reiniciar sesión manual
-app.get("/reiniciar", async (req, res) => {
+// ==========================
+// Endpoint para reiniciar sesión
+// ==========================
+app.get('/reiniciar', async (req, res) => {
     try {
-        fs.rmSync("auth_info_baileys", { recursive: true, force: true });
+        fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
         isConnected = false;
         qrCode = '';
-        mensajesEnviados = 0;
-        mensajesRecibidos = 0;
-        chatsActivos = new Set();
-        await iniciarBot();
-        res.send("<h3>🔄 Sesión reiniciada correctamente. Ve a / para ver el QR.</h3>");
+        iniciarBot();
+        res.send("<h3>🔄 Sesión reiniciada. Ve a / para escanear QR</h3>");
     } catch (err) {
-        console.error(err);
-        res.status(500).send("❌ Error al reiniciar sesión");
+        res.status(500).send("❌ Error al reiniciar: " + err.message);
     }
 });
 
 // ==========================
 // Iniciar servidor
 // ==========================
-app.listen(PORT, () => {
-    console.log(`🚀 Servidor iniciado en http://localhost:${PORT}`);
-});
-
+app.listen(PORT, () => console.log(`🚀 Servidor iniciado en http://localhost:${PORT}`));
 
 // ==========================
-// Funciones Firebase
+// Función placeholder para enviar mensaje
 // ==========================
-async function getClientes() {
-    const snapshot = await get(ref(db, 'clientes'));
-    return snapshot.exists() ? snapshot.val() : {};
-}
-
-async function saveCliente(telefono, nombre) {
-    await set(ref(db, `clientes/${telefono}`), { nombre, telefono });
-    console.log(`✅ Cliente registrado: ${nombre} (${telefono})`);
-}
-
-
-
-async function getServicios() {
-    const snapshot = await get(ref(db, 'servicios'));
-    if (!snapshot.exists()) return [];
-    // Convertir objeto a array
-    return Object.values(snapshot.val());
-}
-
-// Guardar cita en Firebase
-async function guardarCitaFirebase(telefono, conversacion) {
-    try {
-        const cita = conversacion.datosTemporales;
-
-        // Validar fecha
-        if (!cita.fechaSeleccionada || !esFechaPermitida(cita.fechaSeleccionada)) {
-            return {
-                exito: false,
-                mensaje: "⚠️ Solo puedes reservar citas para esta semana o la siguiente. Por favor, selecciona otra fecha."
-            };
-        }
-
-        // Validar horario permitido
-        if (!cita.hora || !esHorarioValido(cita.fechaSeleccionada, cita.hora)) {
-            return {
-                exito: false,
-                mensaje: "⚠️ El horario seleccionado no es válido.\n" +
-                         "⏰ Lunes a Viernes: 19:00 - 21:00\n" +
-                         "📅 Sábados y Domingos: 09:00 a 21:00.\n" +
-                         "Por favor selecciona otra hora."
-            };
-        }
-
-        // Verificar disponibilidad de la manicurista
-        const disponible = await verificarDisponibilidad(
-            cita.fechaSeleccionada,
-            cita.hora,
-            cita.manicurista
-        );
-
-        if (!disponible) {
-            return {
-                exito: false,
-                mensaje: `⚠️ Lo siento, la manicurista ya tiene una cita el ${cita.fechaSeleccionada} a las ${cita.hora}.\nPor favor selecciona otro horario.`
-            };
-        }
-
-        // Guardar cita
-        const citaId = uuidv4();
-        const citaData = {
-            clienteId: telefono.replace('@s.whatsapp.net', ''),
-            servicioId: cita.servicioSeleccionado.id,
-            manicuristaId: cita.manicurista,
-            fecha: cita.fechaSeleccionada,
-            hora: cita.hora,
-            estado: "Reservada",
-            notas: cita.notas || "",
-            fechaCreacion: new Date().toISOString(),
-            usuarioCreacion: "chat-bot"
-        };
-
-        await set(ref(db, `citas/${citaId}`), citaData);
-
-        return {
-            exito: true,
-            mensaje: `✅ ¡Cita agendada correctamente!\n\n` +
-                     `📅 Fecha: ${cita.fechaSeleccionada}\n` +
-                     `🕒 Hora: ${cita.hora}\n` +
-                     `💅 Servicio: ${cita.servicioSeleccionado.nombre}\n` +
-                     `👩‍🎨 Manicurista: ${cita.manicurista}\n` +
-                     `🔑 ID de Cita: ${citaId}`
-        };
-
-    } catch (error) {
-        console.error("❌ Error guardando cita en Firebase:", error);
-        return {
-            exito: false,
-            mensaje: "❌ Ocurrió un error al guardar tu cita. Por favor, intenta de nuevo."
-        };
-    }
-}
-
-
-
-// ==========================
-// WhatsApp Bot
-// ==========================
-async function startWhatsApp() {
-    try {
-        const { state, saveCreds } = await useMultiFileAuthState('./baileys_auth');
-
-        sock = makeWASocket({
-            auth: state,
-            printQRInTerminal: true,
-            logger,
-            browser: ['Salón Bot', 'Chrome', '1.0'],
-            syncFullHistory: true
-
-        });
-        // =======================
-        // Manejo de conexión
-        // =======================
-        sock.ev.on('connection.update', async (update) => {
-            const { connection, lastDisconnect, qr } = update;
-
-            if (qr) {
-                qrCode = await qrcode.toDataURL(qr);
-                console.log('📱 Escanea el código QR → http://localhost:3000/qr');
-            }
-
-            if (connection === 'open') {
-                console.log('✅ Bot conectado a WhatsApp');
-                isConnected = true;
-                qrCode = '';
-            }
-
-            if (connection === 'close') {
-                isConnected = false;
-                const statusCode = lastDisconnect?.error?.output?.statusCode;
-                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-                
-                console.log('❌ Conexión cerrada', lastDisconnect?.error);
-
-                if (shouldReconnect) {
-                    console.log('🔄 Reintentando conexión en 5s...');
-                    setTimeout(startWhatsApp, 5000);
-                } else {
-                    console.log('⚠️ Sesión cerrada, eliminando credenciales...');
-                    fs.rmSync("baileys_auth", { recursive: true, force: true });
-                    qrCode = null;
-                }
-            }
-        });
-
-        sock.ev.on('creds.update', saveCreds);
-
-        // =======================
-        // Recibir mensajes
-        // =======================
-        sock.ev.on('messages.upsert', async (m) => {
-            if (!isConnected) return; // Ignorar hasta que esté listo
-            const message = m.messages[0];
-            if (!message.message || message.key.fromMe) return;
-
-            const from = message.key.remoteJid;
-            const texto = extractMessageText(message);
-            if (texto && from) await procesarMensajeWhatsApp(texto, from);
-        });
-
-    } catch (error) {
-        console.error('❌ Error iniciando bot:', error);
-        setTimeout(startWhatsApp, 10000); // Reintentar en 10s si falla
-    }
-}
-
-
-function extractMessageText(message) {
-    return (
-        message.message?.conversation ||
-        message.message?.extendedTextMessage?.text ||
-        message.message?.imageMessage?.caption ||
-        null
-    );
-}
-
-// ==========================
-// Procesar mensajes entrantes
-// ==========================
-async function procesarMensajeWhatsApp(mensaje, telefono) {
-    const clientes = await getClientes();
-    const telSinCodigo = telefono.replace('@s.whatsapp.net', '');
-    let cliente = clientes[telSinCodigo];
-
-    // Si no hay conversación activa, iniciamos una
-    if (!conversacionesActivas.has(telefono)) {
-        conversacionesActivas.set(telefono, {
-            paso: cliente ? 'inicio' : 'registrar_cliente',
-            datosTemporales: {},
-            ultimaActividad: new Date()
-        });
-    }
-
-    const conversacion = conversacionesActivas.get(telefono);
-    conversacion.ultimaActividad = new Date();
-
-    // ✅ NUEVO: Verificar comandos de cancelación/menú en cualquier paso
-    const mensajeLower = mensaje.toLowerCase().trim();
-    if (verificarComandosCancelacion(mensajeLower, telefono, conversacion)) {
-        return; // Se procesó un comando de cancelación
-    }
-
-    // Si el cliente no existe, pedimos su nombre
-    if (!cliente && conversacion.paso === 'registrar_cliente') {
-        await enviarMensaje(telefono,"👋 ¡Hola! Para registrarte, por favor dime tu nombre:");
-        conversacion.paso = 'capturar_nombre';
-        return;
-    }
-
-    // Si el cliente ya existe, damos la bienvenida y seguimos el flujo
-    if (cliente && conversacion.paso === 'inicio') {
-        await enviarMensaje(telefono,`👋 Hola ${cliente.nombre}, bienvenido de nuevo al *Salón de Belleza* 💅`);
-        conversacion.paso = 'menu_principal';
-    }
-
-    // Procesamos el flujo del cliente
-    await procesarEstadoConversacion(mensaje, telefono, conversacion);
-    conversacionesActivas.set(telefono, conversacion);
+async function enviarMensaje(telefono, texto) {
+    if (!sock || !isConnected) return;
+    await sock.sendMessage(telefono, { text: texto });
 }
 
 function verificarComandosCancelacion(mensajeLower, telefono, conversacion) {
@@ -1774,3 +1663,4 @@ async function manejarReprogramarFecha(mensaje, telefono, conversacion) {
         `Por favor, indica la nueva hora que deseas (ejemplo: 15:30):`
     );
 }
+
