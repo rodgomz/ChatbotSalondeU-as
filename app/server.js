@@ -156,10 +156,16 @@ async function procesarMensajeWhatsApp(mensaje, telefono) {
         return;
     }
 
-    if (cliente && conversacion.paso === 'inicio') {
-        await enviarMensaje(telefono, `👋 Hola ${cliente.nombre}, bienvenido de nuevo al *Salón de Belleza* 💅`);
-        conversacion.paso = 'menu_principal';
-    }
+    // Actualizar paso inicial según si hay cliente o no
+if (!cliente && conversacion.paso === 'registrar_cliente') {
+    conversacion.paso = 'capturar_nombre';
+} else if (cliente && conversacion.paso === 'inicio') {
+    conversacion.paso = 'menu_principal';
+    await enviarMensaje(telefono, `👋 Hola ${cliente.nombre}, bienvenido de nuevo al *Salón de Belleza JazminNails.* 💅`);
+}
+
+// Llamar al flujo principal después de actualizar el paso
+await procesarEstadoConversacion(mensaje, telefono, conversacion);
 
     // TODO: procesar estado de la conversación
     conversacionesActivas.set(telefono, conversacion);
