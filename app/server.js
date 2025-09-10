@@ -633,21 +633,6 @@ function limpiarTelefono(jid) {
 }
 
 
-
-// Función para verificar si es un contacto individual válido
-function esContactoIndividual(jid) {
-    // Los contactos individuales terminan con @s.whatsapp.net
-    if (!jid || !jid.endsWith('@s.whatsapp.net')) {
-        return false;
-    }
-    
-    // Extraer el número de teléfono
-    const numero = jid.split('@')[0];
-    
-    // Verificar que sea solo números y tenga longitud válida
-    return /^\d{10,15}$/.test(numero);
-}
-
 // Función para limpiar número de teléfono para logs (solo para privacidad)
 function limpiarTelefono(jid) {
     const numero = jid.split('@')[0];
