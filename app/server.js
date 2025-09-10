@@ -2003,11 +2003,147 @@ async function manejarReprogramarHora(mensaje, telefono, conversacion) {
         await enviarMensaje(telefono, "❌ Error al reprogramar la cita. Por favor, intenta de nuevo.");
     }
 }
-// ==========================
-// API REST
-// ==========================
-app.get('/', (req, res) => {
-    res.send(`<h1>🤖 Bot activo</h1><p>Estado: ${isConnected ? "✅ Conectado" : "❌ Desconectado"}</p>`);
+app.get("/", async (req, res) => {
+    const statusBot = isConnected ? "✅ Conectado" : "❌ Desconectado";
+    const qrPath = path.join(__dirname, "qr.png");
+    const qrExists = fs.existsSync(qrPath);
+ // Variables para estadísticas reales
+let mensajesEnviados = 0;
+let mensajesRecibidos = 0;
+let chatsActivos = new Set(); // Para evitar duplicados de chats
+    res.send(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Dashboard Bot WhatsApp</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+        <style>
+            body {
+                background-color: #f5f7fa;
+                font-family: Arial, sans-serif;
+            }
+            .card {
+                border-radius: 16px;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+                transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            }
+            .card:hover {
+                transform: scale(1.05);
+                box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+                cursor: pointer;
+            }
+            .status {
+                font-size: 1.2rem;
+                font-weight: bold;
+            }
+            .qr-img {
+                max-width: 250px;
+                border: 3px solid #eee;
+                border-radius: 8px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container py-5">
+            <h1 class="text-center mb-4">🤖 Dashboard Bot WhatsApp</h1>
+            
+            <div class="row g-4">
+                <!-- Estado del bot -->
+                <div class="col-md-4">
+                    <div class="card text-center p-3">
+                        <h5>Estado del Bot</h5>
+                        <p class="status">${statusBot}</p>
+                    </div>
+                </div>
+
+                <!-- Chats activos -->
+                <div class="col-md-4">
+                    <div class="card text-center p-3">
+                        <h5>Chats Activos</h5>
+                        <p class="status text-primary">${chatsActivos}</p>
+                    </div>
+                </div>
+
+                <!-- QR para reconexión -->
+                <div class="col-md-4">
+                    <div class="card text-center p-3">
+                        <h5>Código QR</h5>
+                        ${
+                            qrExists
+                                ? `<img src="/qr.png" class="qr-img" alt="QR para conectar">`
+                                : `<p class="text-muted">No es necesario reconectar</p>`
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Estadísticas y administración -->
+            <div class="row g-4 mt-3">
+                <div class="col-md-4">
+                    <div class="card text-center p-3">
+                        <h5>Mensajes Enviados</h5>
+                        <p class="status text-success">${mensajesEnviados}</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card text-center p-3">
+                        <h5>Mensajes Recibidos</h5>
+                        <p class="status text-info">${mensajesRecibidos}</p>
+                    </div>
+                </div>
+                <!-- Nueva card para administrar servicios -->
+                <div class="col-md-4">
+                    <div class="card text-center p-3" onclick="irServicios()">
+                        <h5>Administrar Servicios</h5>
+                        <p class="status text-warning">Gestiona los servicios del salón</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Botones de control -->
+            <div class="text-center mt-5">
+                <button class="btn btn-primary me-2" onclick="reconectarBot()">🔄 Reconectar Bot</button>
+                <button class="btn btn-danger" onclick="reiniciarServidor()">⚡ Reiniciar Servidor</button>
+            </div>
+        </div>
+
+        <script>
+            function reconectarBot() {
+                Swal.fire({
+                    title: "Reconectando bot...",
+                    text: "Espera mientras intentamos reconectar",
+                    icon: "info",
+                    timer: 3000,
+                    showConfirmButton: false
+                });
+                fetch('/reconnect', { method: 'POST' });
+            }
+
+            function reiniciarServidor() {
+                Swal.fire({
+                    title: "¿Seguro que quieres reiniciar?",
+                    icon: "warning",
+                    showCancelButton: true,
+                    confirmButtonText: "Sí, reiniciar",
+                    cancelButtonText: "Cancelar"
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        fetch('/restart', { method: 'POST' });
+                        Swal.fire("Servidor reiniciado", "", "success");
+                    }
+                });
+            }
+
+            function irServicios() {
+                window.location.href = "/servicios/servicios.html";
+            }
+        </script>
+    </body>
+    </html>
+    `);
 });
 
 app.get('/qr', (req, res) => {
