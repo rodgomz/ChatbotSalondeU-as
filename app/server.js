@@ -2003,14 +2003,72 @@ async function manejarReprogramarHora(mensaje, telefono, conversacion) {
         await enviarMensaje(telefono, "❌ Error al reprogramar la cita. Por favor, intenta de nuevo.");
     }
 }
+import express from "express";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Variables globales para estadísticas
+let mensajesEnviados = 0;
+let mensajesRecibidos = 0;
+let chatsActivos = new Set();
+
+// Aquí deberías tener tu instancia de Baileys
+import makeWASocket, { useMultiFileAuthState } from "@whiskeysockets/baileys";
+// Iniciar WhatsApp Bot
+async function iniciarBot() {
+    const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
+
+    sock = makeWASocket({
+        auth: state,
+        printQRInTerminal: true,
+    });
+
+    // Escuchar conexión
+    sock.ev.on("connection.update", ({ connection }) => {
+        isConnected = connection === "open";
+        console.log(isConnected ? "✅ Bot conectado" : "❌ Bot desconectado");
+    });
+
+    // Contar mensajes recibidos y enviados
+    sock.ev.on("messages.upsert", (m) => {
+        mensajesRecibidos += m.messages.length;
+        m.messages.forEach(msg => {
+            chatsActivos.add(msg.key.remoteJid);
+        });
+    });
+
+    sock.ev.on("messages.update", () => {
+        mensajesEnviados++;
+    });
+
+    sock.ev.on("creds.update", saveCreds);
+}
+
+iniciarBot();
+
+// Middleware para archivos estáticos (servicios)
+app.use("/servicios", express.static(path.join(__dirname, "servicios")));
+
+// Ruta para QR dinámico
+app.get("/qr", (req, res) => {
+    const qrPath = path.join(__dirname, "qr.png");
+    if (fs.existsSync(qrPath)) {
+        res.sendFile(qrPath);
+    } else {
+        res.status(404).json({ error: "QR aún no generado, intenta más tarde" });
+    }
+});
+
+// Ruta principal: dashboard
 app.get("/", async (req, res) => {
     const statusBot = isConnected ? "✅ Conectado" : "❌ Desconectado";
     const qrPath = path.join(__dirname, "qr.png");
     const qrExists = fs.existsSync(qrPath);
- // Variables para estadísticas reales
-let mensajesEnviados = 0;
-let mensajesRecibidos = 0;
-let chatsActivos = new Set(); // Para evitar duplicados de chats
+
     res.send(`
     <!DOCTYPE html>
     <html lang="es">
@@ -2063,7 +2121,7 @@ let chatsActivos = new Set(); // Para evitar duplicados de chats
                 <div class="col-md-4">
                     <div class="card text-center p-3">
                         <h5>Chats Activos</h5>
-                        <p class="status text-primary">${chatsActivos}</p>
+                        <p class="status text-primary">${chatsActivos.size}</p>
                     </div>
                 </div>
 
@@ -2073,7 +2131,7 @@ let chatsActivos = new Set(); // Para evitar duplicados de chats
                         <h5>Código QR</h5>
                         ${
                             qrExists
-                                ? `<img src="/qr.png" class="qr-img" alt="QR para conectar">`
+                                ? `<img src="/qr" class="qr-img" alt="QR para conectar">`
                                 : `<p class="text-muted">No es necesario reconectar</p>`
                         }
                     </div>
@@ -2144,6 +2202,11 @@ let chatsActivos = new Set(); // Para evitar duplicados de chats
     </body>
     </html>
     `);
+});
+
+// Puerto dinámico para Render
+app.listen(PORT, () => {
+    console.log(`🚀 Servidor iniciado en http://localhost:${PORT}`);
 });
 
 app.get('/qr', (req, res) => {
