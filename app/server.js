@@ -624,13 +624,6 @@ function esContactoIndividual(jid) {
 }
 
 
-// Función para limpiar número de teléfono para logs
-function limpiarTelefono(jid) {
-    const numero = jid.split('@')[0];
-    return numero.length > 4 ? 
-        '*'.repeat(numero.length - 4) + numero.slice(-4) : 
-        numero;
-}
 
 
 // Función para limpiar número de teléfono para logs (solo para privacidad)
