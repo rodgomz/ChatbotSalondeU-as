@@ -3,6 +3,8 @@
 // ==========================
 const express = require('express');
 const cors = require('cors');
+import path from "path";
+import { fileURLToPath } from "url";
 const fs = require("fs");
 const { ref, get, set } = require('firebase/database');
 const db = require('./firebase'); // tu archivo firebase.js
@@ -20,7 +22,6 @@ const qrcode = require('qrcode');
 // ==========================
 const app = express();
 const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || 'localhost';
 
 app.use(cors());
 app.use(express.json());
@@ -1704,10 +1705,7 @@ async function manejarReprogramarFecha(mensaje, telefono, conversacion) {
     );
 }
 
-import express from "express";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
