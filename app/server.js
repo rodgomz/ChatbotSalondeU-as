@@ -625,6 +625,8 @@ app.get("/", (req, res) => {
                     }
                 });
             }
+
+
             function reconectarBot() { 
                 fetch('/reiniciar'); 
                 Swal.fire('Reconectando...', '', 'info'); 
@@ -669,6 +671,7 @@ app.get('/reiniciar', async (req, res) => {
 // Iniciar servidor
 // ==========================
 app.listen(PORT, () => console.log(`🚀 Servidor iniciado en http://localhost:${PORT}`));
+
 
 // ==========================
 // Función placeholder para enviar mensaje
