@@ -617,7 +617,7 @@ app.get("/", (req, res) => {
             }
 
             function updateAppointmentList() {
-               const appointmentList = document.getElementById('appointment-list');
+              const appointmentList = document.getElementById('appointment-list');
     const today = new Date();
     const nextTwoWeeks = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
 
@@ -638,14 +638,46 @@ app.get("/", (req, res) => {
             const hoursUntil = (apt.date.getTime() - today.getTime()) / (1000 * 60 * 60);
             const isUrgent = hoursUntil < 4 && hoursUntil > 0;
 
-            let statusColor;
+            // Define statusColor and statusClass based on appointment status
+            let statusColor, statusClass, statusText;
             switch (apt.status) {
-                case 'Reservada': statusColor = 'green'; break;
-                case 'Cancelada': statusColor = 'red'; break;
-                case 'Completada': statusColor = 'blue'; break;
-                case 'No Asistió': statusColor = 'orange'; break;
-                default: statusColor = 'gray';
+                case 'Reservada': 
+                    statusColor = 'green'; 
+                    statusClass = 'status-pending';
+                    statusText = 'Reservada';
+                    break;
+                case 'Confirmada':
+                    statusColor = 'blue';
+                    statusClass = 'status-confirmed';
+                    statusText = 'Confirmada';
+                    break;
+                case 'Cancelada': 
+                    statusColor = 'red'; 
+                    statusClass = 'status-pending';
+                    statusText = 'Cancelada';
+                    break;
+                case 'Completada': 
+                case 'Finalizada':
+                    statusColor = 'blue'; 
+                    statusClass = 'status-confirmed';
+                    statusText = 'Completada';
+                    break;
+                case 'No Asistió': 
+                    statusColor = 'orange'; 
+                    statusClass = 'status-pending';
+                    statusText = 'No Asistió';
+                    break;
+                case 'En Proceso':
+                    statusColor = 'purple';
+                    statusClass = 'status-confirmed';
+                    statusText = 'En Proceso';
+                    break;
+                default: 
+                    statusColor = 'gray';
+                    statusClass = 'status-pending';
+                    statusText = apt.status || 'Pendiente';
             }
+            
 
                         return \`
                             <div class="appointment-item \${isUrgent ? 'urgent' : ''}" onclick="showAppointmentDetails('\${apt.id}')">
