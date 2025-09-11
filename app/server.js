@@ -615,7 +615,17 @@ app.get("/", (req, res) => {
                     calendarGrid.appendChild(dayElement);
                 }
             }
-
+ // Función para obtener el estilo CSS del estado
+        function getStatusStyle(status) {
+            const styles = {
+                'Reservada': 'background: #fff3cd; color: #856404;',
+                'Confirmada': 'background: #d4edda; color: #155724;',
+                'En Proceso': 'background: #cce7ff; color: #004085;',
+                'Finalizada': 'background: #d1ecf1; color: #0c5460;',
+                'Cancelada': 'background: #f8d7da; color: #721c24;'
+            };
+            return styles[status] || 'background: #e2e3e5; color: #383d41;';
+        }
             function updateAppointmentList() {
                 const appointmentList = document.getElementById('appointment-list');
                 
@@ -703,6 +713,7 @@ app.get("/", (req, res) => {
                                 \${apt.notas ? \`<div style="margin: 5px 0; font-style: italic;">📝 \${apt.notas}</div>\` : ''}
                                 <div style="text-align: right;">
                                     <button onclick="callClient('\${apt.telefono}')" class="btn btn-sm btn-primary" style="margin: 2px;">📞 Llamar</button>
+                                  <button onclick="showStatusMenu('${apt.id}', '${apt.status}')" class="btn btn-sm btn-warning" style="margin: 2px;">🔄 Estado</button>
                                     <button onclick="cancelAppointment('\${apt.id}')" class="btn btn-sm btn-danger" style="margin: 2px;">❌ Cancelar</button>
                                 </div>
                             </div>
@@ -740,9 +751,9 @@ app.get("/", (req, res) => {
                     \`<option value="\${servicio.id}">\${servicio.nombre} - $\${servicio.precio} (\${servicio.duracion}min)</option>\`
                 ).join('');
                 
-                // Generar opciones de horas (de 8:00 a 18:00)
+                // Generar opciones de horas (de 8:00 a 23:00)
                 const horasOptions = [];
-                for (let hora = 8; hora <= 18; hora++) {
+                for (let hora = 8; hora <= 23:00; hora++) {
                     for (let minuto = 0; minuto < 60; minuto += 30) {
                         const horaStr = \`\${hora.toString().padStart(2, '0')}:\${minuto.toString().padStart(2, '0')}\`;
                         horasOptions.push(\`<option value="\${horaStr}">\${horaStr}</option>\`);
@@ -875,21 +886,28 @@ app.get("/", (req, res) => {
                         \${apt.notas ? \`<p><strong>📝 Notas:</strong> \${apt.notas}</p>\` : ''}
                     </div>
                 \`;
-                
-                Swal.fire({
+                    Swal.fire({
                     title: 'Detalles de la Cita',
                     html: detailsHtml,
                     showCancelButton: true,
+                    showDenyButton: true,
                     confirmButtonText: '📞 Llamar Cliente',
+                    denyButtonText: '🔄 Cambiar Estado',
                     cancelButtonText: '❌ Cancelar Cita',
                     showCloseButton: true
                 }).then((result) => {
                     if (result.isConfirmed) {
+                        // Acción: llamar
                         callClient(apt.telefono);
+                    } else if (result.isDenied) {
+                        // Acción: cambiar estado
+                        showStatusMenu(apt.id, apt.status);
                     } else if (result.dismiss === Swal.DismissReason.cancel) {
+                        // Acción: cancelar cita
                         cancelAppointment(apt.id);
                     }
                 });
+
             }
 
             // Función para mostrar menú de cambio de estado
