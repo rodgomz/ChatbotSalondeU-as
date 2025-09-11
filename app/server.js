@@ -1367,6 +1367,41 @@ async function manejarConfirmarCita(mensaje, telefono, conversacion) {
         });
     }
 }
+const { ref, set } = require("firebase/database");
+const { v4: uuidv4 } = require("uuid"); // para IDs únicos
+
+async function guardarCitaFirebase(telefono, conversacion) {
+    try {
+        const citaId = uuidv4();
+        const telefonoNumerico = telefono.replace(/@.*$/, '');
+
+        const nuevaCita = {
+            clienteId: telefonoNumerico,
+            estado: "Reservada",
+            fecha: conversacion.datosTemporales.fechaSeleccionada,
+            hora: conversacion.datosTemporales.hora,
+            manicuristaId: conversacion.datosTemporales.manicurista,
+            servicioId: conversacion.datosTemporales.servicioSeleccionado.id,
+            notas: conversacion.datosTemporales.notas || "",
+            usuarioCreacion: "chat-bot",
+            fechaCreacion: new Date().toISOString()
+        };
+
+        await set(ref(db, `citas/${citaId}`), nuevaCita);
+
+        return {
+            exito: true,
+            mensaje: `✅ Tu cita fue agendada.\n📅 ${nuevaCita.fecha} a las ${nuevaCita.hora}\n💅 Con: ${nuevaCita.manicuristaId}\n🆔 ID de Cita: ${citaId}`
+        };
+
+    } catch (error) {
+        console.error("❌ Error en guardarCitaFirebase:", error);
+        return {
+            exito: false,
+            mensaje: "❌ No se pudo guardar la cita. Intenta de nuevo."
+        };
+    }
+}
 
 const MANICURISTAS = {
     "Jazmín Leon": "5216442570491@s.whatsapp.net"
