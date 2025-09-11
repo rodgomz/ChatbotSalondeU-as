@@ -1,7 +1,6 @@
 // ==========================
 // server.js - WhatsApp Bot Salón de Belleza
 // ==========================
-
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -202,6 +201,25 @@ async function getCitas() {
 }
 
 // ==========================
+// Nueva función para crear una cita
+// ==========================
+async function crearCita(datosCita) {
+    try {
+        const citaId = uuidv4();
+        await set(ref(db, `citas/${citaId}`), {
+            ...datosCita,
+            estado: 'Reservada',
+            fechaCreacion: new Date().toISOString(),
+            id: citaId
+        });
+        return citaId;
+    } catch (error) {
+        console.error('Error al crear cita:', error);
+        throw error;
+    }
+}
+
+// ==========================
 // API Endpoints para el calendario
 // ==========================
 
@@ -242,6 +260,79 @@ app.get('/api/citas', async (req, res) => {
     } catch (error) {
         console.error('Error en /api/citas:', error);
         res.status(500).json({ error: 'Error al obtener citas' });
+    }
+});
+
+// Endpoint para crear una nueva cita
+app.post('/api/citas', async (req, res) => {
+    try {
+        const { clienteId, servicioId, fecha, hora, manicuristaId, notas } = req.body;
+        
+        // Validar datos requeridos
+        if (!clienteId || !servicioId || !fecha || !hora) {
+            return res.status(400).json({ error: 'Datos incompletos' });
+        }
+
+        // Validar que el cliente existe
+        const clientes = await getClientes();
+        if (!clientes[clienteId]) {
+            return res.status(404).json({ error: 'Cliente no encontrado' });
+        }
+
+        // Validar que el servicio existe
+        const servicios = await getServicios();
+        const servicio = servicios.find(s => s.id === servicioId);
+        if (!servicio) {
+            return res.status(404).json({ error: 'Servicio no encontrado' });
+        }
+
+        // Crear la cita
+        const datosCita = {
+            clienteId,
+            servicioId,
+            fecha,
+            hora,
+            manicuristaId: manicuristaId || 'Sin asignar',
+            notas: notas || ''
+        };
+
+        const citaId = await crearCita(datosCita);
+        
+        res.json({ 
+            success: true, 
+            message: 'Cita creada exitosamente',
+            citaId: citaId 
+        });
+    } catch (error) {
+        console.error('Error al crear cita:', error);
+        res.status(500).json({ error: 'Error al crear cita' });
+    }
+});
+
+// Endpoint para obtener clientes
+app.get('/api/clientes', async (req, res) => {
+    try {
+        const clientes = await getClientes();
+        const clientesArray = Object.entries(clientes).map(([id, cliente]) => ({
+            id: id,
+            nombre: cliente.nombre,
+            telefono: cliente.telefono
+        }));
+        res.json(clientesArray);
+    } catch (error) {
+        console.error('Error al obtener clientes:', error);
+        res.status(500).json({ error: 'Error al obtener clientes' });
+    }
+});
+
+// Endpoint para obtener servicios
+app.get('/api/servicios', async (req, res) => {
+    try {
+        const servicios = await getServicios();
+        res.json(servicios);
+    } catch (error) {
+        console.error('Error al obtener servicios:', error);
+        res.status(500).json({ error: 'Error al obtener servicios' });
     }
 });
 
@@ -310,6 +401,16 @@ app.get("/", (req, res) => {
             .appointment-status { font-size: 0.8rem; padding: 2px 8px; border-radius: 12px; }
             .status-pending { background: #fff3cd; color: #856404; }
             .status-confirmed { background: #d4edda; color: #155724; }
+
+            /* Estilos para el formulario de nueva cita */
+            .new-appointment-form { text-align: left; }
+            .form-group { margin-bottom: 15px; }
+            .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+            .form-group select, .form-group input, .form-group textarea {
+                width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;
+            }
+            .btn-primary { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
+            .btn-secondary { background: #6c757d; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px; }
         </style>
     </head>
     <body>
@@ -403,6 +504,8 @@ app.get("/", (req, res) => {
             let currentDate = new Date();
             let selectedDate = new Date();
             let appointments = [];
+            let clientes = [];
+            let servicios = [];
             
             // Función para convertir fecha DD/MM/YYYY a objeto Date
             function parseDate(fechaStr, horaStr) {
@@ -427,6 +530,26 @@ app.get("/", (req, res) => {
                     updateAppointmentList();
                 } catch (error) {
                     console.error('Error cargando citas:', error);
+                }
+            }
+
+            // Cargar clientes
+            async function loadClientes() {
+                try {
+                    const response = await fetch('/api/clientes');
+                    clientes = await response.json();
+                } catch (error) {
+                    console.error('Error cargando clientes:', error);
+                }
+            }
+
+            // Cargar servicios
+            async function loadServicios() {
+                try {
+                    const response = await fetch('/api/servicios');
+                    servicios = await response.json();
+                } catch (error) {
+                    console.error('Error cargando servicios:', error);
                 }
             }
 
@@ -560,8 +683,11 @@ app.get("/", (req, res) => {
                     apt.date.toDateString() === date.toDateString()
                 );
                 
+                // Crear HTML para citas existentes
+                let existingAppointmentsHtml = '';
                 if (dayAppointments.length > 0) {
-                    const appointmentsHtml = dayAppointments
+                    existingAppointmentsHtml = '<h6>Citas existentes:</h6>' + 
+                    dayAppointments
                         .sort((a, b) => a.date - b.date)
                         .map(apt => \`
                             <div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px;">
@@ -581,20 +707,152 @@ app.get("/", (req, res) => {
                                 </div>
                             </div>
                         \`)
-                        .join('');
-                    
-                    Swal.fire({
-                        title: \`📅 Servicios del \${date.toLocaleDateString('es-ES')}\`,
-                        html: appointmentsHtml,
-                        width: '600px',
-                        showConfirmButton: false,
-                        showCloseButton: true
+                        .join('') + '<hr>';
+                }
+                
+                const dateStr = date.toLocaleDateString('es-ES');
+                
+                Swal.fire({
+                    title: \`📅 \${dateStr}\`,
+                    html: \`
+                        \${existingAppointmentsHtml}
+                        <div style="text-align: center; margin: 20px 0;">
+                            <button onclick="showNewAppointmentForm('\${dateStr}')" class="btn btn-success">
+                                ➕ Agregar Nueva Cita
+                            </button>
+                        </div>
+                    \`,
+                    width: '600px',
+                    showConfirmButton: false,
+                    showCloseButton: true
+                });
+            }
+
+            // Función para mostrar el formulario de nueva cita
+            function showNewAppointmentForm(dateStr) {
+                // Generar opciones de clientes
+                const clientesOptions = clientes.map(cliente => 
+                    \`<option value="\${cliente.id}">\${cliente.nombre} (\${cliente.telefono})</option>\`
+                ).join('');
+                
+                // Generar opciones de servicios
+                const serviciosOptions = servicios.map(servicio => 
+                    \`<option value="\${servicio.id}">\${servicio.nombre} - $\${servicio.precio} (\${servicio.duracion}min)</option>\`
+                ).join('');
+                
+                // Generar opciones de horas (de 8:00 a 18:00)
+                const horasOptions = [];
+                for (let hora = 8; hora <= 18; hora++) {
+                    for (let minuto = 0; minuto < 60; minuto += 30) {
+                        const horaStr = \`\${hora.toString().padStart(2, '0')}:\${minuto.toString().padStart(2, '0')}\`;
+                        horasOptions.push(\`<option value="\${horaStr}">\${horaStr}</option>\`);
+                    }
+                }
+                
+                Swal.fire({
+                    title: \`➕ Nueva Cita - \${dateStr}\`,
+                    html: \`
+                        <div class="new-appointment-form">
+                            <div class="form-group">
+                                <label for="cliente">Cliente:</label>
+                                <select id="cliente" required>
+                                    <option value="">Seleccionar cliente...</option>
+                                    \${clientesOptions}
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="servicio">Servicio:</label>
+                                <select id="servicio" required>
+                                    <option value="">Seleccionar servicio...</option>
+                                    \${serviciosOptions}
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="hora">Hora:</label>
+                                <select id="hora" required>
+                                    <option value="">Seleccionar hora...</option>
+                                    \${horasOptions.join('')}
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="manicurista">Manicurista:</label>
+                                <input type="text" id="manicurista" placeholder="Nombre del manicurista (opcional)">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="notas">Notas:</label>
+                                <textarea id="notas" rows="3" placeholder="Notas adicionales (opcional)"></textarea>
+                            </div>
+                        </div>
+                    \`,
+                    width: '500px',
+                    showCancelButton: true,
+                    confirmButtonText: '💾 Crear Cita',
+                    cancelButtonText: '❌ Cancelar',
+                    preConfirm: () => {
+                        const clienteId = document.getElementById('cliente').value;
+                        const servicioId = document.getElementById('servicio').value;
+                        const hora = document.getElementById('hora').value;
+                        const manicurista = document.getElementById('manicurista').value;
+                        const notas = document.getElementById('notas').value;
+                        
+                        if (!clienteId || !servicioId || !hora) {
+                            Swal.showValidationMessage('Por favor completa todos los campos obligatorios');
+                            return false;
+                        }
+                        
+                        return {
+                            clienteId,
+                            servicioId,
+                            fecha: dateStr,
+                            hora,
+                            manicuristaId: manicurista || 'Sin asignar',
+                            notas
+                        };
+                    }
+                }).then(async (result) => {
+                    if (result.isConfirmed) {
+                        await createNewAppointment(result.value);
+                    }
+                });
+            }
+
+            // Función para crear una nueva cita
+            async function createNewAppointment(appointmentData) {
+                try {
+                    const response = await fetch('/api/citas', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(appointmentData)
                     });
-                } else {
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        Swal.fire({
+                            icon: 'success',
+                            title: '¡Cita creada!',
+                            text: 'La cita se ha creado exitosamente',
+                            timer: 2000,
+                            showConfirmButton: false
+                        });
+                        
+                        // Recargar las citas para actualizar el calendario
+                        await loadAppointments();
+                    } else {
+                        throw new Error(result.error || 'Error desconocido');
+                    }
+                } catch (error) {
+                    console.error('Error creando cita:', error);
                     Swal.fire({
-                        title: 'Sin servicios',
-                        text: \`No hay servicios programados para \${date.toLocaleDateString('es-ES')}\`,
-                        icon: 'info'
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'No se pudo crear la cita: ' + error.message
                     });
                 }
             }
@@ -634,6 +892,54 @@ app.get("/", (req, res) => {
                 });
             }
 
+            // Función para llamar a un cliente (abre el marcador del teléfono)
+            function callClient(telefono) {
+                window.open(\`tel:\${telefono}\`, '_self');
+            }
+
+            // Función para cancelar una cita
+            async function cancelAppointment(appointmentId) {
+                const result = await Swal.fire({
+                    title: '¿Cancelar cita?',
+                    text: 'Esta acción no se puede deshacer',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sí, cancelar',
+                    cancelButtonText: 'No cancelar'
+                });
+                
+                if (result.isConfirmed) {
+                    try {
+                        const response = await fetch(\`/api/citas/\${appointmentId}/cancelar\`, {
+                            method: 'POST'
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Cita cancelada',
+                                text: 'La cita se ha cancelado correctamente',
+                                timer: 2000,
+                                showConfirmButton: false
+                            });
+                            
+                            // Recargar las citas
+                            await loadAppointments();
+                        } else {
+                            throw new Error(result.error || 'Error desconocido');
+                        }
+                    } catch (error) {
+                        console.error('Error cancelando cita:', error);
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: 'No se pudo cancelar la cita: ' + error.message
+                        });
+                    }
+                }
+            }
 
             function reconectarBot() { 
                 fetch('/reiniciar'); 
@@ -646,8 +952,10 @@ app.get("/", (req, res) => {
             }
 
             // Inicializar cuando se carga la página
-            document.addEventListener('DOMContentLoaded', () => {
-                loadAppointments();
+            document.addEventListener('DOMContentLoaded', async () => {
+                await loadClientes();
+                await loadServicios();
+                await loadAppointments();
             });
             
             // Actualizar cada 2 minutos para mantener la información fresca
