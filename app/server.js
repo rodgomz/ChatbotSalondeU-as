@@ -740,9 +740,9 @@ app.get("/", (req, res) => {
                     \`<option value="\${servicio.id}">\${servicio.nombre} - $\${servicio.precio} (\${servicio.duracion}min)</option>\`
                 ).join('');
                 
-                // Generar opciones de horas (de 8:00 a 23:00)
+                // Generar opciones de horas (de 8:00 a 18:00)
                 const horasOptions = [];
-                for (let hora = 8; hora <= 23; hora++) {
+                for (let hora = 8; hora <= 18; hora++) {
                     for (let minuto = 0; minuto < 60; minuto += 30) {
                         const horaStr = \`\${hora.toString().padStart(2, '0')}:\${minuto.toString().padStart(2, '0')}\`;
                         horasOptions.push(\`<option value="\${horaStr}">\${horaStr}</option>\`);
@@ -890,6 +890,125 @@ app.get("/", (req, res) => {
                         cancelAppointment(apt.id);
                     }
                 });
+            }
+
+            // Función para mostrar menú de cambio de estado
+            function showStatusMenu(appointmentId, currentStatus) {
+                const estados = [
+                    { valor: 'Reservada', icono: '📅', descripcion: 'Cita reservada' },
+                    { valor: 'Confirmada', icono: '✅', descripcion: 'Cliente confirmó asistencia' },
+                    { valor: 'En Proceso', icono: '⏳', descripcion: 'Servicio en progreso' },
+                    { valor: 'Finalizada', icono: '🎉', descripcion: 'Servicio completado' },
+                    { valor: 'Cancelada', icono: '❌', descripcion: 'Cita cancelada' }
+                ];
+                
+                const estadosHtml = estados
+                    .filter(estado => estado.valor !== currentStatus)
+                    .map(estado => \`
+                        <button onclick="changeAppointmentStatus('\${appointmentId}', '\${estado.valor}')" 
+                                class="btn btn-outline-primary w-100 mb-2" 
+                                style="text-align: left; display: flex; align-items: center;">
+                            <span style="margin-right: 10px; font-size: 1.2em;">\${estado.icono}</span>
+                            <div>
+                                <strong>\${estado.valor}</strong><br>
+                                <small style="color: #666;">\${estado.descripcion}</small>
+                            </div>
+                        </button>
+                    \`)
+                    .join('');
+                
+                Swal.fire({
+                    title: \`🔄 Cambiar Estado\`,
+                    html: \`
+                        <div style="text-align: left; margin-bottom: 15px;">
+                            <strong>Estado actual:</strong> 
+                            <span style="padding: 4px 12px; border-radius: 15px; font-weight: bold; \${getStatusStyle(currentStatus)}">\${currentStatus}</span>
+                        </div>
+                        <div style="text-align: center;">
+                            \${estadosHtml}
+                        </div>
+                    \`,
+                    width: '400px',
+                    showConfirmButton: false,
+                    showCloseButton: true
+                });
+            }
+
+            // Función para cambiar el estado de una cita
+            async function changeAppointmentStatus(appointmentId, newStatus) {
+                // Confirmación especial para estados importantes
+                let confirmMessage = '';
+                let confirmIcon = 'question';
+                
+                switch(newStatus) {
+                    case 'Finalizada':
+                        confirmMessage = '¿Confirmar que el servicio ha sido finalizado?';
+                        confirmIcon = 'success';
+                        break;
+                    case 'Cancelada':
+                        confirmMessage = '¿Estás seguro de que quieres cancelar esta cita?';
+                        confirmIcon = 'warning';
+                        break;
+                    case 'En Proceso':
+                        confirmMessage = '¿Marcar el servicio como en proceso?';
+                        confirmIcon = 'info';
+                        break;
+                    default:
+                        confirmMessage = \`¿Cambiar el estado a \${newStatus}?\`;
+                }
+                
+                const result = await Swal.fire({
+                    title: 'Confirmar cambio',
+                    text: confirmMessage,
+                    icon: confirmIcon,
+                    showCancelButton: true,
+                    confirmButtonText: 'Sí, cambiar',
+                    cancelButtonText: 'Cancelar'
+                });
+                
+                if (result.isConfirmed) {
+                    try {
+                        const response = await fetch(\`/api/citas/\${appointmentId}/estado\`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ estado: newStatus })
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            let successMessage = 'Estado actualizado correctamente';
+                            let successIcon = 'success';
+                            
+                            if (newStatus === 'Finalizada') {
+                                successMessage = '🎉 ¡Servicio finalizado exitosamente!';
+                            } else if (newStatus === 'En Proceso') {
+                                successMessage = '⏳ Servicio marcado como en proceso';
+                            }
+                            
+                            Swal.fire({
+                                icon: successIcon,
+                                title: successMessage,
+                                timer: 2000,
+                                showConfirmButton: false
+                            });
+                            
+                            // Recargar las citas
+                            await loadAppointments();
+                        } else {
+                            throw new Error(result.error || 'Error desconocido');
+                        }
+                    } catch (error) {
+                        console.error('Error cambiando estado:', error);
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: 'No se pudo cambiar el estado: ' + error.message
+                        });
+                    }
+                }
             }
 
             // Función para llamar a un cliente (abre el marcador del teléfono)
