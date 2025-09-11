@@ -40,7 +40,6 @@ let conversacionesActivas = new Map();
 const logger = pino({ level: 'silent' });
 const AUTH_FOLDER = 'auth_info_baileys';
 
-
 // ==========================
 // Función para iniciar el bot
 // ==========================
@@ -148,7 +147,7 @@ async function procesarMensajeWhatsApp(mensaje, telefono) {
 
     const conversacion = conversacionesActivas.get(telefono);
     conversacion.ultimaActividad = new Date();
-     if (verificarComandosCancelacion(mensaje, telefono, conversacion)) return;
+    if (verificarComandosCancelacion(mensaje, telefono, conversacion)) return;
 
     if (!cliente && conversacion.paso === 'registrar_cliente') {
         await enviarMensaje(telefono, "👋 ¡Hola! Para registrarte, por favor dime tu nombre:");
@@ -157,15 +156,15 @@ async function procesarMensajeWhatsApp(mensaje, telefono) {
     }
 
     // Actualizar paso inicial según si hay cliente o no
-if (!cliente && conversacion.paso === 'registrar_cliente') {
-    conversacion.paso = 'capturar_nombre';
-} else if (cliente && conversacion.paso === 'inicio') {
-    conversacion.paso = 'menu_principal';
-    await enviarMensaje(telefono, `👋 Hola ${cliente.nombre}, bienvenido de nuevo al *Salón de Belleza JazminNails.* 💅`);
-}
+    if (!cliente && conversacion.paso === 'registrar_cliente') {
+        conversacion.paso = 'capturar_nombre';
+    } else if (cliente && conversacion.paso === 'inicio') {
+        conversacion.paso = 'menu_principal';
+        await enviarMensaje(telefono, `👋 Hola ${cliente.nombre}, bienvenido de nuevo al *Salón de Belleza JazminNails.* 💅`);
+    }
 
-// Llamar al flujo principal después de actualizar el paso
-await procesarEstadoConversacion(mensaje, telefono, conversacion);
+    // Llamar al flujo principal después de actualizar el paso
+    await procesarEstadoConversacion(mensaje, telefono, conversacion);
 
     // TODO: procesar estado de la conversación
     conversacionesActivas.set(telefono, conversacion);
@@ -190,7 +189,78 @@ async function getServicios() {
 }
 
 // ==========================
-// Dashboard y rutas
+// Nueva función para obtener citas desde Firebase
+// ==========================
+async function getCitas() {
+    try {
+        const snapshot = await get(ref(db, 'citas'));
+        return snapshot.exists() ? snapshot.val() : {};
+    } catch (error) {
+        console.error('Error al obtener citas:', error);
+        return {};
+    }
+}
+
+// ==========================
+// API Endpoints para el calendario
+// ==========================
+
+// Endpoint para obtener todas las citas
+app.get('/api/citas', async (req, res) => {
+    try {
+        const citas = await getCitas();
+        const clientes = await getClientes();
+        const servicios = await getServicios();
+
+        // Convertir servicios array a objeto para búsqueda rápida
+        const serviciosObj = {};
+        servicios.forEach(s => serviciosObj[s.id] = s);
+
+        // Procesar citas para el calendario
+        const citasProcesadas = Object.entries(citas)
+            .filter(([id, cita]) => cita.estado === 'Reservada')
+            .map(([id, cita]) => {
+                const cliente = clientes[cita.clienteId] || { nombre: 'Cliente desconocido', telefono: cita.clienteId };
+                const servicio = serviciosObj[cita.servicioId] || { nombre: 'Servicio desconocido', duracion: 60, precio: 0 };
+
+                return {
+                    id: id,
+                    client: cliente.nombre,
+                    service: servicio.nombre,
+                    fecha: cita.fecha,
+                    hora: cita.hora,
+                    status: 'confirmed',
+                    manicurista: cita.manicuristaId,
+                    notas: cita.notas || '',
+                    telefono: cliente.telefono,
+                    duracion: servicio.duracion || 60,
+                    precio: servicio.precio || 0
+                };
+            });
+
+        res.json(citasProcesadas);
+    } catch (error) {
+        console.error('Error en /api/citas:', error);
+        res.status(500).json({ error: 'Error al obtener citas' });
+    }
+});
+
+// Endpoint para cancelar una cita
+app.post('/api/citas/:id/cancelar', async (req, res) => {
+    try {
+        const citaId = req.params.id;
+        await set(ref(db, `citas/${citaId}/estado`), 'Cancelada');
+        await set(ref(db, `citas/${citaId}/fechaCancelacion`), new Date().toISOString());
+        
+        res.json({ success: true, message: 'Cita cancelada correctamente' });
+    } catch (error) {
+        console.error('Error al cancelar cita:', error);
+        res.status(500).json({ error: 'Error al cancelar cita' });
+    }
+});
+
+// ==========================
+// Dashboard principal con calendario
 // ==========================
 app.use("/servicios", express.static(path.join(__dirname, "servicios")));
 
@@ -212,12 +282,40 @@ app.get("/", (req, res) => {
             .card:hover { transform: scale(1.05); box-shadow:0 6px 18px rgba(0,0,0,0.2); cursor:pointer; }
             .status { font-size:1.2rem; font-weight:bold; }
             .qr-img { max-width:250px; border:3px solid #eee; border-radius:8px; }
+            
+            /* Estilos del calendario */
+            .calendar-container { background: white; border-radius: 16px; padding: 20px; box-shadow:0 4px 15px rgba(0,0,0,0.1); }
+            .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+            .calendar-nav { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #007bff; }
+            .calendar-nav:hover { color: #0056b3; }
+            .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+            .calendar-day-header { text-align: center; font-weight: bold; padding: 10px; background: #f8f9fa; border-radius: 8px; }
+            .calendar-day { text-align: center; padding: 15px 5px; cursor: pointer; border-radius: 8px; transition: all 0.2s; position: relative; min-height: 50px; }
+            .calendar-day:hover { background: #e3f2fd; }
+            .calendar-day.other-month { color: #ccc; }
+            .calendar-day.today { background: #007bff; color: white; font-weight: bold; }
+            .calendar-day.has-appointments { background: #fff3cd; border: 2px solid #ffc107; }
+            .appointment-dot { position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; background: #dc3545; border-radius: 50%; }
+            
+            /* Lista de citas */
+            .appointment-list { max-height: 400px; overflow-y: auto; }
+            .appointment-item { background: white; border-left: 4px solid #007bff; padding: 15px; margin-bottom: 10px; border-radius: 0 8px 8px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: pointer; transition: all 0.2s; }
+            .appointment-item:hover { transform: translateX(5px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+            .appointment-item.urgent { border-left-color: #dc3545; animation: pulse 2s infinite; }
+            @keyframes pulse { 0% { box-shadow: 0 2px 8px rgba(0,0,0,0.1); } 50% { box-shadow: 0 4px 16px rgba(220,53,69,0.3); } 100% { box-shadow: 0 2px 8px rgba(0,0,0,0.1); } }
+            .appointment-time { font-weight: bold; color: #007bff; font-size: 1.1rem; }
+            .appointment-client { font-size: 1rem; margin: 5px 0; }
+            .appointment-service { color: #666; font-size: 0.9rem; }
+            .appointment-status { font-size: 0.8rem; padding: 2px 8px; border-radius: 12px; }
+            .status-pending { background: #fff3cd; color: #856404; }
+            .status-confirmed { background: #d4edda; color: #155724; }
         </style>
     </head>
     <body>
         <div class="container py-5">
             <h1 class="text-center mb-4">🤖 Dashboard Bot WhatsApp</h1>
             
+            <!-- Estadísticas existentes -->
             <div class="row g-4">
                 <div class="col-md-4">
                     <div class="card text-center p-3">
@@ -262,6 +360,31 @@ app.get("/", (req, res) => {
                 </div>
             </div>
 
+            <!-- Nueva sección del calendario -->
+            <div class="row g-4 mt-4">
+                <div class="col-md-8">
+                    <div class="calendar-container">
+                        <div class="calendar-header">
+                            <button class="calendar-nav" onclick="changeMonth(-1)">❮</button>
+                            <h4 id="calendar-month-year"></h4>
+                            <button class="calendar-nav" onclick="changeMonth(1)">❯</button>
+                        </div>
+                        <div class="calendar-grid" id="calendar-grid">
+                            <!-- El calendario se genera con JavaScript -->
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="card p-3">
+                        <h5 class="mb-3">📅 Próximos Servicios</h5>
+                        <div class="appointment-list" id="appointment-list">
+                            <!-- Las citas se cargan con JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="text-center mt-5">
                 <button class="btn btn-primary me-2" onclick="reconectarBot()">🔄 Reconectar Bot</button>
                 <button class="btn btn-danger" onclick="reiniciarServidor()">⚡ Reiniciar Servidor</button>
@@ -269,8 +392,258 @@ app.get("/", (req, res) => {
         </div>
 
         <script>
-            function reconectarBot() { fetch('/reiniciar'); Swal.fire('Reconectando...', '', 'info'); }
-            function reiniciarServidor() { fetch('/reiniciar'); Swal.fire('Servidor reiniciado', '', 'success'); }
+            let currentDate = new Date();
+            let selectedDate = new Date();
+            let appointments = [];
+            
+            // Función para convertir fecha DD/MM/YYYY a objeto Date
+            function parseDate(fechaStr, horaStr) {
+                const [dia, mes, anio] = fechaStr.split('/');
+                const [hora, minuto] = horaStr.split(':');
+                return new Date(parseInt(anio), parseInt(mes) - 1, parseInt(dia), parseInt(hora), parseInt(minuto));
+            }
+            
+            // Cargar datos desde el servidor
+            async function loadAppointments() {
+                try {
+                    const response = await fetch('/api/citas');
+                    const data = await response.json();
+                    
+                    appointments = data.map(apt => ({
+                        ...apt,
+                        date: parseDate(apt.fecha, apt.hora)
+                    }));
+                    
+                    console.log('Citas cargadas:', appointments.length);
+                    updateCalendarDisplay();
+                    updateAppointmentList();
+                } catch (error) {
+                    console.error('Error cargando citas:', error);
+                }
+            }
+
+            function updateCalendarDisplay() {
+                const monthYear = document.getElementById('calendar-month-year');
+                const calendarGrid = document.getElementById('calendar-grid');
+                
+                const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                              'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+                
+                monthYear.textContent = \`\${months[currentDate.getMonth()]} \${currentDate.getFullYear()}\`;
+                
+                // Limpiar el grid
+                calendarGrid.innerHTML = '';
+                
+                // Días de la semana
+                const dayHeaders = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+                dayHeaders.forEach(day => {
+                    const dayElement = document.createElement('div');
+                    dayElement.className = 'calendar-day-header';
+                    dayElement.textContent = day;
+                    calendarGrid.appendChild(dayElement);
+                });
+                
+                // Obtener el primer día del mes y cuántos días tiene
+                const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+                const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+                const startDate = new Date(firstDay);
+                startDate.setDate(startDate.getDate() - firstDay.getDay());
+                
+                // Generar los días del calendario
+                for (let i = 0; i < 42; i++) {
+                    const date = new Date(startDate);
+                    date.setDate(startDate.getDate() + i);
+                    
+                    const dayElement = document.createElement('div');
+                    dayElement.className = 'calendar-day';
+                    dayElement.textContent = date.getDate();
+                    dayElement.onclick = () => selectDate(date);
+                    
+                    // Marcar días de otros meses
+                    if (date.getMonth() !== currentDate.getMonth()) {
+                        dayElement.classList.add('other-month');
+                    }
+                    
+                    // Marcar el día de hoy
+                    const today = new Date();
+                    if (date.toDateString() === today.toDateString()) {
+                        dayElement.classList.add('today');
+                    }
+                    
+                    // Marcar días con citas
+                    const hasAppointments = appointments.some(apt => 
+                        apt.date.toDateString() === date.toDateString()
+                    );
+                    if (hasAppointments) {
+                        dayElement.classList.add('has-appointments');
+                        const dot = document.createElement('div');
+                        dot.className = 'appointment-dot';
+                        dayElement.appendChild(dot);
+                    }
+                    
+                    calendarGrid.appendChild(dayElement);
+                }
+            }
+
+            function updateAppointmentList() {
+                const appointmentList = document.getElementById('appointment-list');
+                
+                // Filtrar citas de los próximos 14 días y ordenar por fecha
+                const today = new Date();
+                const nextTwoWeeks = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
+                
+                const upcomingAppointments = appointments
+                    .filter(apt => apt.date >= today && apt.date <= nextTwoWeeks)
+                    .sort((a, b) => a.date - b.date);
+                
+                if (upcomingAppointments.length === 0) {
+                    appointmentList.innerHTML = '<p class="text-muted text-center">No hay servicios próximos</p>';
+                    return;
+                }
+                
+                appointmentList.innerHTML = upcomingAppointments
+                    .map(apt => {
+                        const timeStr = apt.date.toLocaleTimeString('es-ES', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                        const dateStr = apt.date.toLocaleDateString('es-ES', {
+                            weekday: 'short',
+                            day: 'numeric',
+                            month: 'short'
+                        });
+                        
+                        // Determinar si es urgente (menos de 4 horas)
+                        const hoursUntil = (apt.date.getTime() - today.getTime()) / (1000 * 60 * 60);
+                        const isUrgent = hoursUntil < 4 && hoursUntil > 0;
+                        
+                        const statusClass = apt.status === 'confirmed' ? 'status-confirmed' : 'status-pending';
+                        const statusText = apt.status === 'confirmed' ? 'Confirmado' : 'Pendiente';
+                        
+                        // Información adicional
+                        const manicuristaInfo = apt.manicurista ? \`💅 \${apt.manicurista}\` : '';
+                        const precioInfo = apt.precio ? \`💰 $\${apt.precio}\` : '';
+                        const duracionInfo = apt.duracion ? \`⏱️ \${apt.duracion}min\` : '';
+                        
+                        return \`
+                            <div class="appointment-item \${isUrgent ? 'urgent' : ''}" onclick="showAppointmentDetails('\${apt.id}')">
+                                <div class="appointment-time">\${timeStr} - \${dateStr}</div>
+                                <div class="appointment-client">👤 \${apt.client}</div>
+                                <div class="appointment-service">✂️ \${apt.service}</div>
+                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                    <div class="appointment-status \${statusClass}">\${statusText}</div>
+                                    <small class="text-muted">\${duracionInfo} \${precioInfo}</small>
+                                </div>
+                                \${manicuristaInfo ? \`<div class="text-muted"><small>\${manicuristaInfo}</small></div>\` : ''}
+                            </div>
+                        \`;
+                    })
+                    .join('');
+            }
+
+            function changeMonth(direction) {
+                currentDate.setMonth(currentDate.getMonth() + direction);
+                updateCalendarDisplay();
+            }
+
+            function selectDate(date) {
+                selectedDate = date;
+                const dayAppointments = appointments.filter(apt => 
+                    apt.date.toDateString() === date.toDateString()
+                );
+                
+                if (dayAppointments.length > 0) {
+                    const appointmentsHtml = dayAppointments
+                        .sort((a, b) => a.date - b.date)
+                        .map(apt => \`
+                            <div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <strong style="color: #007bff;">\${apt.date.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}</strong>
+                                    <span style="font-size: 0.8em; color: #666;">⏱️ \${apt.duracion || 60}min</span>
+                                </div>
+                                <div style="margin: 5px 0;"><strong>👤 \${apt.client}</strong></div>
+                                <div style="margin: 5px 0;">📞 \${apt.telefono}</div>
+                                <div style="margin: 5px 0;">✂️ \${apt.service}</div>
+                                <div style="margin: 5px 0;">💅 \${apt.manicurista}</div>
+                                \${apt.precio ? \`<div style="margin: 5px 0;">💰 $\${apt.precio}</div>\` : ''}
+                                \${apt.notas ? \`<div style="margin: 5px 0; font-style: italic;">📝 \${apt.notas}</div>\` : ''}
+                                <div style="text-align: right;">
+                                    <button onclick="callClient('\${apt.telefono}')" class="btn btn-sm btn-primary" style="margin: 2px;">📞 Llamar</button>
+                                    <button onclick="cancelAppointment('\${apt.id}')" class="btn btn-sm btn-danger" style="margin: 2px;">❌ Cancelar</button>
+                                </div>
+                            </div>
+                        \`)
+                        .join('');
+                    
+                    Swal.fire({
+                        title: \`📅 Servicios del \${date.toLocaleDateString('es-ES')}\`,
+                        html: appointmentsHtml,
+                        width: '600px',
+                        showConfirmButton: false,
+                        showCloseButton: true
+                    });
+                } else {
+                    Swal.fire({
+                        title: 'Sin servicios',
+                        text: \`No hay servicios programados para \${date.toLocaleDateString('es-ES')}\`,
+                        icon: 'info'
+                    });
+                }
+            }
+
+            // Función para mostrar detalles de una cita específica
+            function showAppointmentDetails(appointmentId) {
+                const apt = appointments.find(a => a.id === appointmentId);
+                if (!apt) return;
+                
+                const detailsHtml = \`
+                    <div style="text-align: left;">
+                        <p><strong>📅 Fecha:</strong> \${apt.date.toLocaleDateString('es-ES')}</p>
+                        <p><strong>🕐 Hora:</strong> \${apt.date.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}</p>
+                        <p><strong>👤 Cliente:</strong> \${apt.client}</p>
+                        <p><strong>📞 Teléfono:</strong> \${apt.telefono}</p>
+                        <p><strong>✂️ Servicio:</strong> \${apt.service}</p>
+                        <p><strong>💅 Manicurista:</strong> \${apt.manicurista}</p>
+                        <p><strong>⏱️ Duración:</strong> \${apt.duracion || 60} minutos</p>
+                        \${apt.precio ? \`<p><strong>💰 Precio:</strong> $\${apt.precio}</p>\` : ''}
+                        \${apt.notas ? \`<p><strong>📝 Notas:</strong> \${apt.notas}</p>\` : ''}
+                    </div>
+                \`;
+                
+                Swal.fire({
+                    title: 'Detalles de la Cita',
+                    html: detailsHtml,
+                    showCancelButton: true,
+                    confirmButtonText: '📞 Llamar Cliente',
+                    cancelButtonText: '❌ Cancelar Cita',
+                    showCloseButton: true
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        callClient(apt.telefono);
+                    } else if (result.dismiss === Swal.DismissReason.cancel) {
+                        cancelAppointment(apt.id);
+                    }
+                });
+            }
+            function reconectarBot() { 
+                fetch('/reiniciar'); 
+                Swal.fire('Reconectando...', '', 'info'); 
+            }
+            
+            function reiniciarServidor() { 
+                fetch('/reiniciar'); 
+                Swal.fire('Servidor reiniciado', '', 'success'); 
+            }
+
+            // Inicializar cuando se carga la página
+            document.addEventListener('DOMContentLoaded', () => {
+                loadAppointments();
+            });
+            
+            // Actualizar cada 2 minutos para mantener la información fresca
+            setInterval(() => {
+                loadAppointments();
+            }, 120000);
         </script>
     </body>
     </html>
