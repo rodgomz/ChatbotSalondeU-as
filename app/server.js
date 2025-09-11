@@ -263,6 +263,7 @@ app.post('/api/citas/:id/cancelar', async (req, res) => {
 // Dashboard principal con calendario
 // ==========================
 app.use("/servicios", express.static(path.join(__dirname, "servicios")));
+app.use("/clientes", express.static(path.join(__dirname, "clientes")));
 
 app.get("/", (req, res) => {
     const statusBot = isConnected ? "✅ Conectado" : "❌ Desconectado";
@@ -362,7 +363,7 @@ app.get("/", (req, res) => {
                    <div class="col-md-4">
                     <div class="card text-center p-3" onclick="window.location.href='/clientes/clientes.html'">
                         <h5>Administrar Clientes</h5>
-                        <p class="status text-warning">Gestiona los clientes disponibles/p>
+                        <p class="status text-warning">Gestiona los clientes disponibles</p>
                     </div>
                 </div>
             </div>
