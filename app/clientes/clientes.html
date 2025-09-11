@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Clientes</title>
+    <link rel="stylesheet" href="clientes.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Gestión de Clientes</h1>
+        </header>
+
+        <!-- Formulario para agregar cliente -->
+        <section class="form-section">
+            <h2>Agregar Cliente</h2>
+            <form id="clienteForm">
+                <div class="form-group">
+                    <label for="nombre">Nombre:</label>
+                    <input type="text" id="nombre" required>
+                </div>
+                <div class="form-group">
+                    <label for="telefono">Teléfono:</label>
+                    <input type="tel" id="telefono" required pattern="[0-9]{13}">
+                </div>
+                <button type="submit">Agregar Cliente</button>
+            </form>
+        </section>
+
+        <!-- Lista de clientes -->
+        <section class="clientes-section">
+            <h2>Lista de Clientes</h2>
+            <div class="search-box">
+                <input type="text" id="busqueda" placeholder="Buscar cliente...">
+            </div>
+            <div id="clientesContainer" class="clientes-grid">
+                <!-- Los clientes se cargarán aquí dinámicamente -->
+            </div>
+        </section>
+
+        <!-- Loading spinner -->
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Cargando clientes...</p>
+        </div>
+    </div>
+
+    <!-- Modal para editar cliente -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Editar Cliente</h2>
+            <form id="editForm">
+                <div class="form-group">
+                    <label for="editNombre">Nombre:</label>
+                    <input type="text" id="editNombre" required>
+                </div>
+                <div class="form-group">
+                    <label for="editTelefono">Teléfono:</label>
+                    <input type="tel" id="editTelefono" required pattern="[0-9]{13}">
+                </div>
+                <button type="submit">Guardar Cambios</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+    <script>
+        // Configuración de Firebase - REEMPLAZA CON TU CONFIGURACIÓN
+                const firebaseConfig = {
+            apiKey: "AIzaSyBZxtwpOWWTKndunPiipqaxGp9lRfkmV8I",
+            authDomain: "jaznails-a1d11.firebaseapp.com",
+            databaseURL: "https://jaznails-a1d11-default-rtdb.firebaseio.com/",
+            projectId: "jaznails-a1d11",
+            storageBucket: "jaznails-a1d11.firebasestorage.app",
+            messagingSenderId: "982237408746",
+            appId: "1:982237408746:web:6de954a3aa350d7b8d9693",
+            measurementId: "G-WZE5K2YBBC"
+            };
+
+        // Inicializar Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const clientesRef = database.ref('clientes');
+
+        // Variables globales
+        let clientesData = {};
+        let editandoClienteId = null;
+
+        // Elementos del DOM
+        const clienteForm = document.getElementById('clienteForm');
+        const editForm = document.getElementById('editForm');
+        const clientesContainer = document.getElementById('clientesContainer');
+        const loading = document.getElementById('loading');
+        const modal = document.getElementById('modal');
+        const closeModal = document.querySelector('.close');
+        const busqueda = document.getElementById('busqueda');
+
+        // Event listeners
+        clienteForm.addEventListener('submit', agregarCliente);
+        editForm.addEventListener('submit', guardarCambios);
+        closeModal.addEventListener('click', cerrarModal);
+        busqueda.addEventListener('input', filtrarClientes);
+        window.addEventListener('click', (e) => {
+            if (e.target === modal) cerrarModal();
+        });
+
+        // Escuchar cambios en Firebase
+        clientesRef.on('value', (snapshot) => {
+            loading.style.display = 'none';
+            clientesData = snapshot.val() || {};
+            mostrarClientes(clientesData);
+        });
+
+        // Función para agregar cliente
+        function agregarCliente(e) {
+            e.preventDefault();
+            
+            const nombre = document.getElementById('nombre').value.trim();
+            const telefono = document.getElementById('telefono').value.trim();
+            
+            if (!nombre || !telefono) {
+                alert('Por favor completa todos los campos');
+                return;
+            }
+
+            // Usar el teléfono como key
+            clientesRef.child(telefono).set({
+                nombre: nombre,
+                telefono: telefono
+            }).then(() => {
+                alert('Cliente agregado exitosamente');
+                clienteForm.reset();
+            }).catch((error) => {
+                alert('Error al agregar cliente: ' + error.message);
+            });
+        }
+
+        // Función para mostrar clientes
+        function mostrarClientes(clientes) {
+            clientesContainer.innerHTML = '';
+            
+            if (!clientes || Object.keys(clientes).length === 0) {
+                clientesContainer.innerHTML = '<p class="no-clientes">No hay clientes registrados</p>';
+                return;
+            }
+
+            Object.keys(clientes).forEach(id => {
+                const cliente = clientes[id];
+                const clienteCard = document.createElement('div');
+                clienteCard.className = 'cliente-card';
+                clienteCard.innerHTML = `
+                    <div class="cliente-info">
+                        <h3>${cliente.nombre}</h3>
+                        <p><i class="icon">📞</i> ${cliente.telefono}</p>
+                    </div>
+                    <div class="cliente-actions">
+                        <button onclick="editarCliente('${id}')" class="btn btn-edit">Editar</button>
+                        <button onclick="eliminarCliente('${id}')" class="btn btn-delete">Eliminar</button>
+                    </div>
+                `;
+                clientesContainer.appendChild(clienteCard);
+            });
+        }
+
+        // Función para filtrar clientes
+        function filtrarClientes() {
+            const termino = busqueda.value.toLowerCase();
+            const clientesFiltrados = {};
+            
+            Object.keys(clientesData).forEach(id => {
+                const cliente = clientesData[id];
+                if (cliente.nombre.toLowerCase().includes(termino) || 
+                    cliente.telefono.includes(termino)) {
+                    clientesFiltrados[id] = cliente;
+                }
+            });
+            
+            mostrarClientes(clientesFiltrados);
+        }
+
+        // Función para editar cliente
+        function editarCliente(id) {
+            const cliente = clientesData[id];
+            if (!cliente) return;
+            
+            editandoClienteId = id;
+            document.getElementById('editNombre').value = cliente.nombre;
+            document.getElementById('editTelefono').value = cliente.telefono;
+            modal.style.display = 'block';
+        }
+
+        // Función para guardar cambios
+        function guardarCambios(e) {
+            e.preventDefault();
+            
+            if (!editandoClienteId) return;
+            
+            const nombre = document.getElementById('editNombre').value.trim();
+            const telefono = document.getElementById('editTelefono').value.trim();
+            
+            if (!nombre || !telefono) {
+                alert('Por favor completa todos los campos');
+                return;
+            }
+
+            clientesRef.child(editandoClienteId).update({
+                nombre: nombre,
+                telefono: telefono
+            }).then(() => {
+                alert('Cliente actualizado exitosamente');
+                cerrarModal();
+            }).catch((error) => {
+                alert('Error al actualizar cliente: ' + error.message);
+            });
+        }
+
+        // Función para eliminar cliente
+        function eliminarCliente(id) {
+            if (confirm('¿Estás seguro de que quieres eliminar este cliente?')) {
+                clientesRef.child(id).remove().then(() => {
+                    alert('Cliente eliminado exitosamente');
+                }).catch((error) => {
+                    alert('Error al eliminar cliente: ' + error.message);
+                });
+            }
+        }
+
+        // Función para cerrar modal
+        function cerrarModal() {
+            modal.style.display = 'none';
+            editandoClienteId = null;
+            editForm.reset();
+        }
+    </script>
+</body>
+</html>
