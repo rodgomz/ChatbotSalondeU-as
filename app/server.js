@@ -1367,8 +1367,6 @@ async function manejarConfirmarCita(mensaje, telefono, conversacion) {
         });
     }
 }
-const { ref, set } = require("firebase/database");
-const { v4: uuidv4 } = require("uuid"); // para IDs únicos
 
 async function guardarCitaFirebase(telefono, conversacion) {
     try {
