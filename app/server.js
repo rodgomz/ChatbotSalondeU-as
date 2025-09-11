@@ -358,6 +358,13 @@ app.get("/", (req, res) => {
                         <p class="status text-warning">Gestiona los servicios del salón</p>
                     </div>
                 </div>
+
+                   <div class="col-md-4">
+                    <div class="card text-center p-3" onclick="window.location.href='/clientes/clientes.html'">
+                        <h5>Administrar Clientes</h5>
+                        <p class="status text-warning">Gestiona los clientes disponibles/p>
+                    </div>
+                </div>
             </div>
 
             <!-- Nueva sección del calendario -->
