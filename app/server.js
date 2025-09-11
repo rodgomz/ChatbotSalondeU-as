@@ -617,68 +617,45 @@ app.get("/", (req, res) => {
             }
 
             function updateAppointmentList() {
-              const appointmentList = document.getElementById('appointment-list');
-    const today = new Date();
-    const nextTwoWeeks = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
-
-    const upcomingAppointments = appointments
-        .filter(apt => apt.date >= today && apt.date <= nextTwoWeeks)
-        .sort((a, b) => a.date - b.date);
-
-    if (upcomingAppointments.length === 0) {
-        appointmentList.innerHTML = '<p class="text-muted text-center">No hay servicios próximos</p>';
-        return;
-    }
-
-    appointmentList.innerHTML = upcomingAppointments
-        .map(apt => {
-            const timeStr = apt.date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-            const dateStr = apt.date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
-
-            const hoursUntil = (apt.date.getTime() - today.getTime()) / (1000 * 60 * 60);
-            const isUrgent = hoursUntil < 4 && hoursUntil > 0;
-
-            // Define statusColor and statusClass based on appointment status
-            let statusColor, statusClass, statusText;
-            switch (apt.status) {
-                case 'Reservada': 
-                    statusColor = 'green'; 
-                    statusClass = 'status-pending';
-                    statusText = 'Reservada';
-                    break;
-                case 'Confirmada':
-                    statusColor = 'blue';
-                    statusClass = 'status-confirmed';
-                    statusText = 'Confirmada';
-                    break;
-                case 'Cancelada': 
-                    statusColor = 'red'; 
-                    statusClass = 'status-pending';
-                    statusText = 'Cancelada';
-                    break;
-                case 'Completada': 
-                case 'Finalizada':
-                    statusColor = 'blue'; 
-                    statusClass = 'status-confirmed';
-                    statusText = 'Completada';
-                    break;
-                case 'No Asistió': 
-                    statusColor = 'orange'; 
-                    statusClass = 'status-pending';
-                    statusText = 'No Asistió';
-                    break;
-                case 'En Proceso':
-                    statusColor = 'purple';
-                    statusClass = 'status-confirmed';
-                    statusText = 'En Proceso';
-                    break;
-                default: 
-                    statusColor = 'gray';
-                    statusClass = 'status-pending';
-                    statusText = apt.status || 'Pendiente';
-            }
-            
-
+                const appointmentList = document.getElementById('appointment-list');
+                
+                // Filtrar citas de los próximos 14 días y ordenar por fecha
+                const today = new Date();
+                const nextTwoWeeks = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
+                
+                const upcomingAppointments = appointments
+                    .filter(apt => apt.date >= today && apt.date <= nextTwoWeeks)
+                    .sort((a, b) => a.date - b.date);
+                
+                if (upcomingAppointments.length === 0) {
+                    appointmentList.innerHTML = '<p class="text-muted text-center">No hay servicios próximos</p>';
+                    return;
+                }
+                
+                appointmentList.innerHTML = upcomingAppointments
+                    .map(apt => {
+                        const timeStr = apt.date.toLocaleTimeString('es-ES', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                        const dateStr = apt.date.toLocaleDateString('es-ES', {
+                            weekday: 'short',
+                            day: 'numeric',
+                            month: 'short'
+                        });
+                        
+                        // Determinar si es urgente (menos de 4 horas)
+                        const hoursUntil = (apt.date.getTime() - today.getTime()) / (1000 * 60 * 60);
+                        const isUrgent = hoursUntil < 4 && hoursUntil > 0;
+                        
+                        const statusClass = apt.status === 'confirmed' ? 'status-confirmed' : 'status-pending';
+                        const statusText = apt.status === 'confirmed' ? 'Confirmado' : 'Pendiente';
+                        
+                        // Información adicional
+                        const manicuristaInfo = apt.manicurista ? \`💅 \${apt.manicurista}\` : '';
+                        const precioInfo = apt.precio ? \`💰 $\${apt.precio}\` : '';
+                        const duracionInfo = apt.duracion ? \`⏱️ \${apt.duracion}min\` : '';
+                        
                         return \`
                             <div class="appointment-item \${isUrgent ? 'urgent' : ''}" onclick="showAppointmentDetails('\${apt.id}')">
                                 <div class="appointment-time">\${timeStr} - \${dateStr}</div>
@@ -763,9 +740,9 @@ app.get("/", (req, res) => {
                     \`<option value="\${servicio.id}">\${servicio.nombre} - $\${servicio.precio} (\${servicio.duracion}min)</option>\`
                 ).join('');
                 
-                // Generar opciones de horas (de 8:00 a 23:00)
+                // Generar opciones de horas (de 8:00 a 18:00)
                 const horasOptions = [];
-                for (let hora = 8; hora <= 23; hora++) {
+                for (let hora = 8; hora <= 18; hora++) {
                     for (let minuto = 0; minuto < 60; minuto += 30) {
                         const horaStr = \`\${hora.toString().padStart(2, '0')}:\${minuto.toString().padStart(2, '0')}\`;
                         horasOptions.push(\`<option value="\${horaStr}">\${horaStr}</option>\`);
@@ -881,19 +858,10 @@ app.get("/", (req, res) => {
             }
 
             // Función para mostrar detalles de una cita específica
-   
             function showAppointmentDetails(appointmentId) {
                 const apt = appointments.find(a => a.id === appointmentId);
-
                 if (!apt) return;
-                 let statusColor;
-    switch (apt.status) {
-        case 'Reservada': statusColor = 'green'; break;
-        case 'Cancelada': statusColor = 'red'; break;
-        case 'Completada': statusColor = 'blue'; break;
-        case 'No Asistió': statusColor = 'orange'; break;
-        default: statusColor = 'gray';
-    }
+                
                 const detailsHtml = \`
                     <div style="text-align: left;">
                         <p><strong>📅 Fecha:</strong> \${apt.date.toLocaleDateString('es-ES')}</p>
@@ -905,41 +873,24 @@ app.get("/", (req, res) => {
                         <p><strong>⏱️ Duración:</strong> \${apt.duracion || 60} minutos</p>
                         \${apt.precio ? \`<p><strong>💰 Precio:</strong> $\${apt.precio}</p>\` : ''}
                         \${apt.notas ? \`<p><strong>📝 Notas:</strong> \${apt.notas}</p>\` : ''}
-                           <p><strong>📌 Estado:</strong> 
-                <span style="
-                    display:inline-block; 
-                    padding:4px 10px; 
-                    border-radius:12px; 
-                    background:${statusColor}; 
-                    color:white; 
-                    font-weight:bold;
-                ">
-                    ${apt.status || 'Desconocido'}
-                </span>
-            </p>
                     </div>
                 \`;
                 
-                 Swal.fire({
-        title: 'Detalles de la Cita',
-        html: detailsHtml,
-        showDenyButton: true,
-        showCancelButton: true,
-        confirmButtonText: '📞 Llamar Cliente',
-        denyButtonText: '🔄 Cambiar Estado',
-        cancelButtonText: '❌ Cancelar Cita',
-        showCloseButton: true
-    }).then((result) => {
-        if (result.isConfirmed) {
-            callClient(apt.telefono);
-        } else if (result.isDenied) {
-            showStatusMenu(apt.id, apt.status); // 👈 abre el menú para cambiar estado
-        } else if (result.dismiss === Swal.DismissReason.cancel) {
-            cancelAppointment(apt.id);
-        }
-    });
+                Swal.fire({
+                    title: 'Detalles de la Cita',
+                    html: detailsHtml,
+                    showCancelButton: true,
+                    confirmButtonText: '📞 Llamar Cliente',
+                    cancelButtonText: '❌ Cancelar Cita',
+                    showCloseButton: true
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        callClient(apt.telefono);
+                    } else if (result.dismiss === Swal.DismissReason.cancel) {
+                        cancelAppointment(apt.id);
+                    }
+                });
             }
-                
 
             // Función para mostrar menú de cambio de estado
             function showStatusMenu(appointmentId, currentStatus) {
@@ -966,24 +917,21 @@ app.get("/", (req, res) => {
                     \`)
                     .join('');
                 
-             Swal.fire({
-        title: 'Cambiar Estado',
-        input: 'select',
-        inputOptions: {
-            'Reservada': 'Reservada',
-            'Cancelada': 'Cancelada',
-            'Completada': 'Completada',
-            'No Asistió': 'No Asistió'
-        },
-        inputValue: currentStatus,
-        showCancelButton: true,
-        confirmButtonText: 'Guardar',
-        cancelButtonText: 'Cancelar'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            changeAppointmentStatus(appointmentId, result.value);
-        }
-    });
+                Swal.fire({
+                    title: \`🔄 Cambiar Estado\`,
+                    html: \`
+                        <div style="text-align: left; margin-bottom: 15px;">
+                            <strong>Estado actual:</strong> 
+                            <span style="padding: 4px 12px; border-radius: 15px; font-weight: bold; \${getStatusStyle(currentStatus)}">\${currentStatus}</span>
+                        </div>
+                        <div style="text-align: center;">
+                            \${estadosHtml}
+                        </div>
+                    \`,
+                    width: '400px',
+                    showConfirmButton: false,
+                    showCloseButton: true
+                });
             }
 
             // Función para cambiar el estado de una cita
