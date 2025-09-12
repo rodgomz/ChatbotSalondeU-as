@@ -8,7 +8,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const pino = require('pino');
 const qrcode = require('qrcode');
-const { ref, get, set } = require('firebase/database');
+const { ref, get, set, update } = require('firebase/database');
 const db = require('./firebase'); // tu archivo firebase.js
 const {
     default: makeWASocket,
