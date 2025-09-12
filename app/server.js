@@ -234,7 +234,7 @@ app.get('/api/citas', async (req, res) => {
         const serviciosObj = {};
         servicios.forEach(s => serviciosObj[s.id] = s);
 
-        
+
         // Procesar citas para el calendario (excluir canceladas)
 const citasProcesadas = Object.entries(citas)
     .filter(([id, cita]) => {
@@ -935,9 +935,9 @@ app.get("/", (req, res) => {
                     \`<option value="\${servicio.id}">\${servicio.nombre} - $\${servicio.precio} (\${servicio.duracion}min)</option>\`
                 ).join('');
                 
-                // Generar opciones de horas (de 8:00 a 18:00)
+                // Generar opciones de horas (de 8:00 a 22:00)
                 const horasOptions = [];
-                for (let hora = 8; hora <= 18; hora++) {
+                for (let hora = 8; hora <= 22; hora++) {
                     for (let minuto = 0; minuto < 60; minuto += 30) {
                         const horaStr = \`\${hora.toString().padStart(2, '0')}:\${minuto.toString().padStart(2, '0')}\`;
                         horasOptions.push(\`<option value="\${horaStr}">\${horaStr}</option>\`);
