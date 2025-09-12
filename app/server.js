@@ -350,6 +350,57 @@ app.post('/api/citas/:id/cancelar', async (req, res) => {
     }
 });
 
+// Ruta para cambiar el estado de una cita - VERSION FIREBASE
+app.post('/api/citas/:id/estado', async (req, res) => {
+    try {
+        const citaId = req.params.id;
+        const { estado } = req.body;
+        
+        console.log(`Intentando cambiar estado de cita ${citaId} a ${estado}`);
+        
+        // Obtener la cita desde Firebase
+        const citaRef = ref(db, `citas/${citaId}`);
+        const snapshot = await get(citaRef);
+        
+        if (!snapshot.exists()) {
+            return res.status(404).json({
+                success: false,
+                error: 'Cita no encontrada'
+            });
+        }
+        
+        // Validar estados permitidos
+        const estadosPermitidos = ['Reservada', 'Confirmada', 'En Proceso', 'Finalizada', 'Cancelada'];
+        if (!estadosPermitidos.includes(estado)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Estado no válido'
+            });
+        }
+        
+        // Actualizar el estado en Firebase
+        await update(citaRef, {
+            estado: estado,
+            fechaActualizacion: new Date().toISOString()
+        });
+        
+        console.log(`Estado de cita ${citaId} actualizado a ${estado}`);
+        
+        res.json({
+            success: true,
+            message: `Estado actualizado a ${estado}`,
+            citaId: citaId
+        });
+        
+    } catch (error) {
+        console.error('Error cambiando estado:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor'
+        });
+    }
+});
+
 // ==========================
 // Dashboard principal con calendario
 // ==========================
