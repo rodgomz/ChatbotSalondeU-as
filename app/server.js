@@ -234,27 +234,38 @@ app.get('/api/citas', async (req, res) => {
         const serviciosObj = {};
         servicios.forEach(s => serviciosObj[s.id] = s);
 
-        // Procesar citas para el calendario
-        const citasProcesadas = Object.entries(citas)
-            .filter(([id, cita]) => cita.estado === 'Reservada')
-            .map(([id, cita]) => {
-                const cliente = clientes[cita.clienteId] || { nombre: 'Cliente desconocido', telefono: cita.clienteId };
-                const servicio = serviciosObj[cita.servicioId] || { nombre: 'Servicio desconocido', duracion: 60, precio: 0 };
+        
+        // Procesar citas para el calendario (excluir canceladas)
+const citasProcesadas = Object.entries(citas)
+    .filter(([id, cita]) => {
+        const estado = cita.estado || 'Reservada';
+        return ['Reservada', 'Confirmada', 'En Proceso', 'Finalizada'].includes(estado);
+    })
+    .map(([id, cita]) => {
+        const cliente = clientes[cita.clienteId] || { 
+            nombre: 'Cliente desconocido', 
+            telefono: cita.clienteId 
+        };
+        const servicio = serviciosObj[cita.servicioId] || { 
+            nombre: 'Servicio desconocido', 
+            duracion: 60, 
+            precio: 0 
+        };
 
-                return {
-                    id: id,
-                    client: cliente.nombre,
-                    service: servicio.nombre,
-                    fecha: cita.fecha,
-                    hora: cita.hora,
-                    status: 'confirmed',
-                    manicurista: cita.manicuristaId,
-                    notas: cita.notas || '',
-                    telefono: cliente.telefono,
-                    duracion: servicio.duracion || 60,
-                    precio: servicio.precio || 0
-                };
-            });
+        return {
+            id: id,
+            client: cliente.nombre,
+            service: servicio.nombre,
+            fecha: cita.fecha,
+            hora: cita.hora,
+            status: cita.estado || 'Reservada', // Usar el estado real
+            manicurista: cita.manicuristaId,
+            notas: cita.notas || '',
+            telefono: cliente.telefono,
+            duracion: servicio.duracion || 60,
+            precio: servicio.precio || 0
+        };
+    });
 
         res.json(citasProcesadas);
     } catch (error) {
