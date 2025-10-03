@@ -7,7 +7,90 @@
     <link rel="stylesheet" href="/servicios/servicios.css">
 </head>
 <body>
-    <div class="container">
+     <div class="container">
+        <div class="header">
+            <h1>🏪 Gestor de Servicios</h1>
+            <p>Administra tus servicios con imágenes de manera fácil y rápida</p>
+        </div>
+
+        <div class="content">
+            <div id="alert-container"></div>
+
+            <!-- Formulario para agregar/editar servicios -->
+            <div class="form-section">
+                <h2 id="form-title">➕ Agregar Nuevo Servicio</h2>
+                <form id="service-form">
+                    <input type="hidden" id="service-id">
+                    <input type="hidden" id="current-image-url">
+                    
+                    <!-- Sección de carga de imagen -->
+                    <div class="image-upload-section" id="image-upload-area">
+                        <div class="upload-icon">📷</div>
+                        <h3>Subir Imagen del Servicio</h3>
+                        <p>Haz clic o arrastra una imagen aquí</p>
+                        <p style="color: #999; font-size: 0.9em;">JPG, PNG (máx. 5MB)</p>
+                        <input type="file" id="image-input" accept="image/*" style="display: none;">
+                        <img id="image-preview" alt="Vista previa">
+                    </div>
+
+                    <div class="upload-progress" id="upload-progress">
+                        <p>Subiendo imagen...</p>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-fill">0%</div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="nombre">Nombre del Servicio *</label>
+                            <input type="text" id="nombre" name="nombre" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="precio">Precio *</label>
+                            <input type="number" id="precio" name="precio" step="0.01" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="descripcion">Descripción</label>
+                        <textarea id="descripcion" name="descripcion" placeholder="Describe el servicio..."></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="duracion">Duración (minutos)</label>
+                            <input type="number" id="duracion" name="duracion">
+                        </div>
+                        <div class="form-group">
+                            <label for="categoria">Categoría</label>
+                            <select id="categoria" name="categoria">
+                                <option value="">Seleccionar categoría</option>
+                                <option value="Uñas">Uñas</option>
+                                <option value="Manicura">Manicura</option>
+                                <option value="Pedicura">Pedicura</option>
+                                <option value="Diseño">Diseño</option>
+                                <option value="Tratamientos">Tratamientos</option>
+                                <option value="Otros">Otros</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="submit-btn">Agregar Servicio</button>
+                    <button type="button" class="btn btn-warning" id="cancel-btn" style="display: none;">Cancelar</button>
+                </form>
+            </div>
+
+            <!-- Lista de servicios -->
+            <div class="form-section">
+                <h2>📋 Servicios Registrados</h2>
+                <div id="loading" class="loading">
+                    <div class="spinner"></div>
+                    Cargando servicios...
+                </div>
+                <div id="services-container" class="services-grid" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
         <div class="header">
             <h1>🏪 Gestor de Servicios</h1>
             <p>Administra tus servicios de manera fácil y rápida</p>
