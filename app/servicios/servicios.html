@@ -10,7 +10,7 @@
     <div class="container">
         <div class="header">
             <h1>🏪 Gestor de Servicios</h1>
-            <p>Administra tus servicios de manera fácil y rápida</p>
+            <p>Administra tus servicios con imágenes de manera fácil y rápida</p>
         </div>
 
         <div class="content">
@@ -21,6 +21,24 @@
                 <h2 id="form-title">➕ Agregar Nuevo Servicio</h2>
                 <form id="service-form">
                     <input type="hidden" id="service-id">
+                    <input type="hidden" id="current-image-url">
+                    
+                    <!-- Sección de carga de imagen -->
+                    <div class="image-upload-section" id="image-upload-area">
+                        <div class="upload-icon">📷</div>
+                        <h3>Subir Imagen del Servicio</h3>
+                        <p>Haz clic o arrastra una imagen aquí</p>
+                        <p style="color: #999; font-size: 0.9em;">JPG, PNG (máx. 5MB)</p>
+                        <input type="file" id="image-input" accept="image/*" style="display: none;">
+                        <img id="image-preview" alt="Vista previa">
+                    </div>
+
+                    <div class="upload-progress" id="upload-progress">
+                        <p>Subiendo imagen...</p>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-fill">0%</div>
+                        </div>
+                    </div>
                     
                     <div class="form-row">
                         <div class="form-group">
@@ -57,7 +75,7 @@
                         </div>
                     </div>
 
-                    <button type="submit" class="btn" id="submit-btn">Agregar Servicio</button>
+                    <button type="submit" class="btn btn-primary" id="submit-btn">Agregar Servicio</button>
                     <button type="button" class="btn btn-warning" id="cancel-btn" style="display: none;">Cancelar</button>
                 </form>
             </div>
@@ -77,24 +95,26 @@
     <!-- Firebase SDK -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.15.0/firebase-app-compat.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.15.0/firebase-database-compat.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.15.0/firebase-storage-compat.min.js"></script>
     
-    <!-- Importar configuración de Firebase -->
-<script>
-const firebaseConfig = {
-  apiKey: "AIzaSyBZxtwpOWWTKndunPiipqaxGp9lRfkmV8I",
-  authDomain: "jaznails-a1d11.firebaseapp.com",
-   databaseURL: "https://jaznails-a1d11-default-rtdb.firebaseio.com/",
-  projectId: "jaznails-a1d11",
-  storageBucket: "jaznails-a1d11.firebasestorage.app",
-  messagingSenderId: "982237408746",
-  appId: "1:982237408746:web:6de954a3aa350d7b8d9693",
-  measurementId: "G-WZE5K2YBBC"
-};
-  // Inicializar Firebase
-  firebase.initializeApp(firebaseConfig);
-</script>
+    <!-- Configuración de Firebase -->
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBZxtwpOWWTKndunPiipqaxGp9lRfkmV8I",
+            authDomain: "jaznails-a1d11.firebaseapp.com",
+            databaseURL: "https://jaznails-a1d11-default-rtdb.firebaseio.com/",
+            projectId: "jaznails-a1d11",
+            storageBucket: "jaznails-a1d11.firebasestorage.app",
+            messagingSenderId: "982237408746",
+            appId: "1:982237408746:web:6de954a3aa350d7b8d9693",
+            measurementId: "G-WZE5K2YBBC"
+        };
+        
+        // Inicializar Firebase
+        firebase.initializeApp(firebaseConfig);
+    </script>
     
-    <!-- Script principal -->
+    <!-- Script principal (archivo externo) -->
     <script src="./servicios.js"></script>
 </body>
 </html>
