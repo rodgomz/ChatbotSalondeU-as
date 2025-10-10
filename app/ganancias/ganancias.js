@@ -14,7 +14,7 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
 
         // Filtrar por año
         const citasFiltradas = data.citasGanancia.filter(c => {
-            const [dia, mes, anio] = c.fecha.split('/').map(n => parseInt(n,10));
+            const [dia, mes, anio] = c.fecha.split('/').map(n => parseInt(n, 10));
             return anio === anioFiltro;
         });
 
@@ -23,7 +23,7 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
         } else {
             citasFiltradas.forEach(cita => {
                 const clienteNombre = data.clientes[cita.clienteId]?.nombre || cita.clienteId;
-                const manicuristaNombre = data.manicuristas[cita.manicurista]?.nombre || cita.manicurista || 'Sin asignar';
+                const manicuristaNombre = data.manicuristas[cita.manicuristaId]?.nombre || cita.manicuristaId || 'Sin asignar';
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${cita.fecha}</td>
@@ -40,8 +40,8 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
         // Gráfica mes a mes
         const gananciasMes = new Array(12).fill(0);
         citasFiltradas.forEach(cita => {
-            const [dia, mes] = cita.fecha.split('/').map(n => parseInt(n,10));
-            gananciasMes[mes-1] += cita.precio;
+            const [dia, mes] = cita.fecha.split('/').map(n => parseInt(n, 10));
+            gananciasMes[mes - 1] += cita.precio;
         });
 
         const ctx = document.getElementById('graficaGananciasMes').getContext('2d');
@@ -58,6 +58,7 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
             },
             options: { scales: { y: { beginAtZero: true } } }
         });
+
         document.getElementById('anioGrafica').textContent = anioFiltro;
 
     } catch (error) {
@@ -71,7 +72,7 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
 function cargarComboAnio() {
     const select = document.getElementById('selectAnio');
     const actual = new Date().getFullYear();
-    for (let i = actual; i >= actual-5; i--) {
+    for (let i = actual; i >= actual - 5; i--) {
         const option = document.createElement('option');
         option.value = i;
         option.textContent = i;
@@ -81,30 +82,8 @@ function cargarComboAnio() {
     select.addEventListener('change', () => cargarGanancias(parseInt(select.value)));
 }
 
+// DOMContentLoaded único
 document.addEventListener('DOMContentLoaded', () => {
     cargarComboAnio();
     cargarGanancias();
 });
-
-
-// llenar combo de años
-function cargarComboAnio() {
-    const select = document.getElementById('selectAnio');
-    const actual = new Date().getFullYear();
-    for (let i = actual; i >= actual-5; i--) {
-        const option = document.createElement('option');
-        option.value = i;
-        option.textContent = i;
-        select.appendChild(option);
-    }
-    select.value = actual;
-    select.addEventListener('change', () => cargarGanancias(parseInt(select.value)));
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    cargarComboAnio();
-    cargarGanancias();
-});
-
-
-document.addEventListener('DOMContentLoaded', cargarGanancias);
