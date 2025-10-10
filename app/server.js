@@ -187,6 +187,16 @@ async function getServicios() {
     return snapshot.exists() ? Object.values(snapshot.val()) : [];
 }
 
+async function getManicuristas() {
+    try {
+        const snapshot = await get(ref(db, 'manicuristas')); 
+        return snapshot.exists() ? snapshot.val() : {};
+    } catch (error) {
+        console.error('Error al obtener manicuristas:', error);
+        return {};
+    }
+}
+
 // ==========================
 // Nueva función para obtener citas desde Firebase
 // ==========================
