@@ -412,6 +412,62 @@ app.post('/api/citas/:id/estado', async (req, res) => {
     }
 });
 
+// ==========================
+// GANANCIAS - Basadas en Citas Finalizadas
+// ==========================
+app.get('/api/ganancias', async (req, res) => {
+    try {
+        const citas = await getCitas();
+        const servicios = await getServicios();
+
+        // Convertir array de servicios en objeto para búsqueda rápida
+        const serviciosObj = {};
+        servicios.forEach(s => serviciosObj[s.id] = s);
+
+        let totalSemanal = 0;
+        let totalMensual = 0;
+        let citasGanancia = [];
+
+        const ahora = new Date();
+        const inicioSemana = new Date(ahora);
+        inicioSemana.setDate(ahora.getDate() - ahora.getDay()); // Domingo
+        const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+
+        // Recorrer todas las citas
+        Object.entries(citas || {}).forEach(([id, cita]) => {
+            if (cita.estado === 'Finalizada' && cita.fecha) {
+                const servicio = serviciosObj[cita.servicioId] || { precio: 0, nombre: 'Desconocido' };
+                const fechaCita = new Date(cita.fecha);
+                const precio = parseFloat(servicio.precio || 0);
+
+                // Acumular en semana o mes según la fecha
+                if (fechaCita >= inicioSemana) totalSemanal += precio;
+                if (fechaCita >= inicioMes) totalMensual += precio;
+
+                citasGanancia.push({
+                    id,
+                    servicio: servicio.nombre,
+                    precio,
+                    fecha: cita.fecha,
+                    hora: cita.hora,
+                    manicurista: cita.manicuristaId || 'Sin asignar',
+                    clienteId: cita.clienteId,
+                    estado: cita.estado
+                });
+            }
+        });
+
+        res.json({
+            totalSemanal,
+            totalMensual,
+            citasGanancia
+        });
+    } catch (error) {
+        console.error('Error en /api/ganancias:', error);
+        res.status(500).json({ error: 'Error al calcular ganancias' });
+    }
+});
+
 
 
 // ==========================
