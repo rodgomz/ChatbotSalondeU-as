@@ -476,6 +476,7 @@ app.get('/api/ganancias', async (req, res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 app.use("/servicios", express.static(path.join(__dirname, "servicios")));
 app.use("/clientes", express.static(path.join(__dirname, "clientes")));
+app.use("/ganancias", express.static(path.join(__dirname, "ganancias")));
 
 // Ruta principal - sirve el archivo HTML estático
 app.get("/", (req, res) => {
