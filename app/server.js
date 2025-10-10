@@ -412,12 +412,38 @@ app.post('/api/citas/:id/estado', async (req, res) => {
     }
 });
 
+
+
 // ==========================
-// Dashboard principal con calendario
+// Rutas estáticas
 // ==========================
+app.use(express.static(path.join(__dirname, 'public')));
 app.use("/servicios", express.static(path.join(__dirname, "servicios")));
 app.use("/clientes", express.static(path.join(__dirname, "clientes")));
 
+// Ruta principal - sirve el archivo HTML estático
+app.get("/", (req, res) => {
+    const dashboardPath = path.join(__dirname, 'public', 'dashboard.html');
+    console.log('📄 Intentando servir:', dashboardPath);
+    
+    // Verificar si el archivo existe
+    if (require('fs').existsSync(dashboardPath)) {
+        res.sendFile(dashboardPath);
+    } else {
+        console.error('❌ Archivo no encontrado:', dashboardPath);
+        res.status(404).send(`
+            <h1>Error 404 - Archivo no encontrado</h1>
+            <p>No se encontró el archivo dashboard.html en: ${dashboardPath}</p>
+            <p>Verifica que la estructura de carpetas sea correcta:</p>
+            <pre>
+proyecto/
+├── server.js
+└── public/
+    └── dashboard.html
+            </pre>
+        `);
+    }
+});
 
 
 // ==========================
