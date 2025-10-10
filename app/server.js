@@ -427,39 +427,47 @@ app.get('/api/ganancias', async (req, res) => {
         let totalMensual = 0;
         let citasGanancia = [];
 
+        // 🔧 función para leer "D/M/YYYY"
+        function parseFechaDMY(fechaStr) {
+            const [dia, mes, año] = fechaStr.split('/').map(n => parseInt(n, 10));
+            if (!dia || !mes || !año) return null;
+            return new Date(año, mes - 1, dia);
+        }
+
         const ahora = new Date();
         const inicioSemana = new Date(ahora);
-        inicioSemana.setDate(ahora.getDate() - ahora.getDay()); // domingo
-        inicioSemana.setHours(0, 0, 0, 0); // 🔥 asegura comparación exacta
+        inicioSemana.setDate(ahora.getDate() - ahora.getDay());
+        inicioSemana.setHours(0, 0, 0, 0);
 
         const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
         inicioMes.setHours(0, 0, 0, 0);
 
-        // 🔥 Recorremos las citas de forma segura
-        (Array.isArray(citas) ? citas : Object.values(citas || {})).forEach(cita => {
+        Object.entries(citas || {}).forEach(([id, cita]) => {
             if (cita.estado === 'Finalizada' && cita.fecha) {
-                // Asegurar fecha válida
-                const fechaCita = new Date(cita.fecha);
-                if (isNaN(fechaCita)) return; // ignorar fechas inválidas
+                const fechaCita = parseFechaDMY(cita.fecha);
+                if (!fechaCita) return;
 
                 const servicio = serviciosObj[cita.servicioId] || { precio: 0, nombre: 'Desconocido' };
                 const precio = parseFloat(servicio.precio || 0);
 
-                // ✅ Comparaciones corregidas
+                // 🔥 cálculos correctos
                 if (fechaCita >= inicioSemana) totalSemanal += precio;
                 if (fechaCita >= inicioMes) totalMensual += precio;
 
                 citasGanancia.push({
-                    fecha: fechaCita.toISOString().split('T')[0],
-                    hora: cita.hora || '',
+                    id,
                     servicio: servicio.nombre,
                     precio,
+                    fecha: cita.fecha,
+                    hora: cita.hora,
                     manicurista: cita.manicuristaId || 'Sin asignar',
-                    clienteId: cita.clienteId || '',
+                    clienteId: cita.clienteId,
                     estado: cita.estado
                 });
             }
         });
+
+        console.log("✅ Citas finalizadas:", citasGanancia.length, "Semanal:", totalSemanal, "Mensual:", totalMensual);
 
         res.json({
             totalSemanal,
@@ -471,6 +479,7 @@ app.get('/api/ganancias', async (req, res) => {
         res.status(500).json({ error: 'Error al calcular ganancias' });
     }
 });
+
 
 
 
