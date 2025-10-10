@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard Bot WhatsApp</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        body { background-color: #f5f7fa; font-family: Arial, sans-serif; }
+        .card { border-radius:16px; box-shadow:0 4px 15px rgba(0,0,0,0.1); transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; }
+        .card:hover { transform: scale(1.05); box-shadow:0 6px 18px rgba(0,0,0,0.2); cursor:pointer; }
+        .status { font-size:1.2rem; font-weight:bold; }
+        .qr-img { max-width:250px; border:3px solid #eee; border-radius:8px; }
+        
+        .calendar-container { background: white; border-radius: 16px; padding: 20px; box-shadow:0 4px 15px rgba(0,0,0,0.1); }
+        .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .calendar-nav { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #007bff; }
+        .calendar-nav:hover { color: #0056b3; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+        .calendar-day-header { text-align: center; font-weight: bold; padding: 10px; background: #f8f9fa; border-radius: 8px; }
+        .calendar-day { text-align: center; padding: 15px 5px; cursor: pointer; border-radius: 8px; transition: all 0.2s; position: relative; min-height: 50px; }
+        .calendar-day:hover { background: #e3f2fd; }
+        .calendar-day.other-month { color: #ccc; }
+        .calendar-day.today { background: #007bff; color: white; font-weight: bold; }
+        .calendar-day.has-appointments { background: #fff3cd; border: 2px solid #ffc107; }
+        .appointment-dot { position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; background: #dc3545; border-radius: 50%; }
+        
+        .appointment-list { max-height: 400px; overflow-y: auto; }
+        .appointment-item { background: white; border-left: 4px solid #007bff; padding: 15px; margin-bottom: 10px; border-radius: 0 8px 8px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: pointer; transition: all 0.2s; }
+        .appointment-item:hover { transform: translateX(5px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .appointment-item.urgent { border-left-color: #dc3545; animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 2px 8px rgba(0,0,0,0.1); } 50% { box-shadow: 0 4px 16px rgba(220,53,69,0.3); } 100% { box-shadow: 0 2px 8px rgba(0,0,0,0.1); } }
+        .appointment-time { font-weight: bold; color: #007bff; font-size: 1.1rem; }
+        .appointment-client { font-size: 1rem; margin: 5px 0; }
+        .appointment-service { color: #666; font-size: 0.9rem; }
+        .appointment-status { font-size: 0.8rem; padding: 2px 8px; border-radius: 12px; }
+        
+        .new-appointment-form { text-align: left; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .form-group select, .form-group input, .form-group textarea {
+            width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;
+        }
+        .action-buttons { margin-top: 10px; }
+        .action-buttons button { margin: 2px; font-size: 0.8em; }
+    </style>
+</head>
+<body>
+    <div class="container py-5">
+        <h1 class="text-center mb-4">🤖 Dashboard Bot WhatsApp</h1>
+        
+        <!-- Estadísticas del bot -->
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="card text-center p-3">
+                    <h5>Estado del Bot</h5>
+                    <p class="status" id="bot-status">⏳ Cargando...</p>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card text-center p-3">
+                    <h5>Chats Activos</h5>
+                    <p class="status text-primary" id="chats-activos">0</p>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card text-center p-3">
+                    <h5>Código QR</h5>
+                    <div id="qr-container">
+                        <p class="text-muted">QR no generado</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4 mt-3">
+            <div class="col-md-4">
+                <div class="card text-center p-3">
+                    <h5>Mensajes Enviados</h5>
+                    <p class="status text-success" id="mensajes-enviados">0</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center p-3">
+                    <h5>Mensajes Recibidos</h5>
+                    <p class="status text-info" id="mensajes-recibidos">0</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center p-3" onclick="window.location.href='/servicios/servicios.html'">
+                    <h5>Administrar Servicios</h5>
+                    <p class="status text-warning">Gestiona los servicios del salón</p>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card text-center p-3" onclick="window.location.href='/clientes/clientes.html'">
+                    <h5>Administrar Clientes</h5>
+                    <p class="status text-warning">Gestiona los clientes disponibles</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Calendario y citas -->
+        <div class="row g-4 mt-4">
+            <div class="col-md-8">
+                <div class="calendar-container">
+                    <div class="calendar-header">
+                        <button class="calendar-nav" onclick="changeMonth(-1)">❮</button>
+                        <h4 id="calendar-month-year"></h4>
+                        <button class="calendar-nav" onclick="changeMonth(1)">❯</button>
+                    </div>
+                    <div class="calendar-grid" id="calendar-grid"></div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card p-3">
+                    <h5 class="mb-3">📅 Próximos Servicios</h5>
+                    <div class="appointment-list" id="appointment-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mt-5">
+            <button class="btn btn-primary me-2" onclick="reconectarBot()">🔄 Reconectar Bot</button>
+            <button class="btn btn-danger" onclick="reiniciarServidor()">⚡ Reiniciar Servidor</button>
+        </div>
+    </div>
+
+    <script src="js/dashboard.js"></script>
+</body>
+</html>
