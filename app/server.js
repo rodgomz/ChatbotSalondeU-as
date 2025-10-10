@@ -413,21 +413,22 @@ app.post('/api/citas/:id/estado', async (req, res) => {
 });
 
 // ==========================
-// GANANCIAS - Basadas en Citas Finalizadas
+// GANANCIAS - Basadas en Citas Finalizadas (Semanal, Mensual, Anual)
 // ==========================
 app.get('/api/ganancias', async (req, res) => {
     try {
         const citas = await getCitas();
         const servicios = await getServicios();
+        const anioSeleccionado = parseInt(req.query.anio) || new Date().getFullYear();
 
         const serviciosObj = {};
         servicios.forEach(s => serviciosObj[s.id] = s);
 
         let totalSemanal = 0;
         let totalMensual = 0;
+        let totalAnual = 0;
         let citasGanancia = [];
 
-        // 🔧 función para leer "D/M/YYYY"
         function parseFechaDMY(fechaStr) {
             const [dia, mes, año] = fechaStr.split('/').map(n => parseInt(n, 10));
             if (!dia || !mes || !año) return null;
@@ -449,10 +450,11 @@ app.get('/api/ganancias', async (req, res) => {
 
                 const servicio = serviciosObj[cita.servicioId] || { precio: 0, nombre: 'Desconocido' };
                 const precio = parseFloat(servicio.precio || 0);
+                const anioCita = fechaCita.getFullYear();
 
-                // 🔥 cálculos correctos
                 if (fechaCita >= inicioSemana) totalSemanal += precio;
                 if (fechaCita >= inicioMes) totalMensual += precio;
+                if (anioCita === anioSeleccionado) totalAnual += precio;
 
                 citasGanancia.push({
                     id,
@@ -467,11 +469,10 @@ app.get('/api/ganancias', async (req, res) => {
             }
         });
 
-        console.log("✅ Citas finalizadas:", citasGanancia.length, "Semanal:", totalSemanal, "Mensual:", totalMensual);
-
         res.json({
             totalSemanal,
             totalMensual,
+            totalAnual,
             citasGanancia
         });
     } catch (error) {
@@ -479,6 +480,7 @@ app.get('/api/ganancias', async (req, res) => {
         res.status(500).json({ error: 'Error al calcular ganancias' });
     }
 });
+
 
 
 
