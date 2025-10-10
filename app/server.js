@@ -429,8 +429,8 @@ app.get('/api/ganancias', async (req, res) => {
     try {
         const citas = await getCitas();
         const servicios = await getServicios();
-        const clientes = await getClientes(); // devuelve { id: { nombre, telefono } }
-        //const manicuristas = await getManicuristas(); // devuelve { id: { nombre, telefono } }
+        const clientes = await getClientes();
+        const manicuristas = await getManicuristas();
 
         const serviciosObj = {};
         servicios.forEach(s => serviciosObj[s.id] = s);
@@ -469,7 +469,7 @@ app.get('/api/ganancias', async (req, res) => {
                     precio,
                     fecha: cita.fecha,
                     hora: cita.hora,
-                    manicurista: cita.manicuristaId,
+                    manicurista: manicuristas[cita.manicuristaId]?.nombre || 'Sin asignar',
                     clienteId: cita.clienteId,
                     estado: cita.estado
                 });
@@ -490,12 +490,6 @@ app.get('/api/ganancias', async (req, res) => {
         res.status(500).json({ error: 'Error al calcular ganancias' });
     }
 });
-
-
-
-
-
-
 
 // ==========================
 // Rutas estáticas
