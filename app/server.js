@@ -420,7 +420,6 @@ app.get('/api/ganancias', async (req, res) => {
         const citas = await getCitas();
         const servicios = await getServicios();
 
-        // Convertir array de servicios en objeto para búsqueda rápida
         const serviciosObj = {};
         servicios.forEach(s => serviciosObj[s.id] = s);
 
@@ -430,28 +429,33 @@ app.get('/api/ganancias', async (req, res) => {
 
         const ahora = new Date();
         const inicioSemana = new Date(ahora);
-        inicioSemana.setDate(ahora.getDate() - ahora.getDay()); // Domingo
-        const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+        inicioSemana.setDate(ahora.getDate() - ahora.getDay()); // domingo
+        inicioSemana.setHours(0, 0, 0, 0); // 🔥 asegura comparación exacta
 
-        // Recorrer todas las citas
-        Object.entries(citas || {}).forEach(([id, cita]) => {
+        const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+        inicioMes.setHours(0, 0, 0, 0);
+
+        // 🔥 Recorremos las citas de forma segura
+        (Array.isArray(citas) ? citas : Object.values(citas || {})).forEach(cita => {
             if (cita.estado === 'Finalizada' && cita.fecha) {
-                const servicio = serviciosObj[cita.servicioId] || { precio: 0, nombre: 'Desconocido' };
+                // Asegurar fecha válida
                 const fechaCita = new Date(cita.fecha);
+                if (isNaN(fechaCita)) return; // ignorar fechas inválidas
+
+                const servicio = serviciosObj[cita.servicioId] || { precio: 0, nombre: 'Desconocido' };
                 const precio = parseFloat(servicio.precio || 0);
 
-                // Acumular en semana o mes según la fecha
+                // ✅ Comparaciones corregidas
                 if (fechaCita >= inicioSemana) totalSemanal += precio;
                 if (fechaCita >= inicioMes) totalMensual += precio;
 
                 citasGanancia.push({
-                    id,
+                    fecha: fechaCita.toISOString().split('T')[0],
+                    hora: cita.hora || '',
                     servicio: servicio.nombre,
                     precio,
-                    fecha: cita.fecha,
-                    hora: cita.hora,
                     manicurista: cita.manicuristaId || 'Sin asignar',
-                    clienteId: cita.clienteId,
+                    clienteId: cita.clienteId || '',
                     estado: cita.estado
                 });
             }
