@@ -419,7 +419,8 @@ app.get('/api/ganancias', async (req, res) => {
     try {
         const citas = await getCitas();
         const servicios = await getServicios();
-        const anioSeleccionado = parseInt(req.query.anio) || new Date().getFullYear();
+        const clientes = await getClientes(); // devuelve { id: { nombre, telefono } }
+        const manicuristas = await getManicuristas(); // devuelve { id: { nombre, telefono } }
 
         const serviciosObj = {};
         servicios.forEach(s => serviciosObj[s.id] = s);
@@ -430,18 +431,15 @@ app.get('/api/ganancias', async (req, res) => {
         let citasGanancia = [];
 
         function parseFechaDMY(fechaStr) {
-            const [dia, mes, año] = fechaStr.split('/').map(n => parseInt(n, 10));
+            const [dia, mes, año] = fechaStr.split('/').map(n => parseInt(n,10));
             if (!dia || !mes || !año) return null;
-            return new Date(año, mes - 1, dia);
+            return new Date(año, mes-1, dia);
         }
 
         const ahora = new Date();
-        const inicioSemana = new Date(ahora);
-        inicioSemana.setDate(ahora.getDate() - ahora.getDay());
-        inicioSemana.setHours(0, 0, 0, 0);
-
-        const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
-        inicioMes.setHours(0, 0, 0, 0);
+        const inicioSemana = new Date(ahora); inicioSemana.setDate(ahora.getDate() - ahora.getDay()); inicioSemana.setHours(0,0,0,0);
+        const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1); inicioMes.setHours(0,0,0,0);
+        const inicioAnio = new Date(ahora.getFullYear(), 0, 1); inicioAnio.setHours(0,0,0,0);
 
         Object.entries(citas || {}).forEach(([id, cita]) => {
             if (cita.estado === 'Finalizada' && cita.fecha) {
@@ -450,11 +448,10 @@ app.get('/api/ganancias', async (req, res) => {
 
                 const servicio = serviciosObj[cita.servicioId] || { precio: 0, nombre: 'Desconocido' };
                 const precio = parseFloat(servicio.precio || 0);
-                const anioCita = fechaCita.getFullYear();
 
                 if (fechaCita >= inicioSemana) totalSemanal += precio;
                 if (fechaCita >= inicioMes) totalMensual += precio;
-                if (anioCita === anioSeleccionado) totalAnual += precio;
+                if (fechaCita >= inicioAnio) totalAnual += precio;
 
                 citasGanancia.push({
                     id,
@@ -462,7 +459,7 @@ app.get('/api/ganancias', async (req, res) => {
                     precio,
                     fecha: cita.fecha,
                     hora: cita.hora,
-                    manicurista: cita.manicuristaId || 'Sin asignar',
+                    manicurista: cita.manicuristaId,
                     clienteId: cita.clienteId,
                     estado: cita.estado
                 });
@@ -473,13 +470,18 @@ app.get('/api/ganancias', async (req, res) => {
             totalSemanal,
             totalMensual,
             totalAnual,
-            citasGanancia
+            citasGanancia,
+            clientes,
+            manicuristas
         });
+
     } catch (error) {
         console.error('Error en /api/ganancias:', error);
         res.status(500).json({ error: 'Error al calcular ganancias' });
     }
 });
+
+
 
 
 

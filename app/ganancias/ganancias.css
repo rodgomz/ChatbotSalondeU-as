@@ -1,52 +1,78 @@
 body {
-    font-family: 'Poppins', sans-serif;
-    background-color: #f4f4f4;
+    font-family: Arial, sans-serif;
+    background-color: #f8f8f8;
     margin: 0;
-    padding: 0;
+    padding: 20px;
 }
 
 .container {
-    max-width: 900px;
-    margin: 40px auto;
-    background: #fff;
-    padding: 30px;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    max-width: 1000px;
+    margin: 0 auto;
 }
 
-h1 {
+h1, h2 {
     text-align: center;
-    margin-bottom: 30px;
+    color: #333;
 }
 
 .stats {
     display: flex;
-    justify-content: space-around;
-    margin-bottom: 40px;
+    gap: 20px;
+    justify-content: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
 }
 
 .card {
-    background: #1f2937;
-    color: white;
+    background-color: #222;
+    color: #fff;
     padding: 20px;
-    border-radius: 10px;
+    border-radius: 15px;
+    flex: 1 1 200px;
     text-align: center;
-    flex: 1;
-    margin: 10px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+}
+
+.card h3 {
+    margin: 0;
+    font-size: 18px;
+    color: #f1c40f;
+}
+
+.card p {
+    font-size: 24px;
+    margin-top: 10px;
+}
+
+.selector-anio {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.selector-anio select {
+    padding: 5px 10px;
+    font-size: 16px;
 }
 
 table {
     width: 100%;
     border-collapse: collapse;
+    background-color: #fff;
+    border-radius: 10px;
+    overflow: hidden;
 }
 
-th, td {
-    padding: 12px;
+thead th {
+    background-color: #222;
+    color: #fff;
+    padding: 10px;
+}
+
+tbody td {
+    padding: 10px;
     border-bottom: 1px solid #ddd;
-    text-align: center;
 }
 
-th {
-    background: #1f2937;
-    color: white;
+tbody tr:nth-child(even) {
+    background-color: #f9f9f9;
 }
