@@ -3,6 +3,10 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
         const res = await fetch('/api/ganancias');
         const data = await res.json();
 
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
         // Paneles
         document.getElementById('gananciaSemanal').textContent = `$${data.totalSemanal.toFixed(2)}`;
         document.getElementById('gananciaMensual').textContent = `$${data.totalMensual.toFixed(2)}`;
@@ -68,7 +72,6 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
     }
 }
 
-
 // llenar combo de años
 function cargarComboAnio() {
     const select = document.getElementById('selectAnio');
@@ -88,3 +91,46 @@ document.addEventListener('DOMContentLoaded', () => {
     cargarComboAnio();
     cargarGanancias();
 });
+
+
+// llenar combo de años
+function cargarComboAnio() {
+    const select = document.getElementById('selectAnio');
+    const actual = new Date().getFullYear();
+    for (let i = actual; i >= actual-5; i--) {
+        const option = document.createElement('option');
+        option.value = i;
+        option.textContent = i;
+        select.appendChild(option);
+    }
+    select.value = actual;
+    select.addEventListener('change', () => cargarGanancias(parseInt(select.value)));
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    cargarComboAnio();
+    cargarGanancias();
+});
+
+
+// llenar combo de años
+function cargarComboAnio() {
+    const select = document.getElementById('selectAnio');
+    const actual = new Date().getFullYear();
+    for (let i = actual; i >= actual-5; i--) {
+        const option = document.createElement('option');
+        option.value = i;
+        option.textContent = i;
+        select.appendChild(option);
+    }
+    select.value = actual;
+    select.addEventListener('change', () => cargarGanancias(parseInt(select.value)));
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    cargarComboAnio();
+    cargarGanancias();
+});
+
+
+document.addEventListener('DOMContentLoaded', cargarGanancias);
