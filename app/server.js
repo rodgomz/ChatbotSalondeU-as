@@ -430,7 +430,7 @@ app.get('/api/ganancias', async (req, res) => {
         const citas = await getCitas();
         const servicios = await getServicios();
         const clientes = await getClientes(); // devuelve { id: { nombre, telefono } }
-        const manicuristas = await getManicuristas(); // devuelve { id: { nombre, telefono } }
+        //const manicuristas = await getManicuristas(); // devuelve { id: { nombre, telefono } }
 
         const serviciosObj = {};
         servicios.forEach(s => serviciosObj[s.id] = s);

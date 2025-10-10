@@ -23,7 +23,7 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
         } else {
             citasFiltradas.forEach(cita => {
                 const clienteNombre = data.clientes[cita.clienteId]?.nombre || cita.clienteId;
-                const manicuristaNombre = data.manicuristas[cita.manicuristaId]?.nombre || cita.manicuristaId || 'Sin asignar';
+                const manicuristaNombre = cita.manicurista || 'Sin asignar';
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${cita.fecha}</td>
@@ -67,6 +67,7 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
             '<tr><td colspan="6">Error al cargar ganancias.</td></tr>';
     }
 }
+
 
 // llenar combo de años
 function cargarComboAnio() {
