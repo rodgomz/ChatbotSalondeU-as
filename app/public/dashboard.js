@@ -100,11 +100,29 @@
             }
         }
 
-        function parseDate(fechaStr, horaStr) {
-            const [dia, mes, anio] = fechaStr.split('/');
-            const [hora, minuto] = horaStr.split(':');
-            return new Date(parseInt(anio), parseInt(mes) - 1, parseInt(dia), parseInt(hora), parseInt(minuto));
+       function parseDate(fechaStr, horaStr) {
+    try {
+        // Formato esperado: "DD/MM/YYYY" y "HH:MM"
+        const [dia, mes, anio] = fechaStr.split('/').map(num => parseInt(num, 10));
+        const [hora, minuto] = horaStr.split(':').map(num => parseInt(num, 10));
+        
+        // Validar que todos los valores sean números válidos
+        if (isNaN(dia) || isNaN(mes) || isNaN(anio) || isNaN(hora) || isNaN(minuto)) {
+            console.error('Fecha inválida:', fechaStr, horaStr);
+            return new Date();
         }
+        
+        // IMPORTANTE: Crear la fecha usando UTC para evitar problemas de zona horaria
+        // Mes - 1 porque en JavaScript los meses van de 0 a 11
+        const fecha = new Date(anio, mes - 1, dia, hora, minuto, 0);
+        
+        console.log(`📅 Fecha parseada: ${fechaStr} ${horaStr} -> ${fecha.toString()}`);
+        return fecha;
+    } catch (error) {
+        console.error('Error parseando fecha:', error);
+        return new Date();
+    }
+}
 
         // ============================================
         // FUNCIONES DE DISPONIBILIDAD SEMANAL
@@ -245,24 +263,75 @@
             renderWeek();
         }
 
-        function handleHourClick(dateStr, hour) {
-            const aptsInHour = getAppointmentsForSlot(new Date(dateStr), hour);
-            const maxCapacity = MAX_APPOINTMENTS_PER_HOUR * (BUSINESS_HOURS.interval === 30 ? 2 : 1);
-            
-            if (aptsInHour.length >= maxCapacity) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Sin Disponibilidad',
-                    text: 'Este horario está completamente lleno. Elige otro horario.',
-                    confirmButtonText: 'OK'
-                });
-                return;
-            }
-
-            const hourStr = `${hour.toString().padStart(2, '0')}:00`;
-            showNewAppointmentForm(dateStr, hourStr);
-        }
-
+function handleHourClick(dateStr, hour) {
+    const date = new Date(dateStr);
+    const aptsInHour = getAppointmentsForSlot(date, hour);
+    const maxCapacity = MAX_APPOINTMENTS_PER_HOUR * (BUSINESS_HOURS.interval === 30 ? 2 : 1);
+    
+    // Mostrar citas existentes en este horario
+    let existingAppointmentsHtml = '';
+    if (aptsInHour.length > 0) {
+        existingAppointmentsHtml = `
+            <div style="background: #f8f9ff; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                <h6 style="color: #667eea; margin-bottom: 10px;">📋 Citas en este horario:</h6>
+                ${aptsInHour.map(apt => `
+                    <div style="background: white; padding: 10px; margin-bottom: 10px; border-radius: 6px; border-left: 4px solid #007bff;">
+                        <div><strong>🕐 ${apt.date.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}</strong></div>
+                        <div>👤 ${apt.client}</div>
+                        <div>✂️ ${apt.service}</div>
+                        <div style="font-size: 0.85rem; color: #666;">📊 Estado: ${apt.status}</div>
+                        <button onclick="showAppointmentDetails('${apt.id}')" 
+                                class="btn btn-sm btn-primary" 
+                                style="margin-top: 8px; font-size: 0.85rem;">
+                            Ver Detalles
+                        </button>
+                    </div>
+                `).join('')}
+                <hr>
+            </div>
+        `;
+    }
+    
+    // Verificar disponibilidad
+    const isAvailable = aptsInHour.length < maxCapacity;
+    const hourStr = `${hour.toString().padStart(2, '0')}:00`;
+    const dateFormatted = date.toLocaleDateString('es-ES');
+    
+    if (!isAvailable) {
+        Swal.fire({
+            icon: 'warning',
+            title: '⚠️ Sin Disponibilidad',
+            html: `
+                ${existingAppointmentsHtml}
+                <p>Este horario está completamente lleno (${aptsInHour.length}/${maxCapacity}).</p>
+                <p>Por favor, elige otro horario.</p>
+            `,
+            confirmButtonText: 'OK',
+            width: '600px'
+        });
+        return;
+    }
+    
+    // Si hay disponibilidad, mostrar opción de agregar cita
+    Swal.fire({
+        title: `📅 ${dateFormatted} - ${hourStr}`,
+        html: `
+            ${existingAppointmentsHtml}
+            <div style="text-align: center; padding: 15px; background: #d4edda; border-radius: 8px;">
+                <p style="margin-bottom: 10px;">
+                    ✅ <strong>Disponible</strong> - ${maxCapacity - aptsInHour.length} espacios libres
+                </p>
+                <button onclick="showNewAppointmentForm('${dateStr}', '${hourStr}')" 
+                        class="btn btn-success">
+                    ➕ Agregar Nueva Cita
+                </button>
+            </div>
+        `,
+        width: '600px',
+        showConfirmButton: false,
+        showCloseButton: true
+    });
+}
         // ============================================
         // FUNCIONES DE CALENDARIO
         // ============================================
@@ -414,94 +483,106 @@
         // ============================================
         // FORMULARIO DE NUEVAS CITAS
         // ============================================
-        function showNewAppointmentForm(dateStr, defaultHour = '') {
-            const clientesOptions = clientes.map(cliente => 
-                `<option value="${cliente.id}">${cliente.nombre} (${cliente.telefono})</option>`
-            ).join('');
-            
-            const serviciosOptions = servicios.map(servicio => 
-                `<option value="${servicio.id}">${servicio.nombre} - ${servicio.precio} (${servicio.duracion}min)</option>`
-            ).join('');
-            
-            const horasOptions = [];
-            for (let hora = BUSINESS_HOURS.start; hora < BUSINESS_HOURS.end; hora++) {
-                for (let minuto = 0; minuto < 60; minuto += BUSINESS_HOURS.interval) {
-                    const horaStr = `${hora.toString().padStart(2, '0')}:${minuto.toString().padStart(2, '0')}`;
-                    const selected = defaultHour === horaStr ? 'selected' : '';
-                    horasOptions.push(`<option value="${horaStr}" ${selected}>${horaStr}</option>`);
-                }
-            }
-            
-            Swal.fire({
-                title: `➕ Nueva Cita - ${new Date(dateStr).toLocaleDateString('es-ES')}`,
-                html: `
-                    <div class="new-appointment-form" style="text-align: left;">
-                        <div class="form-group" style="margin-bottom: 15px;">
-                            <label for="cliente" style="display: block; margin-bottom: 5px; font-weight: bold;">Cliente:</label>
-                            <select id="cliente" class="form-control" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
-                                <option value="">Seleccionar cliente...</option>
-                                ${clientesOptions}
-                            </select>
-                        </div>
-                        
-                        <div class="form-group" style="margin-bottom: 15px;">
-                            <label for="servicio" style="display: block; margin-bottom: 5px; font-weight: bold;">Servicio:</label>
-                            <select id="servicio" class="form-control" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
-                                <option value="">Seleccionar servicio...</option>
-                                ${serviciosOptions}
-                            </select>
-                        </div>
-                        
-                        <div class="form-group" style="margin-bottom: 15px;">
-                            <label for="hora" style="display: block; margin-bottom: 5px; font-weight: bold;">Hora:</label>
-                            <select id="hora" class="form-control" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
-                                <option value="">Seleccionar hora...</option>
-                                ${horasOptions.join('')}
-                            </select>
-                        </div>
-                        
-                        <div class="form-group" style="margin-bottom: 15px;">
-                            <label for="manicurista" style="display: block; margin-bottom: 5px; font-weight: bold;">Manicurista:</label>
-                            <input type="text" id="manicurista" class="form-control" placeholder="Nombre del manicurista (opcional)" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="notas" style="display: block; margin-bottom: 5px; font-weight: bold;">Notas:</label>
-                            <textarea id="notas" class="form-control" rows="3" placeholder="Notas adicionales (opcional)" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;"></textarea>
-                        </div>
-                    </div>
-                `,
-                width: '500px',
-                showCancelButton: true,
-                confirmButtonText: '💾 Crear Cita',
-                cancelButtonText: '❌ Cancelar',
-                preConfirm: () => {
-                    const clienteId = document.getElementById('cliente').value;
-                    const servicioId = document.getElementById('servicio').value;
-                    const hora = document.getElementById('hora').value;
-                    const manicurista = document.getElementById('manicurista').value;
-                    const notas = document.getElementById('notas').value;
-                    
-                    if (!clienteId || !servicioId || !hora) {
-                        Swal.showValidationMessage('Por favor completa todos los campos obligatorios');
-                        return false;
-                    }
-                    
-                    return {
-                        clienteId,
-                        servicioId,
-                        fecha: dateStr.split('-').reverse().join('/'),
-                        hora,
-                        manicuristaId: manicurista || 'Sin asignar',
-                        notas
-                    };
-                }
-            }).then(async (result) => {
-                if (result.isConfirmed) {
-                    await createNewAppointment(result.value);
-                }
-            });
+      function showNewAppointmentForm(dateStr, defaultHour = '') {
+    // Convertir dateStr (formato ISO o fecha) al formato correcto
+    let fecha = new Date(dateStr);
+    if (isNaN(fecha.getTime())) {
+        // Si no es una fecha válida, intentar parsear
+        const parts = dateStr.split('-');
+        if (parts.length === 3) {
+            fecha = new Date(parts[0], parts[1] - 1, parts[2]);
         }
+    }
+    
+    const fechaFormateada = `${fecha.getDate().toString().padStart(2, '0')}/${(fecha.getMonth() + 1).toString().padStart(2, '0')}/${fecha.getFullYear()}`;
+    
+    const clientesOptions = clientes.map(cliente => 
+        `<option value="${cliente.id}">${cliente.nombre} (${cliente.telefono})</option>`
+    ).join('');
+
+    const serviciosOptions = servicios.map(servicio => 
+        `<option value="${servicio.id}">${servicio.nombre} - $${servicio.precio} (${servicio.duracion}min)</option>`
+    ).join('');
+
+    const horasOptions = [];
+    for (let hora = BUSINESS_HOURS.start; hora < BUSINESS_HOURS.end; hora++) {
+        for (let minuto = 0; minuto < 60; minuto += BUSINESS_HOURS.interval) {
+            const horaStr = `${hora.toString().padStart(2, '0')}:${minuto.toString().padStart(2, '0')}`;
+            const selected = defaultHour === horaStr ? 'selected' : '';
+            horasOptions.push(`<option value="${horaStr}" ${selected}>${horaStr}</option>`);
+        }
+    }
+
+    Swal.fire({
+        title: `➕ Nueva Cita - ${fecha.toLocaleDateString('es-ES')}`,
+        html: `
+            <div class="new-appointment-form" style="text-align: left;">
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label for="cliente" style="display: block; margin-bottom: 5px; font-weight: bold;">Cliente:</label>
+                    <select id="cliente" class="form-control" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                        <option value="">Seleccionar cliente...</option>
+                        ${clientesOptions}
+                    </select>
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label for="servicio" style="display: block; margin-bottom: 5px; font-weight: bold;">Servicio:</label>
+                    <select id="servicio" class="form-control" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                        <option value="">Seleccionar servicio...</option>
+                        ${serviciosOptions}
+                    </select>
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label for="hora" style="display: block; margin-bottom: 5px; font-weight: bold;">Hora:</label>
+                    <select id="hora" class="form-control" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                        <option value="">Seleccionar hora...</option>
+                        ${horasOptions.join('')}
+                    </select>
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label for="manicurista" style="display: block; margin-bottom: 5px; font-weight: bold;">Manicurista:</label>
+                    <input type="text" id="manicurista" class="form-control" placeholder="Nombre del manicurista (opcional)" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                </div>
+                
+                <div class="form-group">
+                    <label for="notas" style="display: block; margin-bottom: 5px; font-weight: bold;">Notas:</label>
+                    <textarea id="notas" class="form-control" rows="3" placeholder="Notas adicionales (opcional)" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;"></textarea>
+                </div>
+            </div>
+        `,
+        width: '500px',
+        showCancelButton: true,
+        confirmButtonText: '💾 Crear Cita',
+        cancelButtonText: '❌ Cancelar',
+        preConfirm: () => {
+            const clienteId = document.getElementById('cliente').value;
+            const servicioId = document.getElementById('servicio').value;
+            const hora = document.getElementById('hora').value;
+            const manicurista = document.getElementById('manicurista').value;
+            const notas = document.getElementById('notas').value;
+
+            if (!clienteId || !servicioId || !hora) {
+                Swal.showValidationMessage('Por favor completa todos los campos obligatorios');
+                return false;
+            }
+
+            return {
+                clienteId,
+                servicioId,
+                fecha: fechaFormateada, // Usar la fecha formateada correctamente
+                hora,
+                manicuristaId: manicurista || 'Sin asignar',
+                notas
+            };
+        }
+    }).then(async (result) => {
+        if (result.isConfirmed) {
+            await createNewAppointment(result.value);
+        }
+    });
+}
 
         async function createNewAppointment(appointmentData) {
             try {
@@ -538,32 +619,169 @@
             }
         }
 
-        function showAppointmentDetails(appointmentId) {
-            const apt = appointments.find(a => a.id === appointmentId);
-            if (!apt) return;
+     function showAppointmentDetails(appointmentId) {
+    const apt = appointments.find(a => a.id === appointmentId);
+    if (!apt) {
+        Swal.fire('Error', 'Cita no encontrada', 'error');
+        return;
+    }
+
+    const estados = ['Reservada', 'Confirmada', 'En Proceso', 'Finalizada', 'Cancelada'];
+    const estadosOptions = estados.map(estado => 
+        `<option value="${estado}" ${apt.status === estado ? 'selected' : ''}>${estado}</option>`
+    ).join('');
+
+    const detailsHtml = `
+        <div style="text-align: left; padding: 10px;">
+            <div style="background: #f8f9ff; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                <p style="margin: 8px 0;"><strong>📅 Fecha:</strong> ${apt.date.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                <p style="margin: 8px 0;"><strong>🕐 Hora:</strong> ${apt.date.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}</p>
+            </div>
             
-            const detailsHtml = `
-                <div style="text-align: left;">
-                    <p><strong>📅 Fecha:</strong> ${apt.date.toLocaleDateString('es-ES')}</p>
-                    <p><strong>🕐 Hora:</strong> ${apt.date.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}</p>
-                    <p><strong>👤 Cliente:</strong> ${apt.client}</p>
-                    <p><strong>📞 Teléfono:</strong> ${apt.telefono}</p>
-                    <p><strong>✂️ Servicio:</strong> ${apt.service}</p>
-                    <p><strong>💅 Manicurista:</strong> ${apt.manicurista}</p>
-                    <p><strong>⏱️ Duración:</strong> ${apt.duracion || 60} minutos</p>
-                    ${apt.precio ? `<p><strong>💰 Precio:</strong> ${apt.precio}</p>` : ''}
-                    <p><strong>📊 Estado:</strong> ${apt.status}</p>
-                    ${apt.notas ? `<p><strong>📝 Notas:</strong> ${apt.notas}</p>` : ''}
+            <div style="background: white; padding: 15px; border: 1px solid #e1e5f7; border-radius: 8px; margin-bottom: 15px;">
+                <p style="margin: 8px 0;"><strong>👤 Cliente:</strong> ${apt.client}</p>
+                <p style="margin: 8px 0;"><strong>📞 Teléfono:</strong> ${apt.telefono}</p>
+            </div>
+            
+            <div style="background: white; padding: 15px; border: 1px solid #e1e5f7; border-radius: 8px; margin-bottom: 15px;">
+                <p style="margin: 8px 0;"><strong>✂️ Servicio:</strong> ${apt.service}</p>
+                <p style="margin: 8px 0;"><strong>💅 Manicurista:</strong> ${apt.manicurista}</p>
+                <p style="margin: 8px 0;"><strong>⏱️ Duración:</strong> ${apt.duracion || 60} minutos</p>
+                ${apt.precio ? `<p style="margin: 8px 0;"><strong>💰 Precio:</strong> $${apt.precio}</p>` : ''}
+            </div>
+            
+            <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 8px;"><strong>📊 Estado:</strong></label>
+                <select id="estado-cita" class="form-control" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                    ${estadosOptions}
+                </select>
+            </div>
+            
+            ${apt.notas ? `
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <p style="margin: 0;"><strong>📝 Notas:</strong></p>
+                    <p style="margin: 5px 0 0 0; color: #666;">${apt.notas}</p>
                 </div>
-            `;
-            
+            ` : ''}
+        </div>
+    `;
+
+    Swal.fire({
+        title: '📋 Detalles de la Cita',
+        html: detailsHtml,
+        width: '600px',
+        showCancelButton: true,
+        showDenyButton: true,
+        confirmButtonText: '💾 Guardar Estado',
+        denyButtonText: '🗑️ Eliminar Cita',
+        cancelButtonText: '❌ Cerrar',
+        confirmButtonColor: '#28a745',
+        denyButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        preConfirm: async () => {
+            const nuevoEstado = document.getElementById('estado-cita').value;
+            if (nuevoEstado !== apt.status) {
+                return { action: 'update', estado: nuevoEstado };
+            }
+            return null;
+        },
+        preDeny: () => {
+            return { action: 'delete' };
+        }
+    }).then(async (result) => {
+        if (result.isConfirmed && result.value) {
+            if (result.value.action === 'update') {
+                await updateAppointmentStatus(appointmentId, result.value.estado);
+            }
+        } else if (result.isDenied) {
+            // Confirmar eliminación
             Swal.fire({
-                title: 'Detalles de la Cita',
-                html: detailsHtml,
-                showConfirmButton: false,
-                showCloseButton: true
+                title: '¿Estás seguro?',
+                text: "Esta acción no se puede deshacer",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar'
+            }).then(async (confirmResult) => {
+                if (confirmResult.isConfirmed) {
+                    await deleteAppointment(appointmentId);
+                }
             });
         }
+    });
+}
+async function updateAppointmentStatus(appointmentId, newStatus) {
+    try {
+        const response = await fetch(`/api/citas/${appointmentId}/estado`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ estado: newStatus })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            Swal.fire({
+                icon: 'success',
+                title: '✅ Estado Actualizado',
+                text: `La cita ahora está en estado: ${newStatus}`,
+                timer: 2000,
+                showConfirmButton: false
+            });
+            await loadAppointments();
+        } else {
+            throw new Error(result.error || 'Error desconocido');
+        }
+    } catch (error) {
+        console.error('Error actualizando estado:', error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'No se pudo actualizar el estado: ' + error.message
+        });
+    }
+}
+
+// ============================================
+// CORRECCIÓN 5: Función para eliminar cita
+// ============================================
+async function deleteAppointment(appointmentId) {
+    try {
+        const response = await fetch(`/api/citas/${appointmentId}/estado`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ estado: 'Cancelada' })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            Swal.fire({
+                icon: 'success',
+                title: '🗑️ Cita Cancelada',
+                text: 'La cita ha sido cancelada exitosamente',
+                timer: 2000,
+                showConfirmButton: false
+            });
+            await loadAppointments();
+        } else {
+            throw new Error(result.error || 'Error desconocido');
+        }
+    } catch (error) {
+        console.error('Error eliminando cita:', error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'No se pudo cancelar la cita: ' + error.message
+        });
+    }
+}
 
         // ============================================
         // FUNCIONES DEL BOT
