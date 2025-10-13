@@ -539,6 +539,37 @@ app.get('/reiniciar', async (req, res) => {
     }
 });
 
+
+// ==========================
+// Endpoint para obtener estado del bot
+// ==========================
+app.get('/api/bot-status', async (req, res) => {
+    try {
+        // Obtener estadísticas del bot
+        const botStatus = {
+            isConnected: isConnected || false,
+            qrCode: qrCode || '',
+            chatsActivos: chatsActivos || 0,
+            mensajesEnviados: mensajesEnviados || 0,
+            mensajesRecibidos: mensajesRecibidos || 0,
+            estadoServidor: 'activo',
+            ultimaActualizacion: new Date().toISOString()
+        };
+
+        res.json(botStatus);
+    } catch (error) {
+        console.error('Error en /api/bot-status:', error);
+        res.status(500).json({
+            error: 'Error al obtener estado del bot',
+            isConnected: false,
+            chatsActivos: 0,
+            mensajesEnviados: 0,
+            mensajesRecibidos: 0
+        });
+    }
+});
+
+
 // ==========================
 // Iniciar servidor
 // ==========================
