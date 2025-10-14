@@ -772,6 +772,8 @@ async function createNewAppointment(appointmentData) {
             });
             
             await loadAppointments();
+            // Recargar también formulario en caso de que se agregaron clientes/servicios
+            await showNewAppointmentForm('');
         } else {
             throw new Error(result.error || 'Error desconocido');
         }
