@@ -210,6 +210,7 @@ async function getCitas() {
     }
 }
 
+
 // ==========================
 // Nueva función para crear una cita
 // ==========================
@@ -228,6 +229,143 @@ async function crearCita(datosCita) {
         throw error;
     }
 }
+
+// ==========================
+// Endpoint para crear un nuevo cliente
+// ==========================
+app.post('/api/clientes', async (req, res) => {
+    try {
+        console.log('📝 Solicitud recibida: POST /api/clientes', req.body);
+        
+        const { nombre, telefono } = req.body;
+        
+        // Validar datos requeridos
+        if (!nombre || !telefono) {
+            console.warn('⚠️ Datos incompletos en cliente:', { nombre, telefono });
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Nombre y teléfono son requeridos' 
+            });
+        }
+
+        // Validar que el teléfono no exista ya
+        const clientes = await getClientes();
+        if (clientes[telefono]) {
+            console.warn(`⚠️ Cliente ya existe: ${telefono}`);
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Este cliente ya existe' 
+            });
+        }
+
+        // Guardar el nuevo cliente en Firebase
+        await saveCliente(telefono, nombre);
+        
+        console.log(`✅ Cliente creado exitosamente: ${nombre} (${telefono})`);
+        
+        res.json({ 
+            success: true, 
+            message: 'Cliente creado exitosamente',
+            cliente: {
+                id: telefono,
+                nombre: nombre,
+                telefono: telefono
+            }
+        });
+    } catch (error) {
+        console.error('❌ Error al crear cliente:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Error al crear cliente: ' + error.message 
+        });
+    }
+});
+
+// ==========================
+// Endpoint para crear un nuevo servicio
+// ==========================
+app.post('/api/servicios', async (req, res) => {
+    try {
+        console.log('📝 Solicitud recibida: POST /api/servicios', req.body);
+        
+        const { nombre, precio, duracion } = req.body;
+        
+        // Validar datos requeridos
+        if (!nombre || precio === undefined || !duracion) {
+            console.warn('⚠️ Datos incompletos en servicio:', { nombre, precio, duracion });
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Nombre, precio y duración son requeridos' 
+            });
+        }
+
+        // Validar que los valores sean válidos
+        const precioNum = parseFloat(precio);
+        const duracionNum = parseInt(duracion);
+        
+        if (isNaN(precioNum) || precioNum < 0) {
+            console.warn(`⚠️ Precio inválido: ${precio}`);
+            return res.status(400).json({ 
+                success: false, 
+                error: 'El precio debe ser un número válido y positivo' 
+            });
+        }
+
+        if (isNaN(duracionNum) || duracionNum < 15) {
+            console.warn(`⚠️ Duración inválida: ${duracion}`);
+            return res.status(400).json({ 
+                success: false, 
+                error: 'La duración debe ser mínimo 15 minutos' 
+            });
+        }
+
+        // Generar ID único para el servicio
+        const servicioId = 'SRV_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        
+        // Guardar el nuevo servicio en Firebase
+        const servicioData = {
+            id: servicioId,
+            nombre: nombre,
+            precio: precioNum,
+            duracion: duracionNum,
+            fechaCreacion: new Date().toISOString(),
+            fechaActualizacion: new Date().toISOString()
+        };
+
+        await set(ref(db, `servicios/${servicioId}`), servicioData);
+        
+        console.log(`✅ Servicio creado exitosamente: ${nombre} - $${precioNum} (${duracionNum}min)`);
+        
+        res.json({ 
+            success: true, 
+            message: 'Servicio creado exitosamente',
+            servicio: servicioData
+        });
+    } catch (error) {
+        console.error('❌ Error al crear servicio:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Error al crear servicio: ' + error.message 
+        });
+    }
+});
+
+// ==========================
+// Endpoint para obtener servicios (actualizado para incluir el nuevo)
+// ==========================
+app.get('/api/servicios', async (req, res) => {
+    try {
+        console.log('📊 Solicitud recibida: /api/servicios');
+        
+        const servicios = await getServicios();
+        
+        console.log(`✅ ${servicios.length} servicios enviados`);
+        res.json(servicios);
+    } catch (error) {
+        console.error('❌ Error en /api/servicios:', error);
+        res.status(500).json({ error: 'Error al obtener servicios', servicios: [] });
+    }
+});
 
 // ==========================
 // API Endpoints para el calendario
