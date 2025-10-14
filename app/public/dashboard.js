@@ -1,6 +1,9 @@
 // ============================================
 // VARIABLES GLOBALES
 // ============================================
+// ============================================
+// VARIABLES GLOBALES
+// ============================================
 let currentDate = new Date();
 let selectedDate = new Date();
 let currentWeekStart = getMonday(new Date());
@@ -83,18 +86,19 @@ async function loadAppointments() {
         
         appointments = data.map(apt => {
             const fecha = parseDate(apt.fecha, apt.hora);
-            const servicio = servicios.find(s => s.id === apt.servicioId);
-            const duracion = servicio ? servicio.duracion : 60;
+            // Usar duracion del servicio retornado en la cita
+            const duracion = apt.duracion || 60;
             
             return {
                 ...apt,
                 date: fecha,
                 duracion: duracion,
-                endTime: new Date(fecha.getTime() + duracion * 60000) // Calcular hora de fin
+                endTime: new Date(fecha.getTime() + duracion * 60000) // Calcular hora de fin basado en duracion real
             };
         });
 
         console.log('Citas cargadas:', appointments.length);
+        console.log('Duraciones:', appointments.map(a => `${a.client}: ${a.duracion}min`));
         renderWeek();
         updateCalendarDisplay();
         updateAppointmentList();
