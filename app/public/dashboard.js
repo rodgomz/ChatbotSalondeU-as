@@ -11,11 +11,12 @@ let servicios = [];
 const BUSINESS_HOURS = {
     start: 8,
     end: 22,
-    interval: 30
+    interval: 30  // 30 minutos = 2 slots por hora
 };
 
 const MAX_APPOINTMENTS_PER_HOUR = 1; // Solo una manicurista
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const TOTAL_HOURS_PER_WEEK = 14 * 7; // 8am a 10pm = 14 horas × 7 días = 98 horas
 
 // ============================================
 // INICIALIZACIÓN
@@ -180,34 +181,31 @@ function getAppointmentsForSlot(date, hour, minute = 0) {
     });
 }
 
-// Calcular horas ocupadas considerando la duración
+// Calcular horas ocupadas considerando la duración real del servicio
 function getHoursOccupiedInDay(date) {
-    let hoursOccupied = 0;
+    let minutosOcupados = 0;
     
-    for (let hour = BUSINESS_HOURS.start; hour < BUSINESS_HOURS.end; hour++) {
-        for (let minute = 0; minute < 60; minute += BUSINESS_HOURS.interval) {
-            const aptsInSlot = getAppointmentsForSlot(date, hour, minute);
-            if (aptsInSlot.length > 0) {
-                hoursOccupied++;
-            }
-        }
-    }
+    const citasDelDia = appointments.filter(apt => {
+        const aptDate = new Date(apt.date);
+        return aptDate.getFullYear() === date.getFullYear() &&
+               aptDate.getMonth() === date.getMonth() &&
+               aptDate.getDate() === date.getDate() &&
+               ['Reservada', 'Confirmada', 'En Proceso', 'Finalizada'].includes(apt.status);
+    });
     
-    return hoursOccupied;
+    citasDelDia.forEach(apt => {
+        minutosOcupados += apt.duracion; // Usar duración real del servicio
+    });
+    
+    // Convertir minutos a horas (cada 60 minutos = 1 hora)
+    return Math.ceil(minutosOcupados / 60);
 }
 
 // Calcular horas disponibles en un día
 function getHoursAvailableInDay(date) {
-    let totalHours = 0;
-    
-    for (let hour = BUSINESS_HOURS.start; hour < BUSINESS_HOURS.end; hour++) {
-        for (let minute = 0; minute < 60; minute += BUSINESS_HOURS.interval) {
-            totalHours++;
-        }
-    }
-    
+    const HOURS_PER_DAY = BUSINESS_HOURS.end - BUSINESS_HOURS.start; // 14 horas
     const occupied = getHoursOccupiedInDay(date);
-    return totalHours - occupied;
+    return Math.max(0, HOURS_PER_DAY - occupied);
 }
 
 function renderWeek() {
@@ -241,7 +239,7 @@ function renderWeek() {
     const totalSlots = totalAvailable + totalBooked;
     const occupancy = totalSlots > 0 ? Math.round((totalBooked / totalSlots) * 100) : 0;
 
-    console.log(`📊 Resumen Semanal - Disponibles: ${totalAvailable}, Agendadas: ${totalBooked}, Ocupación: ${occupancy}%`);
+    console.log(`📊 Resumen Semanal - Disponibles: ${totalAvailable}h, Agendadas: ${totalBooked}h, Total: ${totalSlots}h, Ocupación: ${occupancy}%`);
 
     document.getElementById('stat-available').textContent = totalAvailable;
     document.getElementById('stat-booked').textContent = totalBooked;
@@ -253,9 +251,9 @@ function createDayCard(date) {
     const dayOfWeek = DAYS[date.getDay()];
     const dateStr = date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
 
-    let availableCount = 0;
-    let bookedCount = 0;
-    let appointmentCount = 0;
+    const HOURS_PER_DAY = BUSINESS_HOURS.end - BUSINESS_HOURS.start; // 14 horas
+    const hoursOccupied = getHoursOccupiedInDay(date);
+    const hoursAvailable = Math.max(0, HOURS_PER_DAY - hoursOccupied);
 
     const hoursHtml = [];
 
@@ -263,13 +261,6 @@ function createDayCard(date) {
         for (let minute = 0; minute < 60; minute += BUSINESS_HOURS.interval) {
             const aptsInSlot = getAppointmentsForSlot(date, hour, minute);
             const isAvailable = aptsInSlot.length === 0;
-
-            if (isAvailable) {
-                availableCount++;
-            } else {
-                bookedCount++;
-            }
-            appointmentCount += aptsInSlot.length;
 
             let slotClass = 'hour-slot';
 
@@ -301,7 +292,7 @@ function createDayCard(date) {
                 <h3>${dayOfWeek} ${isToday ? '(Hoy)' : ''}</h3>
                 <p>${dateStr}</p>
             </div>
-            <div class="day-status status-open">08:00 - 22:00</div>
+            <div class="day-status status-open">08:00 - 22:00 | ${hoursAvailable}h disponibles</div>
             <div class="hours-container">${hoursHtml.join('')}</div>
         </div>
     `;
@@ -312,9 +303,11 @@ function createDayCard(date) {
     return {
         element: tempDiv.firstElementChild,
         stats: {
-            available: availableCount,
-            booked: bookedCount,
-            appointments: appointmentCount
+            available: hoursAvailable,
+            booked: hoursOccupied,
+            appointments: Object.values(appointments).filter(apt => 
+                apt.date.toDateString() === date.toDateString()
+            ).length
         }
     };
 }
@@ -334,39 +327,35 @@ function handleHourClick(dateStr, hour, minute = 0) {
     const aptsInSlot = getAppointmentsForSlot(date, hour, minute);
     const isAvailable = aptsInSlot.length === 0;
     
-    let existingAppointmentsHtml = '';
-    if (aptsInSlot.length > 0) {
-        existingAppointmentsHtml = `
-            <div style="background: #f8d7da; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                <h6 style="color: #721c24; margin-bottom: 10px;">⚠️ Cita(s) en este horario:</h6>
-                ${aptsInSlot.map(apt => `
-                    <div style="background: white; padding: 10px; margin-bottom: 10px; border-radius: 6px; border-left: 4px solid #dc3545;">
-                        <div><strong>🕐 ${apt.date.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})} - ${apt.endTime.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}</strong></div>
-                        <div>👤 ${apt.client}</div>
-                        <div>✂️ ${apt.service} (${apt.duracion}min)</div>
-                    </div>
-                `).join('')}
-            </div>
-        `;
-    }
-    
-    const hourStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-    const dateFormatted = date.toLocaleDateString('es-ES');
-    
+    // Si hay citas en este horario, mostrar detalles de la cita
     if (!isAvailable) {
-        Swal.fire({
-            icon: 'warning',
-            title: '⚠️ Sin Disponibilidad',
-            html: `
-                ${existingAppointmentsHtml}
-                <p>Este horario ya está ocupado.</p>
-                <p>Por favor, elige otro horario.</p>
-            `,
-            confirmButtonText: 'OK',
-            width: '600px'
-        });
+        if (aptsInSlot.length === 1) {
+            // Si solo hay una cita, mostrar directamente sus detalles
+            showAppointmentDetails(aptsInSlot[0].id);
+        } else {
+            // Si hay múltiples citas, mostrar lista para seleccionar
+            const citasHtml = aptsInSlot.map(apt => `
+                <div style="background: #f8f9fa; padding: 10px; margin-bottom: 10px; border-radius: 6px; cursor: pointer;" onclick="showAppointmentDetails('${apt.id}')">
+                    <div><strong>👤 ${apt.client}</strong></div>
+                    <div>✂️ ${apt.service} (${apt.duracion}min)</div>
+                    <div style="font-size: 0.85rem; color: #666;">📊 ${apt.status}</div>
+                </div>
+            `).join('');
+            
+            Swal.fire({
+                title: `📋 Citas en este horario`,
+                html: citasHtml,
+                width: '500px',
+                showConfirmButton: false,
+                showCloseButton: true
+            });
+        }
         return;
     }
+    
+    // Si el horario está disponible, mostrar opción de agregar cita
+    const hourStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+    const dateFormatted = date.toLocaleDateString('es-ES');
     
     Swal.fire({
         title: `📅 ${dateFormatted} - ${hourStr}`,
