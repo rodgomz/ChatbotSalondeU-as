@@ -1,9 +1,6 @@
 // ============================================
 // VARIABLES GLOBALES
 // ============================================
-// ============================================
-// VARIABLES GLOBALES
-// ============================================
 let currentDate = new Date();
 let selectedDate = new Date();
 let currentWeekStart = getMonday(new Date());
@@ -178,9 +175,10 @@ function getAppointmentsForSlot(date, hour, minute = 0) {
         }
         
         const aptStart = apt.date;
-        const aptEnd = apt.endTime;
+        const aptEnd = apt.endTime; // Usa la hora de fin calculada por duracion
         
         // Verificar si hay superposición de tiempo
+        // Si la cita ocupa este slot, no está disponible
         return !(aptEnd <= slotStart || aptStart >= slotEnd);
     });
 }
@@ -552,7 +550,7 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
     ).join('');
 
     const serviciosOptions = servicios.map(servicio => 
-        `<option value="${servicio.id}">${servicio.nombre} - $${servicio.precio} (${servicio.duracion}min)</option>`
+        `<option value="${servicio.id}">${servicio.nombre} - ${servicio.precio} (${servicio.duracion}min)</option>`
     ).join('');
 
     const horasOptions = [];
@@ -570,18 +568,24 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
             <div class="new-appointment-form" style="text-align: left;">
                 <div class="form-group" style="margin-bottom: 15px;">
                     <label for="cliente" style="display: block; margin-bottom: 5px; font-weight: bold;">Cliente:</label>
-                    <select id="cliente" class="form-control" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
-                        <option value="">Seleccionar cliente...</option>
-                        ${clientesOptions}
-                    </select>
+                    <div style="display: flex; gap: 5px;">
+                        <select id="cliente" class="form-control" required style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                            <option value="">Seleccionar cliente...</option>
+                            ${clientesOptions}
+                        </select>
+                        <button type="button" onclick="agregarClienteRapido()" class="btn btn-sm btn-info" style="white-space: nowrap;">➕ Nuevo</button>
+                    </div>
                 </div>
                 
                 <div class="form-group" style="margin-bottom: 15px;">
                     <label for="servicio" style="display: block; margin-bottom: 5px; font-weight: bold;">Servicio:</label>
-                    <select id="servicio" class="form-control" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
-                        <option value="">Seleccionar servicio...</option>
-                        ${serviciosOptions}
-                    </select>
+                    <div style="display: flex; gap: 5px;">
+                        <select id="servicio" class="form-control" required style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                            <option value="">Seleccionar servicio...</option>
+                            ${serviciosOptions}
+                        </select>
+                        <button type="button" onclick="agregarServicioRapido()" class="btn btn-sm btn-info" style="white-space: nowrap;">➕ Nuevo</button>
+                    </div>
                 </div>
                 
                 <div class="form-group" style="margin-bottom: 15px;">
@@ -631,6 +635,117 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
     }).then(async (result) => {
         if (result.isConfirmed) {
             await createNewAppointment(result.value);
+        }
+    });
+}
+
+// Función para agregar cliente rápidamente
+function agregarClienteRapido() {
+    Swal.fire({
+        title: '➕ Agregar Nuevo Cliente',
+        html: `
+            <div style="text-align: left;">
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">Nombre:</label>
+                    <input type="text" id="nombre-cliente" class="form-control" placeholder="Nombre del cliente" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">Teléfono:</label>
+                    <input type="tel" id="telefono-cliente" class="form-control" placeholder="Número de teléfono" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                </div>
+            </div>
+        `,
+        width: '400px',
+        showCancelButton: true,
+        confirmButtonText: '✅ Guardar Cliente',
+        cancelButtonText: '❌ Cancelar',
+        preConfirm: async () => {
+            const nombre = document.getElementById('nombre-cliente').value;
+            const telefono = document.getElementById('telefono-cliente').value;
+
+            if (!nombre || !telefono) {
+                Swal.showValidationMessage('Por favor completa todos los campos');
+                return false;
+            }
+
+            try {
+                const response = await fetch('/api/clientes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nombre, telefono })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    // Recargar clientes
+                    await loadClientes();
+                    Swal.fire('Éxito', 'Cliente agregado correctamente', 'success');
+                    return { nombre, telefono };
+                } else {
+                    throw new Error(result.error || 'Error desconocido');
+                }
+            } catch (error) {
+                Swal.showValidationMessage('Error: ' + error.message);
+                return false;
+            }
+        }
+    });
+}
+
+// Función para agregar servicio rápidamente
+function agregarServicioRapido() {
+    Swal.fire({
+        title: '➕ Agregar Nuevo Servicio',
+        html: `
+            <div style="text-align: left;">
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">Nombre:</label>
+                    <input type="text" id="nombre-servicio" class="form-control" placeholder="Nombre del servicio" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">Precio ($):</label>
+                    <input type="number" id="precio-servicio" class="form-control" placeholder="0.00" min="0" step="0.01" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">Duración (minutos):</label>
+                    <input type="number" id="duracion-servicio" class="form-control" placeholder="60" min="15" step="15" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                </div>
+            </div>
+        `,
+        width: '400px',
+        showCancelButton: true,
+        confirmButtonText: '✅ Guardar Servicio',
+        cancelButtonText: '❌ Cancelar',
+        preConfirm: async () => {
+            const nombre = document.getElementById('nombre-servicio').value;
+            const precio = document.getElementById('precio-servicio').value;
+            const duracion = document.getElementById('duracion-servicio').value;
+
+            if (!nombre || !precio || !duracion) {
+                Swal.showValidationMessage('Por favor completa todos los campos');
+                return false;
+            }
+
+            try {
+                const response = await fetch('/api/servicios', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nombre, precio: parseFloat(precio), duracion: parseInt(duracion) })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    // Recargar servicios
+                    await loadServicios();
+                    Swal.fire('Éxito', 'Servicio agregado correctamente', 'success');
+                    return { nombre, precio, duracion };
+                } else {
+                    throw new Error(result.error || 'Error desconocido');
+                }
+            } catch (error) {
+                Swal.showValidationMessage('Error: ' + error.message);
+                return false;
+            }
         }
     });
 }
