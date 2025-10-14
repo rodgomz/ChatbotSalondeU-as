@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Bot WhatsApp</title>
-      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-     <style>
+    <style>
         * {
             margin: 0;
             padding: 0;
@@ -73,7 +73,6 @@
             padding: 30px;
         }
 
-        /* Estilos para la pestaña de disponibilidad */
         .week-selector {
             display: flex;
             justify-content: space-between;
@@ -139,11 +138,13 @@
         .day-header h3 {
             font-size: 1.3rem;
             margin-bottom: 5px;
+            margin: 0;
         }
 
         .day-header p {
             font-size: 0.9rem;
             opacity: 0.9;
+            margin: 0;
         }
 
         .day-status {
@@ -153,9 +154,6 @@
             font-size: 1.1rem;
             background: #f8f9ff;
             border-bottom: 1px solid #e1e5f7;
-        }
-
-        .status-open {
             color: #28a745;
             background: #d4edda;
         }
@@ -268,7 +266,6 @@
             color: #666;
         }
 
-        /* Estilos para pestaña de calendario */
         .calendar-container {
             background: white;
             border-radius: 16px;
@@ -289,17 +286,33 @@
             border: none;
             font-size: 1.5rem;
             cursor: pointer;
-            color: #007bff;
+            color: #667eea;
         }
 
         .calendar-nav:hover {
-            color: #0056b3;
+            color: #764ba2;
         }
 
         .calendar-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
             gap: 5px;
+            overflow-x: auto;
+            padding-bottom: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .calendar-grid {
+                grid-template-columns: repeat(7, minmax(45px, 1fr));
+                gap: 3px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .calendar-grid {
+                grid-template-columns: repeat(7, minmax(40px, 1fr));
+                gap: 2px;
+            }
         }
 
         .calendar-day-header {
@@ -329,7 +342,7 @@
         }
 
         .calendar-day.today {
-            background: #007bff;
+            background: #667eea;
             color: white;
             font-weight: bold;
         }
@@ -349,12 +362,6 @@
             border-radius: 50%;
         }
 
-        .calendar-row {
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            gap: 10px;
-        }
-
         .dashboard-row {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -370,6 +377,7 @@
             text-align: center;
             background: white;
             cursor: pointer;
+            border: none;
         }
 
         .card:hover {
@@ -400,7 +408,7 @@
 
         .appointment-item {
             background: white;
-            border-left: 4px solid #007bff;
+            border-left: 4px solid #667eea;
             padding: 15px;
             margin-bottom: 10px;
             border-radius: 0 8px 8px 0;
@@ -416,7 +424,7 @@
 
         .appointment-time {
             font-weight: bold;
-            color: #007bff;
+            color: #667eea;
             font-size: 1.1rem;
         }
 
@@ -488,19 +496,19 @@
     </style>
 </head>
 <body>
-   <div class="container">
+    <div class="container">
         <div class="header">
             <h1>🤖 Dashboard Bot WhatsApp</h1>
         </div>
 
         <ul class="nav nav-tabs" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="availability-tab" data-bs-toggle="tab" data-bs-target="#availability" type="button" role="tab">
+                <button class="nav-link active" id="availability-tab" data-bs-toggle="tab" data-bs-target="#availability" type="button" role="tab" aria-controls="availability" aria-selected="true">
                     📅 Disponibilidad Semanal
                 </button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="calendar-tab" data-bs-toggle="tab" data-bs-target="#calendar" type="button" role="tab">
+                <button class="nav-link" id="calendar-tab" data-bs-toggle="tab" data-bs-target="#calendar" type="button" role="tab" aria-controls="calendar" aria-selected="false">
                     🗓️ Calendario y Bot
                 </button>
             </li>
@@ -508,7 +516,7 @@
 
         <div class="tab-content">
             <!-- PESTAÑA 1: DISPONIBILIDAD SEMANAL -->
-            <div class="tab-pane fade show active" id="availability" role="tabpanel">
+            <div class="tab-pane fade show active" id="availability" role="tabpanel" aria-labelledby="availability-tab">
                 <div class="week-selector">
                     <button onclick="previousWeek()">⬅ Semana Anterior</button>
                     <div class="week-info">
@@ -560,17 +568,17 @@
             </div>
 
             <!-- PESTAÑA 2: CALENDARIO Y BOT -->
-            <div class="tab-pane fade" id="calendar" role="tabpanel">
+            <div class="tab-pane fade" id="calendar" role="tabpanel" aria-labelledby="calendar-tab">
                 <div class="dashboard-row">
-                    <div class="card text-center">
+                    <div class="card">
                         <h5>Estado del Bot</h5>
                         <p class="status" id="bot-status">⏳ Cargando...</p>
                     </div>
-                    <div class="card text-center">
+                    <div class="card">
                         <h5>Chats Activos</h5>
                         <p class="status text-primary" id="chats-activos">0</p>
                     </div>
-                    <div class="card text-center">
+                    <div class="card">
                         <h5>Código QR</h5>
                         <div id="qr-container">
                             <p class="text-muted">QR no generado</p>
@@ -579,26 +587,26 @@
                 </div>
 
                 <div class="dashboard-row">
-                    <div class="card text-center">
+                    <div class="card">
                         <h5>Mensajes Enviados</h5>
                         <p class="status text-success" id="mensajes-enviados">0</p>
                     </div>
-                    <div class="card text-center">
+                    <div class="card">
                         <h5>Mensajes Recibidos</h5>
                         <p class="status text-info" id="mensajes-recibidos">0</p>
                     </div>
-                    <div class="card text-center" onclick="window.location.href='/servicios/servicios.html'">
+                    <div class="card" onclick="window.location.href='/servicios/servicios.html'">
                         <h5>Administrar Servicios</h5>
                         <p class="status text-warning">Gestiona los servicios</p>
                     </div>
                 </div>
 
                 <div class="dashboard-row">
-                    <div class="card text-center" onclick="window.location.href='/clientes/clientes.html'">
+                    <div class="card" onclick="window.location.href='/clientes/clientes.html'">
                         <h5>Administrar Clientes</h5>
                         <p class="status text-warning">Gestiona los clientes</p>
                     </div>
-                    <div class="card text-center" onclick="window.location.href='/ganancias/ganancias.html'">
+                    <div class="card" onclick="window.location.href='/ganancias/ganancias.html'">
                         <h5>Ver Ganancias</h5>
                         <p class="status text-warning">Ve las ganancias</p>
                     </div>
@@ -631,10 +639,11 @@
             </div>
         </div>
     </div>
-      <!-- Bootstrap JS Bundle -->
+
+    <!-- Bootstrap JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     
-     <script src="/dashboard.js"></script>
+    <!-- Tu archivo dashboard.js -->
+    <script src="/dashboard.js"></script>
 </body>
 </html>
-
