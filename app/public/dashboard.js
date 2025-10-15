@@ -7,8 +7,8 @@ let currentWeekStart = getMonday(new Date());
 let appointments = [];
 let clientes = [];
 let servicios = [];
- let deudas = [];
-        let notificacionesPendientes = [];
+let deudas = [];
+let notificacionesPendientes = [];
 
         
 const BUSINESS_HOURS = {
@@ -1228,18 +1228,27 @@ async function cargarDeudas() {
         const data = await res.json();
 
         if (data.success) {
-            const listaDeudas = document.getElementById('listaDeudas'); // tu contenedor HTML
-            listaDeudas.innerHTML = ''; // limpiar lista anterior
+            const listaDeudas = document.getElementById('listaDeudas');
+            if (!listaDeudas) return; 
+
+            listaDeudas.innerHTML = '';
+
+            if (data.deudas.length === 0) {
+                listaDeudas.innerHTML = '<p class="text-muted">No hay deudas registradas.</p>';
+                return;
+            }
 
             data.deudas.forEach(deuda => {
                 const item = document.createElement('div');
-                item.className = 'deuda-item';
+                item.className = 'deuda-item card mb-2 p-2';
                 item.innerHTML = `
                     <strong>${deuda.nombre}</strong> - ${deuda.tipo} - ${deuda.monto ? '$' + deuda.monto.toFixed(2) : 'Sin monto'}
-                    <button onclick="eliminarDeuda('${deuda.id}')" class="btn btn-danger btn-sm">Eliminar</button>
-                    <button onclick="marcarPagada('${deuda.id}', ${deuda.pagado})" class="btn btn-success btn-sm">
-                        ${deuda.pagado ? 'Marcar Pendiente' : 'Marcar Pagada'}
-                    </button>
+                    <div class="mt-2">
+                        <button onclick="eliminarDeuda('${deuda.id}')" class="btn btn-danger btn-sm me-1">Eliminar</button>
+                        <button onclick="togglePago('${deuda.id}', ${deuda.pagado})" class="btn btn-${deuda.pagado ? 'warning' : 'success'} btn-sm">
+                            ${deuda.pagado ? 'Marcar Pendiente' : 'Marcar Pagada'}
+                        </button>
+                    </div>
                 `;
                 listaDeudas.appendChild(item);
             });
@@ -1250,6 +1259,7 @@ async function cargarDeudas() {
         Swal.fire('❌ Error', error.message || 'No se pudieron cargar las deudas', 'error');
     }
 }
+
 
 // Marcar pagado / pendiente
 async function togglePago(id, pagado) {
