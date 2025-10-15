@@ -667,19 +667,22 @@ proyecto/
  */
 app.get('/api/deudas', async (req, res) => {
     try {
-        const snapshot = await db.ref('deudas').once('value');
+        const deudasRef = ref(db, 'deudas');
+        const snapshot = await get(deudasRef);
         const deudas = [];
-        
-        snapshot.forEach((childSnapshot) => {
-            deudas.push({
-                id: childSnapshot.key,
-                ...childSnapshot.val()
+
+        if (snapshot.exists()) {
+            snapshot.forEach((childSnapshot) => {
+                deudas.push({
+                    id: childSnapshot.key,
+                    ...childSnapshot.val()
+                });
             });
-        });
+        }
 
         res.json({
             success: true,
-            deudas: deudas
+            deudas
         });
     } catch (error) {
         console.error('Error obteniendo deudas:', error);
@@ -729,7 +732,8 @@ app.post('/api/deudas', async (req, res) => {
 app.get('/api/deudas/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const snapshot = await db.ref(`deudas/${id}`).once('value');
+        const deudaRef = ref(db, `deudas/${id}`);
+        const snapshot = await get(deudaRef);
 
         if (!snapshot.exists()) {
             return res.status(404).json({
@@ -753,7 +757,6 @@ app.get('/api/deudas/:id', async (req, res) => {
         });
     }
 });
-
 /**
  * PUT /api/deudas/:id
  * Actualizar una deuda
@@ -792,7 +795,9 @@ app.post('/api/deudas/:id/pagar', async (req, res) => {
         const { pagado } = req.body;
 
         // Verificar que la deuda existe
-        const snapshot = await db.ref(`deudas/${id}`).once('value');
+        const deudaRef = ref(db, `deudas/${id}`);
+        const snapshot = await get(deudaRef);
+
         if (!snapshot.exists()) {
             return res.status(404).json({
                 success: false,
@@ -807,7 +812,7 @@ app.post('/api/deudas/:id/pagar', async (req, res) => {
             fechaUltimaModificacion: new Date().toISOString()
         };
 
-        await db.ref(`deudas/${id}`).update(actualizacion);
+        await update(deudaRef, actualizacion);
 
         res.json({
             success: true,
@@ -846,46 +851,50 @@ app.delete('/api/deudas/:id', async (req, res) => {
  */
 app.get('/api/deudas/notificaciones', async (req, res) => {
     try {
-        const snapshot = await db.ref('deudas').once('value');
+        const deudasRef = ref(db, 'deudas');
+        const snapshot = await get(deudasRef);
+
         const notificaciones = [];
         const hoy = new Date();
         
-        snapshot.forEach((childSnapshot) => {
-            const deuda = childSnapshot.val();
-            
-            // Solo notificar deudas no pagadas
-            if (!deuda.pagado) {
-                const diasRestantes = calcularDiasRestantes(deuda.diaPago);
+        if (snapshot.exists()) {
+            snapshot.forEach((childSnapshot) => {
+                const deuda = childSnapshot.val();
                 
-                // Notificar si faltan 10 días o menos, o si ya está vencido
-                if (diasRestantes <= 10) {
-                    const urgente = diasRestantes <= 3;
+                // Solo notificar deudas no pagadas
+                if (!deuda.pagado) {
+                    const diasRestantes = calcularDiasRestantes(deuda.diaPago);
                     
-                    let mensaje = '';
-                    if (diasRestantes < 0) {
-                        mensaje = `${deuda.nombre} está vencido hace ${Math.abs(diasRestantes)} día${Math.abs(diasRestantes) !== 1 ? 's' : ''}`;
-                    } else if (diasRestantes === 0) {
-                        mensaje = `${deuda.nombre} vence HOY`;
-                    } else if (diasRestantes === 1) {
-                        mensaje = `${deuda.nombre} vence MAÑANA`;
-                    } else {
-                        mensaje = `${deuda.nombre} vence en ${diasRestantes} días`;
+                    // Notificar si faltan 10 días o menos, o si ya está vencido
+                    if (diasRestantes <= 10) {
+                        const urgente = diasRestantes <= 3;
+                        
+                        let mensaje = '';
+                        if (diasRestantes < 0) {
+                            mensaje = `${deuda.nombre} está vencido hace ${Math.abs(diasRestantes)} día${Math.abs(diasRestantes) !== 1 ? 's' : ''}`;
+                        } else if (diasRestantes === 0) {
+                            mensaje = `${deuda.nombre} vence HOY`;
+                        } else if (diasRestantes === 1) {
+                            mensaje = `${deuda.nombre} vence MAÑANA`;
+                        } else {
+                            mensaje = `${deuda.nombre} vence en ${diasRestantes} días`;
+                        }
+                        
+                        notificaciones.push({
+                            id: childSnapshot.key,
+                            titulo: urgente ? '⚠️ Pago Urgente' : '🔔 Recordatorio de Pago',
+                            mensaje: mensaje,
+                            deuda: deuda.nombre,
+                            tipo: deuda.tipo,
+                            diasRestantes: diasRestantes,
+                            urgente: urgente,
+                            monto: deuda.monto,
+                            fechaNotificacion: new Date().toISOString()
+                        });
                     }
-                    
-                    notificaciones.push({
-                        id: childSnapshot.key,
-                        titulo: urgente ? '⚠️ Pago Urgente' : '🔔 Recordatorio de Pago',
-                        mensaje: mensaje,
-                        deuda: deuda.nombre,
-                        tipo: deuda.tipo,
-                        diasRestantes: diasRestantes,
-                        urgente: urgente,
-                        monto: deuda.monto,
-                        fechaNotificacion: new Date().toISOString()
-                    });
                 }
-            }
-        });
+            });
+        }
 
         res.json({
             success: true,
@@ -906,7 +915,8 @@ app.get('/api/deudas/notificaciones', async (req, res) => {
  */
 app.get('/api/deudas/resumen', async (req, res) => {
     try {
-        const snapshot = await db.ref('deudas').once('value');
+        const deudasRef = ref(db, 'deudas');
+        const snapshot = await get(deudasRef);
         
         let totalPagadas = 0;
         let totalPendientes = 0;
@@ -914,25 +924,27 @@ app.get('/api/deudas/resumen', async (req, res) => {
         let montoPendiente = 0;
         let proximasVencer = 0;
         
-        snapshot.forEach((childSnapshot) => {
-            const deuda = childSnapshot.val();
-            
-            if (deuda.pagado) {
-                totalPagadas++;
-                if (deuda.monto) montoTotal += deuda.monto;
-            } else {
-                totalPendientes++;
-                if (deuda.monto) {
-                    montoTotal += deuda.monto;
-                    montoPendiente += deuda.monto;
-                }
+        if (snapshot.exists()) {
+            snapshot.forEach((childSnapshot) => {
+                const deuda = childSnapshot.val();
                 
-                const diasRestantes = calcularDiasRestantes(deuda.diaPago);
-                if (diasRestantes <= 10 && diasRestantes >= 0) {
-                    proximasVencer++;
+                if (deuda.pagado) {
+                    totalPagadas++;
+                    if (deuda.monto) montoTotal += deuda.monto;
+                } else {
+                    totalPendientes++;
+                    if (deuda.monto) {
+                        montoTotal += deuda.monto;
+                        montoPendiente += deuda.monto;
+                    }
+                    
+                    const diasRestantes = calcularDiasRestantes(deuda.diaPago);
+                    if (diasRestantes <= 10 && diasRestantes >= 0) {
+                        proximasVencer++;
+                    }
                 }
-            }
-        });
+            });
+        }
 
         res.json({
             success: true,
@@ -985,33 +997,36 @@ function calcularDiasRestantes(diaPago) {
  */
 async function verificarYEnviarNotificaciones() {
     try {
-        const snapshot = await db.ref('deudas').once('value');
+        const deudasRef = ref(db, 'deudas');
+        const snapshot = await get(deudasRef);
         const notificacionesEnviadas = [];
         
-        snapshot.forEach((childSnapshot) => {
-            const deuda = childSnapshot.val();
-            const id = childSnapshot.key;
-            
-            if (!deuda.pagado) {
-                const diasRestantes = calcularDiasRestantes(deuda.diaPago);
+        if (snapshot.exists()) {
+            snapshot.forEach((childSnapshot) => {
+                const deuda = childSnapshot.val();
+                const id = childSnapshot.key;
                 
-                // Enviar notificación si faltan exactamente 10, 7, 3, 1 días o si está vencido
-                const diasNotificacion = [10, 7, 3, 1, 0];
-                
-                if (diasNotificacion.includes(diasRestantes)) {
-                    notificacionesEnviadas.push({
-                        id,
-                        nombre: deuda.nombre,
-                        tipo: deuda.tipo,
-                        diasRestantes,
-                        monto: deuda.monto
-                    });
+                if (!deuda.pagado) {
+                    const diasRestantes = calcularDiasRestantes(deuda.diaPago);
                     
-                    console.log(`📧 Notificación enviada: ${deuda.nombre} - ${diasRestantes} días`);
+                    // Enviar notificación si faltan exactamente 10, 7, 3, 1 días o si está vencido
+                    const diasNotificacion = [10, 7, 3, 1, 0];
+                    
+                    if (diasNotificacion.includes(diasRestantes)) {
+                        notificacionesEnviadas.push({
+                            id,
+                            nombre: deuda.nombre,
+                            tipo: deuda.tipo,
+                            diasRestantes,
+                            monto: deuda.monto
+                        });
+                        
+                        console.log(`📧 Notificación enviada: ${deuda.nombre} - ${diasRestantes} días`);
+                    }
                 }
-            }
-        });
-        
+            });
+        }
+
         return notificacionesEnviadas;
     } catch (error) {
         console.error('Error verificando notificaciones:', error);
