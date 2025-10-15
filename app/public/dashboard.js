@@ -963,86 +963,56 @@ async function deleteAppointment(appointmentId) {
     }
 }
 
-  // ============================================
-        // FUNCIONES DE PERFIL
-        // ============================================
-        function toggleProfileMenu() {
-            const dropdown = document.getElementById('profile-dropdown');
-            dropdown.classList.toggle('show');
-        }
-
-        function irADeudas() {
-            document.getElementById('deudas-page').style.display = 'block';
-            document.body.style.overflow = 'hidden';
-            cargarDeudas();
-            toggleProfileMenu();
-        }
-
-        function cerrarDeudas() {
-            document.getElementById('deudas-page').style.display = 'none';
-            document.body.style.overflow = 'auto';
-        }
-
-        function verNotificaciones() {
-            if (notificacionesPendientes.length === 0) {
-                Swal.fire({
-                    icon: 'info',
-                    title: 'Sin notificaciones',
-                    text: 'No tienes notificaciones pendientes'
-                });
-            } else {
-                const html = notificacionesPendientes.map(n => `
-                    <div style="text-align: left; padding: 15px; background: #f8f9fa; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid ${n.urgente ? '#dc3545' : '#ffc107'};">
-                        <h6 style="margin: 0 0 5px; color: #333;">${n.titulo}</h6>
-                        <p style="margin: 0; color: #666; font-size: 0.9rem;">${n.mensaje}</p>
-                    </div>
-                `).join('');
-                
-                Swal.fire({
-                    title: '🔔 Notificaciones',
-                    html: html,
-                    width: '600px',
-                    confirmButtonText: 'Cerrar'
-                });
-            }
-            toggleProfileMenu();
-        }
-
-        function configuracion() {
-            Swal.fire({
-                title: '⚙️ Configuración',
-                html: '<p>Panel de configuración en desarrollo...</p>',
-                confirmButtonText: 'Cerrar'
-            });
-            toggleProfileMenu();
-        }
-
-        function cerrarSesion() {
-            Swal.fire({
-                title: '¿Cerrar sesión?',
-                text: '¿Estás seguro de que quieres cerrar sesión?',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonText: 'Sí, cerrar',
-                cancelButtonText: 'Cancelar'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    // Aquí implementa tu lógica de cierre de sesión
-                    window.location.href = '/login';
-                }
-            });
-            toggleProfileMenu();
-        }
-
-      // ============================================
-// FUNCIONES DE DEUDAS (API VERSION)
 // ============================================
-// Inicializa la lista de deudas desde tu backend
+// FUNCIONES DE PERFIL
+// ============================================
+function toggleProfileMenu() {
+    const dropdown = document.getElementById('profile-dropdown');
+    dropdown.classList.toggle('show');
+}
+
+function irADeudas() {
+    document.getElementById('deudas-page').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+    // Cerrar dropdown si estaba abierto
+    document.getElementById('profile-dropdown').classList.remove('show');
+    cargarDeudas();
+}
+
+
+function cerrarDeudas() {
+    document.getElementById('deudas-page').style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+// ============================================
+// FUNCIONES AUXILIARES
+// ============================================
+
+// Calcula los días restantes hasta el próximo pago
+function calcularDiasRestantes(diaPago) {
+    const hoy = new Date();
+    const mesActual = hoy.getMonth();
+    const anioActual = hoy.getFullYear();
+    
+    let fechaPago = new Date(anioActual, mesActual, diaPago);
+    if (fechaPago < hoy) {
+        fechaPago = new Date(anioActual, mesActual + 1, diaPago);
+    }
+    const diffTime = fechaPago - hoy;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+}
+
+// ============================================
+// FUNCIONES DE DEUDAS
+// ============================================
+
+// Inicializa la lista de deudas
 async function inicializarDeudas() {
     try {
-        const response = await fetch('/api/deudas');
-        const data = await response.json();
-
+        const res = await fetch('/api/deudas');
+        const data = await res.json();
         if (data.success) {
             deudas = data.deudas || [];
             renderizarDeudas();
@@ -1057,7 +1027,7 @@ async function inicializarDeudas() {
 
 // Renderiza las tarjetas de deudas
 function renderizarDeudas() {
-    const contenedor = document.getElementById('lista-deudas');
+    const contenedor = document.getElementById('lista-deudas') || document.getElementById('deudas-grid');
     if (!contenedor) return;
 
     contenedor.innerHTML = '';
@@ -1067,76 +1037,95 @@ function renderizarDeudas() {
         return;
     }
 
-    deudas.forEach((deuda) => {
+    deudas.forEach(deuda => {
+        const diasRestantes = calcularDiasRestantes(deuda.diaPago);
         const estado = deuda.pagado
             ? `<span class="badge bg-success">Pagado</span>`
             : `<span class="badge bg-danger">Pendiente</span>`;
-
         const fecha = deuda.fechaPago
             ? new Date(deuda.fechaPago).toLocaleDateString()
             : '-';
 
         const card = document.createElement('div');
         card.className = 'card shadow-sm mb-3';
+        card.style.padding = '15px';
         card.innerHTML = `
-            <div class="card-body">
-                <h5 class="card-title">${deuda.nombre}</h5>
-                <p class="card-text">
-                    <strong>Tipo:</strong> ${deuda.tipo}<br>
-                    <strong>Día de pago:</strong> ${deuda.diaPago}<br>
-                    <strong>Monto:</strong> $${deuda.monto || '0.00'}<br>
-                    <strong>Estado:</strong> ${estado}<br>
-                    <strong>Fecha Pago:</strong> ${fecha}
-                </p>
-                <div class="d-flex gap-2">
-                    <button class="btn btn-sm btn-primary" onclick="editarDeuda('${deuda.id}')">✏️ Editar</button>
-                    <button class="btn btn-sm btn-danger" onclick="eliminarDeuda('${deuda.id}')">🗑️ Eliminar</button>
-                    <button class="btn btn-sm btn-${deuda.pagado ? 'warning' : 'success'}" onclick="togglePago('${deuda.id}', ${deuda.pagado})">
-                        ${deuda.pagado ? '🔁 Marcar Pendiente' : '💰 Marcar Pagado'}
-                    </button>
-                </div>
+            <h5>${deuda.nombre}</h5>
+            <p>
+                <strong>Tipo:</strong> ${deuda.tipo} <br>
+                <strong>Día de pago:</strong> ${deuda.diaPago} <br>
+                <strong>Monto:</strong> $${deuda.monto || '0.00'} <br>
+                <strong>Estado:</strong> ${estado} <br>
+                <strong>Fecha Pago:</strong> ${fecha} <br>
+                <strong>Días restantes:</strong> ${diasRestantes >= 0 ? diasRestantes : 'Vencida'}
+            </p>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-primary" onclick="editarDeuda('${deuda.id}')">✏️ Editar</button>
+                <button class="btn btn-sm btn-danger" onclick="eliminarDeuda('${deuda.id}')">🗑️ Eliminar</button>
+                <button class="btn btn-sm btn-${deuda.pagado ? 'warning' : 'success'}" onclick="togglePago('${deuda.id}', ${deuda.pagado})">
+                    ${deuda.pagado ? '🔁 Marcar Pendiente' : '💰 Marcar Pagado'}
+                </button>
             </div>
         `;
         contenedor.appendChild(card);
     });
 }
 
-// Agregar nueva deuda
+// Cargar deudas en overlay
+async function cargarDeudas() {
+    const contenedor = document.getElementById('deudas-grid');
+    if (!contenedor) return;
+    contenedor.innerHTML = `<p style="text-align: center; color: #999;">Cargando deudas...</p>`;
+
+    try {
+        const res = await fetch('/api/deudas');
+        const data = await res.json();
+
+        if (!data.success || !data.deudas || data.deudas.length === 0) {
+            contenedor.innerHTML = `<p style="text-align: center; color: #999;">No hay deudas registradas.</p>`;
+            return;
+        }
+
+        deudas = data.deudas;
+        renderizarDeudas();
+
+    } catch (error) {
+        contenedor.innerHTML = `<p style="text-align: center; color: red;">Error al cargar las deudas: ${error.message}</p>`;
+        console.error('Error cargando deudas:', error);
+    }
+}
+
+// Agregar deuda
 async function agregarDeuda() {
-    const tipos = ['Arrendamiento', 'Luz', 'Agua', 'Internet', 'Teléfono', 'Gas', 'Tarjeta de Crédito 1', 'Tarjeta de Crédito 2', 'Otro'];
+    const tipos = ['Arrendamiento','Luz','Agua','Internet','Teléfono','Gas','Tarjeta de Crédito 1','Tarjeta de Crédito 2','Otro'];
     const opcionesTipo = tipos.map(t => `<option value="${t}">${t}</option>`).join('');
 
     Swal.fire({
         title: '➕ Agregar Nueva Deuda',
         html: `
             <div class="text-start">
-                <label><strong>Nombre:</strong></label>
-                <input type="text" id="nombre-deuda" class="form-control mb-2" placeholder="Ej. Pago de local">
-                <label><strong>Tipo:</strong></label>
+                <label>Nombre:</label>
+                <input type="text" id="nombre-deuda" class="form-control mb-2">
+                <label>Tipo:</label>
                 <select id="tipo-deuda" class="form-control mb-2">
                     <option value="">Seleccionar tipo...</option>
                     ${opcionesTipo}
                 </select>
-                <label><strong>Día de Pago:</strong></label>
-                <input type="number" id="dia-pago" class="form-control mb-2" placeholder="Ej. 15">
-                <label><strong>Monto ($):</strong></label>
-                <input type="number" id="monto-deuda" class="form-control mb-2" placeholder="Ej. 1500.00">
+                <label>Día de Pago:</label>
+                <input type="number" id="dia-pago" class="form-control mb-2">
+                <label>Monto ($):</label>
+                <input type="number" id="monto-deuda" class="form-control mb-2">
             </div>
         `,
         confirmButtonText: '💾 Guardar',
-        cancelButtonText: '❌ Cancelar',
         showCancelButton: true,
         preConfirm: () => {
             const nombre = document.getElementById('nombre-deuda').value.trim();
             const tipo = document.getElementById('tipo-deuda').value;
-            const diaPago = document.getElementById('dia-pago').value;
-            const monto = document.getElementById('monto-deuda').value;
-
-            if (!nombre || !tipo || !diaPago) {
-                Swal.showValidationMessage('Por favor completa todos los campos obligatorios');
-                return false;
-            }
-            return { nombre, tipo, diaPago: parseInt(diaPago), monto: monto ? parseFloat(monto) : 0 };
+            const diaPago = parseInt(document.getElementById('dia-pago').value);
+            const monto = parseFloat(document.getElementById('monto-deuda').value || 0);
+            if (!nombre || !tipo || !diaPago) return Swal.showValidationMessage('Completa todos los campos');
+            return { nombre, tipo, diaPago, monto };
         }
     }).then(async (r) => {
         if (r.isConfirmed) {
@@ -1147,11 +1136,9 @@ async function agregarDeuda() {
             });
             const data = await res.json();
             if (data.success) {
-                Swal.fire('✅ Guardado', 'Deuda agregada correctamente', 'success');
+                Swal.fire('✅ Guardado','Deuda agregada','success');
                 inicializarDeudas();
-            } else {
-                Swal.fire('❌ Error', data.error || 'No se pudo guardar', 'error');
-            }
+            } else Swal.fire('❌ Error',data.error || 'No se pudo guardar','error');
         }
     });
 }
@@ -1164,14 +1151,9 @@ async function editarDeuda(id) {
     Swal.fire({
         title: '✏️ Editar Deuda',
         html: `
-            <div class="text-start">
-                <label><strong>Nombre:</strong></label>
-                <input type="text" id="edit-nombre" class="form-control mb-2" value="${deuda.nombre}">
-                <label><strong>Día de Pago:</strong></label>
-                <input type="number" id="edit-dia" class="form-control mb-2" value="${deuda.diaPago}">
-                <label><strong>Monto ($):</strong></label>
-                <input type="number" id="edit-monto" class="form-control mb-2" value="${deuda.monto || ''}">
-            </div>
+            <input type="text" id="edit-nombre" class="form-control mb-2" value="${deuda.nombre}">
+            <input type="number" id="edit-dia" class="form-control mb-2" value="${deuda.diaPago}">
+            <input type="number" id="edit-monto" class="form-control mb-2" value="${deuda.monto || ''}">
         `,
         confirmButtonText: '💾 Guardar Cambios',
         showCancelButton: true,
@@ -1189,140 +1171,54 @@ async function editarDeuda(id) {
             });
             const data = await res.json();
             if (data.success) {
-                Swal.fire('✅ Actualizado', 'La deuda fue modificada', 'success');
+                Swal.fire('✅ Actualizado','Deuda modificada','success');
                 inicializarDeudas();
-            } else {
-                Swal.fire('❌ Error', data.error || 'No se pudo actualizar', 'error');
-            }
+            } else Swal.fire('❌ Error',data.error || 'No se pudo actualizar','error');
         }
     });
 }
 
 // Eliminar deuda
 async function eliminarDeuda(id) {
-    Swal.fire({
+    const result = await Swal.fire({
         title: '🗑️ Eliminar Deuda',
         text: '¿Seguro que deseas eliminar esta deuda?',
         icon: 'warning',
         showCancelButton: true,
         confirmButtonText: 'Sí, eliminar',
         cancelButtonText: 'Cancelar'
-    }).then(async (r) => {
-        if (r.isConfirmed) {
-            const res = await fetch(`/api/deudas/${id}`, { method: 'DELETE' });
-            const data = await res.json();
-            if (data.success) {
-                Swal.fire('✅ Eliminada', 'La deuda fue eliminada', 'success');
-                inicializarDeudas();
-            } else {
-                Swal.fire('❌ Error', data.error || 'No se pudo eliminar', 'error');
-            }
-        }
     });
+    if (!result.isConfirmed) return;
+
+    const res = await fetch(`/api/deudas/${id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.success) {
+        Swal.fire('✅ Eliminada','Deuda eliminada','success');
+        inicializarDeudas();
+    } else Swal.fire('❌ Error',data.error || 'No se pudo eliminar','error');
 }
-
-//Cargar deuda
-async function cargarDeudas() {
-    const contenedor = document.getElementById('deudas-grid');
-    if (!contenedor) return;
-
-    // Mostrar mensaje de carga
-    contenedor.innerHTML = `<p style="text-align: center; color: #999;">Cargando deudas...</p>`;
-
-    try {
-        const res = await fetch('/api/deudas');
-        const data = await res.json();
-
-        if (!data.success || !data.deudas || data.deudas.length === 0) {
-            contenedor.innerHTML = `<p style="text-align: center; color: #999;">No hay deudas registradas.</p>`;
-            return;
-        }
-
-        // Limpiar contenedor
-        contenedor.innerHTML = '';
-
-        data.deudas.forEach(deuda => {
-            const diasRestantes = calcularDiasRestantes(deuda.diaPago);
-            const estado = deuda.pagado
-                ? `<span class="badge bg-success">Pagado</span>`
-                : `<span class="badge bg-danger">Pendiente</span>`;
-
-            const fecha = deuda.fechaPago
-                ? new Date(deuda.fechaPago).toLocaleDateString()
-                : '-';
-
-            const item = document.createElement('div');
-            item.className = 'card shadow-sm mb-3';
-            item.style.padding = '15px';
-            item.innerHTML = `
-                <h5>${deuda.nombre}</h5>
-                <p>
-                    <strong>Tipo:</strong> ${deuda.tipo} <br>
-                    <strong>Día de pago:</strong> ${deuda.diaPago} <br>
-                    <strong>Monto:</strong> $${deuda.monto || '0.00'} <br>
-                    <strong>Estado:</strong> ${estado} <br>
-                    <strong>Fecha Pago:</strong> ${fecha} <br>
-                    <strong>Días restantes:</strong> ${diasRestantes >= 0 ? diasRestantes : 'Vencida'}
-                </p>
-                <div class="d-flex gap-2">
-                    <button class="btn btn-sm btn-primary" onclick="editarDeuda('${deuda.id}')">✏️ Editar</button>
-                    <button class="btn btn-sm btn-danger" onclick="eliminarDeuda('${deuda.id}')">🗑️ Eliminar</button>
-                    <button class="btn btn-sm btn-${deuda.pagado ? 'warning' : 'success'}" onclick="togglePago('${deuda.id}', ${deuda.pagado})">
-                        ${deuda.pagado ? '🔁 Marcar Pendiente' : '💰 Marcar Pagado'}
-                    </button>
-                </div>
-            `;
-            contenedor.appendChild(item);
-        });
-    } catch (error) {
-        contenedor.innerHTML = `<p style="text-align: center; color: red;">Error al cargar las deudas: ${error.message}</p>`;
-        console.error('Error cargando deudas:', error);
-    }
-}
-
 
 // Marcar pagado / pendiente
 async function togglePago(id, pagado) {
     try {
-        const res = await fetch(`/api/deudas/${id}/pago`, {
-            method: 'PATCH',
+        const res = await fetch(`/api/deudas/${id}/pagar`, {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ pagado: !pagado })
         });
         const data = await res.json();
         if (data.success) {
-            Swal.fire({
-                icon: 'success',
-                title: pagado ? '🔁 Marcado Pendiente' : '💰 Pago Registrado',
-                timer: 1500,
-                showConfirmButton: false
-            });
+            Swal.fire({ icon: 'success', title: pagado ? '🔁 Marcado Pendiente' : '💰 Pago Registrado', timer: 1500, showConfirmButton: false });
             inicializarDeudas();
         }
     } catch (error) {
-        Swal.fire('❌ Error', 'No se pudo actualizar el estado del pago', 'error');
+        Swal.fire('❌ Error','No se pudo actualizar el estado del pago','error');
     }
 }
 
 // ============================================
-// Función para calcular días restantes hasta el día de pago
+// NOTIFICACIONES
 // ============================================
-function calcularDiasRestantes(diaPago) {
-    const hoy = new Date();
-    const diaActual = hoy.getDate();
-    
-    // Calculamos la diferencia de días en el mes actual
-    let diasRestantes = diaPago - diaActual;
-
-    // Si el día de pago ya pasó, lo marcamos como vencido (negativo)
-    return diasRestantes;
-}
-
-
-// ============================================
-// 🔔 NOTIFICACIONES DE DEUDAS
-// ============================================
-
 function verificarNotificaciones() {
     const hoy = new Date();
     const diaActual = hoy.getDate();
@@ -1330,39 +1226,27 @@ function verificarNotificaciones() {
     const deudasProximas = deudas.filter(d => !d.pagado && d.diaPago - diaActual <= 2 && d.diaPago - diaActual >= 0);
     const deudasVencidas = deudas.filter(d => !d.pagado && d.diaPago < diaActual);
 
-    if (deudasProximas.length > 0) {
-        mostrarNotificacionToast(`⚠️ ${deudasProximas.length} deudas próximas a vencer`, 'warning');
-    }
-
-    if (deudasVencidas.length > 0) {
-        mostrarNotificacionToast(`❌ ${deudasVencidas.length} deudas vencidas`, 'danger');
-    }
+    if (deudasProximas.length > 0) mostrarNotificacionToast(`⚠️ ${deudasProximas.length} deudas próximas a vencer`, 'warning');
+    if (deudasVencidas.length > 0) mostrarNotificacionToast(`❌ ${deudasVencidas.length} deudas vencidas`, 'danger');
 }
 
-function mostrarNotificacionToast(mensaje, tipo = 'info') {
-    const colores = {
-        success: '#28a745',
-        warning: '#ffc107',
-        danger: '#dc3545',
-        info: '#17a2b8'
-    };
-
+function mostrarNotificacionToast(mensaje, tipo='info') {
+    const colores = { success:'#28a745', warning:'#ffc107', danger:'#dc3545', info:'#17a2b8' };
     const toast = document.createElement('div');
-    toast.className = 'toast align-items-center text-white border-0';
+    toast.className='toast align-items-center text-white border-0';
     toast.style.backgroundColor = colores[tipo];
-    toast.innerHTML = `
-        <div class="d-flex">
-            <div class="toast-body">${mensaje}</div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-        </div>
-    `;
-
+    toast.innerHTML=`<div class="d-flex"><div class="toast-body">${mensaje}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
     document.body.appendChild(toast);
-    const bsToast = new bootstrap.Toast(toast, { delay: 4000 });
+    const bsToast = new bootstrap.Toast(toast,{delay:4000});
     bsToast.show();
-
-    toast.addEventListener('hidden.bs.toast', () => toast.remove());
+    toast.addEventListener('hidden.bs.toast',()=>toast.remove());
 }
+
+// ============================================
+// INICIALIZACIÓN
+// ============================================
+document.addEventListener('DOMContentLoaded', inicializarDeudas);
+
 // ============================================
 // FUNCIONES DEL BOT
 // ============================================
