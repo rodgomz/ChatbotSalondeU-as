@@ -1221,6 +1221,36 @@ async function eliminarDeuda(id) {
     });
 }
 
+//Cargar deuda
+async function cargarDeudas() {
+    try {
+        const res = await fetch('/api/deudas');
+        const data = await res.json();
+
+        if (data.success) {
+            const listaDeudas = document.getElementById('listaDeudas'); // tu contenedor HTML
+            listaDeudas.innerHTML = ''; // limpiar lista anterior
+
+            data.deudas.forEach(deuda => {
+                const item = document.createElement('div');
+                item.className = 'deuda-item';
+                item.innerHTML = `
+                    <strong>${deuda.nombre}</strong> - ${deuda.tipo} - ${deuda.monto ? '$' + deuda.monto.toFixed(2) : 'Sin monto'}
+                    <button onclick="eliminarDeuda('${deuda.id}')" class="btn btn-danger btn-sm">Eliminar</button>
+                    <button onclick="marcarPagada('${deuda.id}', ${deuda.pagado})" class="btn btn-success btn-sm">
+                        ${deuda.pagado ? 'Marcar Pendiente' : 'Marcar Pagada'}
+                    </button>
+                `;
+                listaDeudas.appendChild(item);
+            });
+        } else {
+            Swal.fire('❌ Error', data.error || 'No se pudieron cargar las deudas', 'error');
+        }
+    } catch (error) {
+        Swal.fire('❌ Error', error.message || 'No se pudieron cargar las deudas', 'error');
+    }
+}
+
 // Marcar pagado / pendiente
 async function togglePago(id, pagado) {
     try {
@@ -1243,6 +1273,8 @@ async function togglePago(id, pagado) {
         Swal.fire('❌ Error', 'No se pudo actualizar el estado del pago', 'error');
     }
 }
+
+
 
 // ============================================
 // 🔔 NOTIFICACIONES DE DEUDAS
