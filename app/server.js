@@ -661,6 +661,624 @@ proyecto/
     }
 });
 
+/**
+ * GET /api/deudas
+ * Obtener todas las deudas
+ */
+app.get('/api/deudas', async (req, res) => {
+    try {
+        const snapshot = await db.ref('deudas').once('value');
+        const deudas = [];
+        
+        snapshot.forEach((childSnapshot) => {
+            deudas.push({
+                id: childSnapshot.key,
+                ...childSnapshot.val()
+            });
+        });
+
+        res.json({
+            success: true,
+            deudas: deudas
+        });
+    } catch (error) {
+        console.error('Error obteniendo deudas:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
+ * POST /api/deudas
+ * Crear una nueva deuda
+ */
+app.post('/api/deudas', async (req, res) => {
+    try {
+        const { tipo, nombre, diaPago, monto, notas } = req.body;
+
+        // Validaciones
+        if (!tipo || !nombre || !diaPago) {
+            return res.status(400).json({
+                success: false,
+                error: 'Faltan campos obligatorios'
+            });
+        }
+
+        if (diaPago < 1 || diaPago > 31) {
+            return res.status(400).json({
+                success: false,
+                error: 'El día debe estar entre 1 y 31'
+            });
+        }
+
+        // Crear nueva deuda
+        const nuevaDeuda = {
+            tipo,
+            nombre,
+            diaPago: parseInt(diaPago),
+            monto: monto ? parseFloat(monto) : null,
+            notas: notas || '',
+            pagado: false,
+            fechaCreacion: new Date().toISOString(),
+            fechaUltimaModificacion: new Date().toISOString()
+        };
+
+        const nuevaRef = await db.ref('deudas').push(nuevaDeuda);
+
+        res.json({
+            success: true,
+            id: nuevaRef.key,
+            deuda: nuevaDeuda
+        });
+    } catch (error) {
+        console.error('Error creando deuda:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
+ * GET /api/deudas/:id
+ * Obtener una deuda específica
+ */
+app.get('/api/deudas/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const snapshot = await db.ref(`deudas/${id}`).once('value');
+
+        if (!snapshot.exists()) {
+            return res.status(404).json({
+                success: false,
+                error: 'Deuda no encontrada'
+            });
+        }
+
+        res.json({
+            success: true,
+            deuda: {
+                id: snapshot.key,
+                ...snapshot.val()
+            }
+        });
+    } catch (error) {
+        console.error('Error obteniendo deuda:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
+ * PUT /api/deudas/:id
+ * Actualizar una deuda
+ */
+app.put('/api/deudas/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { tipo, nombre, diaPago, monto, notas } = req.body;
+
+        // Verificar que la deuda existe
+        const snapshot = await db.ref(`deudas/${id}`).once('value');
+        if (!snapshot.exists()) {
+            return res.status(404).json({
+                success: false,
+                error: 'Deuda no encontrada'
+            });
+        }
+
+        // Validaciones
+        if (!tipo || !nombre || !diaPago) {
+            return res.status(400).json({
+                success: false,
+                error: 'Faltan campos obligatorios'
+            });
+        }
+
+        if (diaPago < 1 || diaPago > 31) {
+            return res.status(400).json({
+                success: false,
+                error: 'El día debe estar entre 1 y 31'
+            });
+        }
+
+        // Actualizar deuda
+        const actualizacion = {
+            tipo,
+            nombre,
+            diaPago: parseInt(diaPago),
+            monto: monto ? parseFloat(monto) : null,
+            notas: notas || '',
+            fechaUltimaModificacion: new Date().toISOString()
+        };
+
+        await db.ref(`deudas/${id}`).update(actualizacion);
+
+        res.json({
+            success: true,
+            message: 'Deuda actualizada exitosamente'
+        });
+    } catch (error) {
+        console.error('Error actualizando deuda:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
+ * POST /api/deudas/:id/pagar
+ * Marcar una deuda como pagada o pendiente
+ */
+app.post('/api/deudas/:id/pagar', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { pagado } = req.body;
+
+        // Verificar que la deuda existe
+        const snapshot = await db.ref(`deudas/${id}`).once('value');
+        if (!snapshot.exists()) {
+            return res.status(404).json({
+                success: false,
+                error: 'Deuda no encontrada'
+            });
+        }
+
+        // Actualizar estado de pago
+        const actualizacion = {
+            pagado: pagado === true,
+            fechaPago: pagado === true ? new Date().toISOString() : null,
+            fechaUltimaModificacion: new Date().toISOString()
+        };
+
+        await db.ref(`deudas/${id}`).update(actualizacion);
+
+        res.json({
+            success: true,
+            message: pagado ? 'Deuda marcada como pagada' : 'Deuda marcada como pendiente'
+        });
+    } catch (error) {
+        console.error('Error actualizando estado de pago:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
+ * DELETE /api/deudas/:id
+ * Eliminar una deuda
+ */
+app.delete('/api/deudas/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Verificar que la deuda existe
+        const snapshot = await db.ref(`deudas/${id}`).once('value');
+        if (!snapshot.exists()) {
+            return res.status(404).json({
+                success: false,
+                error: 'Deuda no encontrada'
+            });
+        }
+
+        // Eliminar deuda
+        await db.ref(`deudas/${id}`).remove();
+
+        res.json({
+            success: true,
+            message: 'Deuda eliminada exitosamente'
+        });
+    } catch (error) {
+        console.error('Error eliminando deuda:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
+ * GET /api/deudas/notificaciones
+ * Obtener notificaciones de pagos próximos (10 días antes)
+ */
+app.get('/api/deudas/notificaciones', async (req, res) => {
+    try {
+        const snapshot = await db.ref('deudas').once('value');
+        const notificaciones = [];
+        const hoy = new Date();
+        
+        snapshot.forEach((childSnapshot) => {
+            const deuda = childSnapshot.val();
+            
+            // Solo notificar deudas no pagadas
+            if (!deuda.pagado) {
+                const diasRestantes = calcularDiasRestantes(deuda.diaPago);
+                
+                // Notificar si faltan 10 días o menos, o si ya está vencido
+                if (diasRestantes <= 10) {
+                    const urgente = diasRestantes <= 3;
+                    
+                    let mensaje = '';
+                    if (diasRestantes < 0) {
+                        mensaje = `${deuda.nombre} está vencido hace ${Math.abs(diasRestantes)} día${Math.abs(diasRestantes) !== 1 ? 's' : ''}`;
+                    } else if (diasRestantes === 0) {
+                        mensaje = `${deuda.nombre} vence HOY`;
+                    } else if (diasRestantes === 1) {
+                        mensaje = `${deuda.nombre} vence MAÑANA`;
+                    } else {
+                        mensaje = `${deuda.nombre} vence en ${diasRestantes} días`;
+                    }
+                    
+                    notificaciones.push({
+                        id: childSnapshot.key,
+                        titulo: urgente ? '⚠️ Pago Urgente' : '🔔 Recordatorio de Pago',
+                        mensaje: mensaje,
+                        deuda: deuda.nombre,
+                        tipo: deuda.tipo,
+                        diasRestantes: diasRestantes,
+                        urgente: urgente,
+                        monto: deuda.monto,
+                        fechaNotificacion: new Date().toISOString()
+                    });
+                }
+            }
+        });
+
+        res.json({
+            success: true,
+            notificaciones: notificaciones.sort((a, b) => a.diasRestantes - b.diasRestantes)
+        });
+    } catch (error) {
+        console.error('Error obteniendo notificaciones:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
+ * GET /api/deudas/resumen
+ * Obtener resumen estadístico de deudas
+ */
+app.get('/api/deudas/resumen', async (req, res) => {
+    try {
+        const snapshot = await db.ref('deudas').once('value');
+        
+        let totalPagadas = 0;
+        let totalPendientes = 0;
+        let montoTotal = 0;
+        let montoPendiente = 0;
+        let proximasVencer = 0;
+        
+        snapshot.forEach((childSnapshot) => {
+            const deuda = childSnapshot.val();
+            
+            if (deuda.pagado) {
+                totalPagadas++;
+                if (deuda.monto) montoTotal += deuda.monto;
+            } else {
+                totalPendientes++;
+                if (deuda.monto) {
+                    montoTotal += deuda.monto;
+                    montoPendiente += deuda.monto;
+                }
+                
+                const diasRestantes = calcularDiasRestantes(deuda.diaPago);
+                if (diasRestantes <= 10 && diasRestantes >= 0) {
+                    proximasVencer++;
+                }
+            }
+        });
+
+        res.json({
+            success: true,
+            resumen: {
+                totalDeudas: totalPagadas + totalPendientes,
+                totalPagadas,
+                totalPendientes,
+                montoTotal: montoTotal.toFixed(2),
+                montoPendiente: montoPendiente.toFixed(2),
+                proximasVencer
+            }
+        });
+    } catch (error) {
+        console.error('Error obteniendo resumen:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// ============================================
+// FUNCIÓN AUXILIAR
+// ============================================
+function calcularDiasRestantes(diaPago) {
+    const hoy = new Date();
+    const mesActual = hoy.getMonth();
+    const anioActual = hoy.getFullYear();
+    
+    let fechaPago = new Date(anioActual, mesActual, diaPago);
+    
+    // Si la fecha ya pasó este mes, usar el próximo mes
+    if (fechaPago < hoy) {
+        fechaPago = new Date(anioActual, mesActual + 1, diaPago);
+    }
+    
+    const diffTime = fechaPago - hoy;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    return diffDays;
+}
+
+// ============================================
+// WEBHOOK PARA NOTIFICACIONES AUTOMÁTICAS
+// ============================================
+
+/**
+ * Función para verificar y enviar notificaciones automáticas
+ * Se puede ejecutar con un cron job o setInterval
+ */
+async function verificarYEnviarNotificaciones() {
+    try {
+        const snapshot = await db.ref('deudas').once('value');
+        const notificacionesEnviadas = [];
+        
+        snapshot.forEach((childSnapshot) => {
+            const deuda = childSnapshot.val();
+            const id = childSnapshot.key;
+            
+            if (!deuda.pagado) {
+                const diasRestantes = calcularDiasRestantes(deuda.diaPago);
+                
+                // Enviar notificación si faltan exactamente 10, 7, 3, 1 días o si está vencido
+                const diasNotificacion = [10, 7, 3, 1, 0];
+                
+                if (diasNotificacion.includes(diasRestantes)) {
+                    notificacionesEnviadas.push({
+                        id,
+                        nombre: deuda.nombre,
+                        tipo: deuda.tipo,
+                        diasRestantes,
+                        monto: deuda.monto
+                    });
+                    
+                    console.log(`📧 Notificación enviada: ${deuda.nombre} - ${diasRestantes} días`);
+                }
+            }
+        });
+        
+        return notificacionesEnviadas;
+    } catch (error) {
+        console.error('Error verificando notificaciones:', error);
+        return [];
+    }
+}
+
+// Ejecutar verificación de notificaciones cada hora
+setInterval(verificarYEnviarNotificaciones, 3600000); // 1 hora
+
+// ============================================
+// ENDPOINTS ADICIONALES PARA EL DASHBOARD
+// ============================================
+
+/**
+ * POST /api/deudas/resetear-pagos
+ * Resetear todos los pagos al inicio del mes (útil para pagos recurrentes)
+ */
+app.post('/api/deudas/resetear-pagos', async (req, res) => {
+    try {
+        const snapshot = await db.ref('deudas').once('value');
+        const updates = {};
+        
+        snapshot.forEach((childSnapshot) => {
+            updates[`${childSnapshot.key}/pagado`] = false;
+            updates[`${childSnapshot.key}/fechaPago`] = null;
+            updates[`${childSnapshot.key}/fechaUltimaModificacion`] = new Date().toISOString();
+        });
+        
+        await db.ref('deudas').update(updates);
+        
+        res.json({
+            success: true,
+            message: 'Todos los pagos han sido reseteados'
+        });
+    } catch (error) {
+        console.error('Error reseteando pagos:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
+ * GET /api/deudas/historial/:id
+ * Obtener historial de pagos de una deuda específica
+ */
+app.get('/api/deudas/historial/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const snapshot = await db.ref(`historial/${id}`).once('value');
+        
+        const historial = [];
+        snapshot.forEach((childSnapshot) => {
+            historial.push({
+                id: childSnapshot.key,
+                ...childSnapshot.val()
+            });
+        });
+        
+        res.json({
+            success: true,
+            historial: historial.sort((a, b) => 
+                new Date(b.fecha) - new Date(a.fecha)
+            )
+        });
+    } catch (error) {
+        console.error('Error obteniendo historial:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
+ * POST /api/deudas/:id/agregar-historial
+ * Agregar entrada al historial cuando se marca como pagado
+ */
+app.post('/api/deudas/:id/agregar-historial', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { monto, notas } = req.body;
+        
+        const deudaSnapshot = await db.ref(`deudas/${id}`).once('value');
+        if (!deudaSnapshot.exists()) {
+            return res.status(404).json({
+                success: false,
+                error: 'Deuda no encontrada'
+            });
+        }
+        
+        const deuda = deudaSnapshot.val();
+        
+        const entrada = {
+            fecha: new Date().toISOString(),
+            monto: monto || deuda.monto,
+            notas: notas || '',
+            tipo: deuda.tipo,
+            nombre: deuda.nombre
+        };
+        
+        await db.ref(`historial/${id}`).push(entrada);
+        
+        res.json({
+            success: true,
+            message: 'Entrada agregada al historial'
+        });
+    } catch (error) {
+        console.error('Error agregando historial:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
+ * GET /api/deudas/por-tipo
+ * Obtener deudas agrupadas por tipo
+ */
+app.get('/api/deudas/por-tipo', async (req, res) => {
+    try {
+        const snapshot = await db.ref('deudas').once('value');
+        const porTipo = {};
+        
+        snapshot.forEach((childSnapshot) => {
+            const deuda = {
+                id: childSnapshot.key,
+                ...childSnapshot.val()
+            };
+            
+            if (!porTipo[deuda.tipo]) {
+                porTipo[deuda.tipo] = [];
+            }
+            
+            porTipo[deuda.tipo].push(deuda);
+        });
+        
+        res.json({
+            success: true,
+            porTipo
+        });
+    } catch (error) {
+        console.error('Error obteniendo deudas por tipo:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
+ * POST /api/deudas/batch
+ * Crear múltiples deudas a la vez
+ */
+app.post('/api/deudas/batch', async (req, res) => {
+    try {
+        const { deudas } = req.body;
+        
+        if (!Array.isArray(deudas) || deudas.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Se requiere un array de deudas'
+            });
+        }
+        
+        const updates = {};
+        const ids = [];
+        
+        deudas.forEach(deuda => {
+            const newKey = db.ref('deudas').push().key;
+            ids.push(newKey);
+            
+            updates[`deudas/${newKey}`] = {
+                tipo: deuda.tipo,
+                nombre: deuda.nombre,
+                diaPago: parseInt(deuda.diaPago),
+                monto: deuda.monto ? parseFloat(deuda.monto) : null,
+                notas: deuda.notas || '',
+                pagado: false,
+                fechaCreacion: new Date().toISOString(),
+                fechaUltimaModificacion: new Date().toISOString()
+            };
+        });
+        
+        await db.ref().update(updates);
+        
+        res.json({
+            success: true,
+            message: `${deudas.length} deudas creadas exitosamente`,
+            ids
+        });
+    } catch (error) {
+        console.error('Error creando deudas en batch:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
 
 // ==========================
 // Endpoint para reiniciar sesión

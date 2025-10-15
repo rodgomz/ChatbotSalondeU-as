@@ -9,6 +9,11 @@
     <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    
     <style>
         * {
             margin: 0;
@@ -37,6 +42,7 @@
             color: white;
             padding: 30px;
             text-align: center;
+            position: relative;
         }
 
         .header h1 {
@@ -45,6 +51,193 @@
             font-weight: 300;
         }
 
+        /* PERFIL DROPDOWN */
+        .profile-menu {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+        }
+
+        .profile-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: white;
+            color: #667eea;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 3px solid rgba(255,255,255,0.3);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+
+        .profile-icon:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.3);
+        }
+
+        .profile-dropdown {
+            position: absolute;
+            top: 60px;
+            right: 0;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            min-width: 250px;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .profile-dropdown.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .profile-dropdown::before {
+            content: '';
+            position: absolute;
+            top: -8px;
+            right: 20px;
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-bottom: 8px solid white;
+        }
+
+        .profile-dropdown-header {
+            padding: 20px;
+            border-bottom: 1px solid #e1e5f7;
+            text-align: center;
+        }
+
+        .profile-dropdown-header h5 {
+            margin: 0;
+            color: #333;
+            font-size: 1.1rem;
+        }
+
+        .profile-dropdown-header p {
+            margin: 5px 0 0;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .profile-dropdown-menu {
+            padding: 10px 0;
+        }
+
+        .profile-dropdown-item {
+            padding: 12px 20px;
+            color: #333;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+            font-size: 1rem;
+        }
+
+        .profile-dropdown-item:hover {
+            background: #f8f9ff;
+            color: #667eea;
+        }
+
+        .profile-dropdown-item i {
+            font-size: 1.2rem;
+            width: 24px;
+            text-align: center;
+        }
+
+        /* NOTIFICACIONES */
+        .notification-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: #dc3545;
+            color: white;
+            border-radius: 50%;
+            width: 22px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: bold;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .notification-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            max-width: 400px;
+        }
+
+        .notification-item {
+            background: white;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: start;
+            gap: 12px;
+            animation: slideIn 0.3s ease;
+            border-left: 4px solid #ffc107;
+        }
+
+        .notification-item.urgent {
+            border-left-color: #dc3545;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .notification-icon {
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .notification-content h6 {
+            margin: 0 0 5px;
+            color: #333;
+            font-size: 0.95rem;
+        }
+
+        .notification-content p {
+            margin: 0;
+            color: #666;
+            font-size: 0.85rem;
+        }
+
+        /* RESTO DE ESTILOS DEL DASHBOARD ORIGINAL */
         .nav-tabs {
             background: #f8f9ff;
             border-bottom: 2px solid #e1e5f7;
@@ -75,474 +268,248 @@
             padding: 30px;
         }
 
-        .week-selector {
+        /* ESTILOS PÁGINA DE DEUDAS */
+        .deudas-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 30px;
+        }
+
+        .deudas-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 30px;
-            background: #f8f9ff;
-            padding: 20px;
-            border-radius: 10px;
-            border: 1px solid #e1e5f7;
         }
 
-        .week-selector button {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: all 0.3s ease;
-        }
-
-        .week-selector button:hover {
-            background: #764ba2;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-        }
-
-        .week-info {
-            font-size: 1.2rem;
-            font-weight: 600;
+        .deudas-header h2 {
             color: #333;
+            margin: 0;
         }
 
-        .availability-grid {
+        .deudas-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
 
-        .day-card {
+        .deuda-card {
             background: white;
             border-radius: 12px;
-            border: 2px solid #e1e5f7;
-            overflow: hidden;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            border-left: 5px solid #667eea;
             transition: all 0.3s ease;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
         }
 
-        .day-card:hover {
-            border-color: #667eea;
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.15);
+        .deuda-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
         }
 
-        .day-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 15px;
-            text-align: center;
-        }
-
-        .day-header h3 {
-            font-size: 1.3rem;
-            margin-bottom: 5px;
-            margin: 0;
-        }
-
-        .day-header p {
-            font-size: 0.9rem;
-            opacity: 0.9;
-            margin: 0;
-        }
-
-        .day-status {
-            padding: 15px;
-            text-align: center;
-            font-weight: 600;
-            font-size: 1.1rem;
-            background: #f8f9ff;
-            border-bottom: 1px solid #e1e5f7;
-            color: #28a745;
-            background: #d4edda;
-        }
-
-        .hours-container {
-            padding: 15px;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-
-        .hour-slot {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px;
-            margin-bottom: 8px;
-            border-radius: 8px;
-            transition: all 0.2s ease;
-            background: #f9f9f9;
-            border-left: 4px solid #e1e5f7;
-            cursor: pointer;
-        }
-
-        .hour-slot:hover {
-            background: #f0f4ff;
-            border-left-color: #667eea;
-            transform: translateX(5px);
-        }
-
-        .hour-slot.available {
-            background: #d4edda;
+        .deuda-card.pagado {
             border-left-color: #28a745;
+            opacity: 0.8;
         }
 
-        .hour-slot.booked {
-            background: #fff3cd;
+        .deuda-card.proximo {
             border-left-color: #ffc107;
         }
 
-        .hour-slot.fully-booked {
-            background: #f8d7da;
+        .deuda-card.urgente {
             border-left-color: #dc3545;
-            opacity: 0.7;
-            cursor: not-allowed;
+            animation: shake 0.5s ease;
         }
 
-        .hour-time {
-            font-weight: 600;
-            font-size: 1rem;
-            color: #333;
-            min-width: 70px;
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
         }
 
-        .hour-availability {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 0.9rem;
-        }
-
-        .availability-bar {
-            display: flex;
-            height: 8px;
-            border-radius: 4px;
-            width: 100px;
-            background: #e1e5f7;
-            overflow: hidden;
-        }
-
-        .availability-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #28a745, #ffc107);
-            transition: width 0.3s ease;
-        }
-
-        .availability-text {
-            font-size: 0.85rem;
-            color: #666;
-            white-space: nowrap;
-        }
-
-        .stats-section {
-            background: #f8f9ff;
-            border: 1px solid #e1e5f7;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 30px;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-        }
-
-        .stat-card {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            text-align: center;
-            border-left: 4px solid #667eea;
-        }
-
-        .stat-value {
-            font-size: 1.8rem;
-            font-weight: 600;
-            color: #667eea;
-            margin: 5px 0;
-        }
-
-        .stat-label {
-            font-size: 0.9rem;
-            color: #666;
-        }
-
-        .calendar-container {
-            background: white;
-            border-radius: 16px;
-            padding: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-        }
-
-        .calendar-header {
+        .deuda-header-card {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
+            align-items: start;
+            margin-bottom: 15px;
         }
 
-        .calendar-nav {
-            background: none;
-            border: none;
-            font-size: 1.5rem;
-            cursor: pointer;
-            color: #667eea;
+        .deuda-titulo {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #333;
+            margin: 0;
         }
 
-        .calendar-nav:hover {
-            color: #764ba2;
+        .deuda-icono {
+            font-size: 1.8rem;
         }
 
-        .calendar-grid {
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            gap: 5px;
-            overflow-x: auto;
-            padding-bottom: 10px;
+        .deuda-info {
+            margin: 10px 0;
         }
 
-        @media (max-width: 768px) {
-            .calendar-grid {
-                grid-template-columns: repeat(7, minmax(45px, 1fr));
-                gap: 3px;
-            }
+        .deuda-info-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            font-size: 0.95rem;
         }
 
-        @media (max-width: 480px) {
-            .calendar-grid {
-                grid-template-columns: repeat(7, minmax(40px, 1fr));
-                gap: 2px;
-            }
+        .deuda-info-label {
+            color: #666;
         }
 
-        .calendar-day-header {
-            text-align: center;
-            font-weight: bold;
+        .deuda-info-value {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .deuda-dias {
+            background: #f8f9ff;
             padding: 10px;
-            background: #f8f9fa;
             border-radius: 8px;
-        }
-
-        .calendar-day {
             text-align: center;
-            padding: 15px 5px;
+            margin: 15px 0;
+            font-weight: 600;
+        }
+
+        .deuda-dias.urgente {
+            background: #fee;
+            color: #dc3545;
+        }
+
+        .deuda-dias.proximo {
+            background: #fff8e1;
+            color: #f57c00;
+        }
+
+        .deuda-acciones {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn-deuda {
+            flex: 1;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
             cursor: pointer;
-            border-radius: 8px;
-            transition: all 0.2s;
-            position: relative;
-            min-height: 50px;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
         }
 
-        @media (max-width: 768px) {
-            .calendar-day-header {
-                padding: 8px 3px;
-                font-size: 0.85rem;
-            }
-
-            .calendar-day {
-                padding: 10px 3px;
-                min-height: 45px;
-                font-size: 0.9rem;
-            }
+        .btn-pagar {
+            background: #28a745;
+            color: white;
         }
 
-        @media (max-width: 480px) {
-            .calendar-day-header {
-                padding: 6px 2px;
-                font-size: 0.75rem;
-            }
-
-            .calendar-day {
-                padding: 8px 2px;
-                min-height: 40px;
-                font-size: 0.8rem;
-            }
+        .btn-pagar:hover {
+            background: #218838;
         }
 
-        .calendar-day:hover {
-            background: #e3f2fd;
-        }
-
-        .calendar-day.other-month {
-            color: #ccc;
-        }
-
-        .calendar-day.today {
+        .btn-editar {
             background: #667eea;
             color: white;
-            font-weight: bold;
         }
 
-        .calendar-day.has-appointments {
-            background: #fff3cd;
-            border: 2px solid #ffc107;
+        .btn-editar:hover {
+            background: #5568d3;
         }
 
-        .appointment-dot {
-            position: absolute;
-            top: 5px;
-            right: 5px;
-            width: 8px;
-            height: 8px;
+        .btn-eliminar {
             background: #dc3545;
-            border-radius: 50%;
+            color: white;
         }
 
-        .dashboard-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .card {
-            border-radius: 16px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-            padding: 20px;
-            text-align: center;
-            background: white;
-            cursor: pointer;
-            border: none;
-        }
-
-        .card:hover {
-            transform: scale(1.05);
-            box-shadow: 0 6px 18px rgba(0,0,0,0.2);
-        }
-
-        .card h5 {
-            color: #333;
-            margin-bottom: 10px;
-        }
-
-        .status {
-            font-size: 1.2rem;
-            font-weight: bold;
-        }
-
-        .qr-img {
-            max-width: 250px;
-            border: 3px solid #eee;
-            border-radius: 8px;
-        }
-
-        .appointment-list {
-            max-height: 400px;
-            overflow-y: auto;
-        }
-
-        .appointment-item {
-            background: white;
-            border-left: 4px solid #667eea;
-            padding: 15px;
-            margin-bottom: 10px;
-            border-radius: 0 8px 8px 0;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .appointment-item:hover {
-            transform: translateX(5px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-
-        .appointment-time {
-            font-weight: bold;
-            color: #667eea;
-            font-size: 1.1rem;
-        }
-
-        .appointment-client {
-            font-size: 1rem;
-            margin: 5px 0;
-        }
-
-        .appointment-service {
-            color: #666;
-            font-size: 0.9rem;
-        }
-
-        .button-group {
-            text-align: center;
-            margin-top: 30px;
-        }
-
-        .button-group button {
-            margin: 0 10px;
-        }
-
-        .legend {
-            background: #f8f9ff;
-            border: 1px solid #e1e5f7;
-            border-radius: 10px;
-            padding: 20px;
-            margin-top: 30px;
-        }
-
-        .legend h4 {
-            margin-bottom: 15px;
-            color: #333;
-        }
-
-        .legend-items {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-        }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .legend-color {
-            width: 30px;
-            height: 30px;
-            border-radius: 6px;
-            border: 2px solid #e1e5f7;
+        .btn-eliminar:hover {
+            background: #c82333;
         }
 
         @media (max-width: 768px) {
-            .availability-grid {
-                grid-template-columns: 1fr;
+            .profile-menu {
+                top: 20px;
+                right: 20px;
             }
 
-            .week-selector {
-                flex-direction: column;
-                gap: 15px;
+            .profile-icon {
+                width: 45px;
+                height: 45px;
+                font-size: 1.3rem;
             }
 
             .header h1 {
-                font-size: 2rem;
+                font-size: 1.8rem;
+                padding-right: 60px;
+            }
+
+            .deudas-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .notification-container {
+                left: 20px;
+                right: 20px;
+                max-width: none;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container">
+ <div class="container">
         <div class="header">
             <h1>🤖 Dashboard Bot WhatsApp</h1>
+            
+            <!-- Menú de Perfil -->
+            <div class="profile-menu">
+                <div class="profile-icon" id="profile-icon" onclick="toggleProfileMenu()">
+                    👤
+                    <span class="notification-badge" id="notification-badge" style="display: none;">0</span>
+                </div>
+                
+                <div class="profile-dropdown" id="profile-dropdown">
+                    <div class="profile-dropdown-header">
+                        <h5>Mi Perfil</h5>
+                        <p>Admin</p>
+                    </div>
+                    <div class="profile-dropdown-menu">
+                        <button class="profile-dropdown-item" onclick="irADeudas()">
+                            <span>💳</span>
+                            <span>Gestión de Deudas</span>
+                        </button>
+                        <button class="profile-dropdown-item" onclick="verNotificaciones()">
+                            <span>🔔</span>
+                            <span>Notificaciones</span>
+                        </button>
+                        <button class="profile-dropdown-item" onclick="configuracion()">
+                            <span>⚙️</span>
+                            <span>Configuración</span>
+                        </button>
+                        <button class="profile-dropdown-item" onclick="cerrarSesion()">
+                            <span>🚪</span>
+                            <span>Cerrar Sesión</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <ul class="nav nav-tabs" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="availability-tab" data-bs-toggle="tab" data-bs-target="#availability" type="button" role="tab" aria-controls="availability" aria-selected="true">
+                <button class="nav-link active" id="availability-tab" data-bs-toggle="tab" data-bs-target="#availability" type="button" role="tab">
                     📅 Disponibilidad Semanal
                 </button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="calendar-tab" data-bs-toggle="tab" data-bs-target="#calendar" type="button" role="tab" aria-controls="calendar" aria-selected="false">
+                <button class="nav-link" id="calendar-tab" data-bs-toggle="tab" data-bs-target="#calendar" type="button" role="tab">
                     🗓️ Calendario y Bot
                 </button>
             </li>
         </ul>
 
-        <div class="tab-content">
+          <div class="tab-content">
             <!-- PESTAÑA 1: DISPONIBILIDAD SEMANAL -->
             <div class="tab-pane fade show active" id="availability" role="tabpanel" aria-labelledby="availability-tab">
                 <div class="week-selector">
@@ -668,12 +635,117 @@
                 </div>
             </div>
         </div>
+
+         <div class="tab-pane fade" id="calendar" role="tabpanel" aria-labelledby="calendar-tab">
+                <div class="dashboard-row">
+                    <div class="card">
+                        <h5>Estado del Bot</h5>
+                        <p class="status" id="bot-status">⏳ Cargando...</p>
+                    </div>
+                    <div class="card">
+                        <h5>Chats Activos</h5>
+                        <p class="status text-primary" id="chats-activos">0</p>
+                    </div>
+                    <div class="card">
+                        <h5>Código QR</h5>
+                        <div id="qr-container">
+                            <p class="text-muted">QR no generado</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-row">
+                    <div class="card">
+                        <h5>Mensajes Enviados</h5>
+                        <p class="status text-success" id="mensajes-enviados">0</p>
+                    </div>
+                    <div class="card">
+                        <h5>Mensajes Recibidos</h5>
+                        <p class="status text-info" id="mensajes-recibidos">0</p>
+                    </div>
+                    <div class="card" onclick="window.location.href='/servicios/servicios.html'">
+                        <h5>Administrar Servicios</h5>
+                        <p class="status text-warning">Gestiona los servicios</p>
+                    </div>
+                </div>
+
+                <div class="dashboard-row">
+                    <div class="card" onclick="window.location.href='/clientes/clientes.html'">
+                        <h5>Administrar Clientes</h5>
+                        <p class="status text-warning">Gestiona los clientes</p>
+                    </div>
+                    <div class="card" onclick="window.location.href='/ganancias/ganancias.html'">
+                        <h5>Ver Ganancias</h5>
+                        <p class="status text-warning">Ve las ganancias</p>
+                    </div>
+                </div>
+
+                <div class="row g-4 mt-3">
+                    <div class="col-md-8">
+                        <div class="calendar-container">
+                            <div class="calendar-header">
+                                <button class="calendar-nav" onclick="changeMonth(-1)">❮</button>
+                                <h4 id="calendar-month-year"></h4>
+                                <button class="calendar-nav" onclick="changeMonth(1)">❯</button>
+                            </div>
+                            <div style="overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 0 10px;">
+                                <div class="calendar-grid" id="calendar-grid"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card p-3">
+                            <h5 class="mb-3">📅 Próximos Servicios</h5>
+                            <div class="appointment-list" id="appointment-list"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="reconectarBot()">🔄 Reconectar Bot</button>
+                    <button class="btn btn-danger" onclick="reiniciarServidor()">⚡ Reiniciar Servidor</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PÁGINA DE DEUDAS (Modal/Overlay) -->
+    <div id="deudas-page" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); z-index: 10000; overflow-y: auto; padding: 20px;">
+        <div style="max-width: 1400px; margin: 0 auto; background: white; border-radius: 15px; min-height: calc(100vh - 40px);">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 15px 15px 0 0; position: sticky; top: 0; z-index: 100;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2 style="margin: 0;">💳 Gestión de Deudas y Pagos</h2>
+                    <button onclick="cerrarDeudas()" style="background: rgba(255,255,255,0.2); border: none; color: white; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 1rem; transition: all 0.3s ease;">
+                        ✕ Cerrar
+                    </button>
+                </div>
+            </div>
+
+            <div class="deudas-container">
+                <div class="deudas-header">
+                    <div>
+                        <h3>Próximos Pagos</h3>
+                        <p style="color: #666; margin: 5px 0 0;">Gestiona tus compromisos financieros</p>
+                    </div>
+                    <button class="btn btn-success" onclick="agregarDeuda()">
+                        ➕ Agregar Pago
+                    </button>
+                </div>
+
+                <div class="deudas-grid" id="deudas-grid">
+                    <p style="text-align: center; color: #999; padding: 40px;">
+                        Cargando deudas...
+                    </p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Bootstrap JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <!-- Tu archivo dashboard.js -->
+     <!-- Tu archivo dashboard.js -->
     <script src="/dashboard.js"></script>
+
 </body>
 </html>
