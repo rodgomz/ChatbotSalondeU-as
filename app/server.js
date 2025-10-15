@@ -1096,16 +1096,18 @@ setInterval(verificarYEnviarNotificaciones, 3600000); // 1 hora
  */
 app.post('/api/deudas/resetear-pagos', async (req, res) => {
     try {
-        const snapshot = await db.ref('deudas').once('value');
+        const snapshot = await get(ref(db, 'deudas'));
         const updates = {};
         
-        snapshot.forEach((childSnapshot) => {
-            updates[`${childSnapshot.key}/pagado`] = false;
-            updates[`${childSnapshot.key}/fechaPago`] = null;
-            updates[`${childSnapshot.key}/fechaUltimaModificacion`] = new Date().toISOString();
-        });
-        
-        await db.ref('deudas').update(updates);
+        if (snapshot.exists()) {
+            snapshot.forEach((childSnapshot) => {
+                updates[`${childSnapshot.key}/pagado`] = false;
+                updates[`${childSnapshot.key}/fechaPago`] = null;
+                updates[`${childSnapshot.key}/fechaUltimaModificacion`] = new Date().toISOString();
+            });
+            
+            await update(ref(db, 'deudas'), updates);
+        }
         
         res.json({
             success: true,
@@ -1120,6 +1122,7 @@ app.post('/api/deudas/resetear-pagos', async (req, res) => {
     }
 });
 
+
 /**
  * GET /api/deudas/historial/:id
  * Obtener historial de pagos de una deuda específica
@@ -1127,15 +1130,17 @@ app.post('/api/deudas/resetear-pagos', async (req, res) => {
 app.get('/api/deudas/historial/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const snapshot = await db.ref(`historial/${id}`).once('value');
+        const snapshot = await get(ref(db, `historial/${id}`));
         
         const historial = [];
-        snapshot.forEach((childSnapshot) => {
-            historial.push({
-                id: childSnapshot.key,
-                ...childSnapshot.val()
+        if (snapshot.exists()) {
+            snapshot.forEach((childSnapshot) => {
+                historial.push({
+                    id: childSnapshot.key,
+                    ...childSnapshot.val()
+                });
             });
-        });
+        }
         
         res.json({
             success: true,
@@ -1161,7 +1166,7 @@ app.post('/api/deudas/:id/agregar-historial', async (req, res) => {
         const { id } = req.params;
         const { monto, notas } = req.body;
         
-        const deudaSnapshot = await db.ref(`deudas/${id}`).once('value');
+        const deudaSnapshot = await get(ref(db, `deudas/${id}`));
         if (!deudaSnapshot.exists()) {
             return res.status(404).json({
                 success: false,
@@ -1179,7 +1184,7 @@ app.post('/api/deudas/:id/agregar-historial', async (req, res) => {
             nombre: deuda.nombre
         };
         
-        await db.ref(`historial/${id}`).push(entrada);
+        await push(ref(db, `historial/${id}`), entrada);
         
         res.json({
             success: true,
@@ -1194,27 +1199,30 @@ app.post('/api/deudas/:id/agregar-historial', async (req, res) => {
     }
 });
 
+
 /**
  * GET /api/deudas/por-tipo
  * Obtener deudas agrupadas por tipo
  */
 app.get('/api/deudas/por-tipo', async (req, res) => {
     try {
-        const snapshot = await db.ref('deudas').once('value');
+        const snapshot = await get(ref(db, 'deudas'));
         const porTipo = {};
         
-        snapshot.forEach((childSnapshot) => {
-            const deuda = {
-                id: childSnapshot.key,
-                ...childSnapshot.val()
-            };
-            
-            if (!porTipo[deuda.tipo]) {
-                porTipo[deuda.tipo] = [];
-            }
-            
-            porTipo[deuda.tipo].push(deuda);
-        });
+        if (snapshot.exists()) {
+            snapshot.forEach((childSnapshot) => {
+                const deuda = {
+                    id: childSnapshot.key,
+                    ...childSnapshot.val()
+                };
+                
+                if (!porTipo[deuda.tipo]) {
+                    porTipo[deuda.tipo] = [];
+                }
+                
+                porTipo[deuda.tipo].push(deuda);
+            });
+        }
         
         res.json({
             success: true,
@@ -1248,7 +1256,7 @@ app.post('/api/deudas/batch', async (req, res) => {
         const ids = [];
         
         deudas.forEach(deuda => {
-            const newKey = db.ref('deudas').push().key;
+            const newKey = push(ref(db, 'deudas')).key;
             ids.push(newKey);
             
             updates[`deudas/${newKey}`] = {
@@ -1263,7 +1271,7 @@ app.post('/api/deudas/batch', async (req, res) => {
             };
         });
         
-        await db.ref().update(updates);
+        await update(ref(db), updates);
         
         res.json({
             success: true,
