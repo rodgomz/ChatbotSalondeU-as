@@ -1034,574 +1034,163 @@ async function deleteAppointment(appointmentId) {
             toggleProfileMenu();
         }
 
-        // ============================================
-        // FUNCIONES DE DEUDAS
-        // ============================================
-        function inicializarDeudas() {
-            deudasRef.on('value', (snapshot) => {
-                deudas = [];
-                snapshot.forEach((childSnapshot) => {
-                    deudas.push({
-                        id: childSnapshot.key,
-                        ...childSnapshot.val()
-                    });
-                });
-                
-                if (document.getElementById('deudas-page').style.display !== 'none') {
-                    renderizarDeudas();
-                }
-                
-                verificarNotificaciones();
-            });
-        }
+      // ============================================
+// FUNCIONES DE DEUDAS (API VERSION)
+// ============================================
+async function inicializarDeudas() {
+    try {
+        const response = await fetch('/api/deudas');
+        const data = await response.json();
 
-        function cargarDeudas() {
-            renderizarDeudas();
-        }
+        if (data.success) {
+            deudas = data.deudas || [];
 
-        function renderizarDeudas() {
-            const grid = document.getElementById('deudas-grid');
-            
-            if (deudas.length === 0) {
-                grid.innerHTML = `
-                    <div style="grid-column: 1/-1; text-align: center; padding: 60px 20px;">
-                        <div style="font-size: 4rem; margin-bottom: 20px;">💳</div>
-                        <h3 style="color: #333; margin-bottom: 10px;">No hay pagos registrados</h3>
-                        <p style="color: #666; margin-bottom: 20px;">Comienza agregando tus compromisos financieros</p>
-                        <button class="btn btn-primary" onclick="agregarDeuda()">➕ Agregar Primer Pago</button>
-                    </div>
-                `;
-                return;
+            if (document.getElementById('deudas-page').style.display !== 'none') {
+                renderizarDeudas();
             }
 
-            // Ordenar por días hasta vencimiento
-            const deudasOrdenadas = [...deudas].sort((a, b) => {
-                if (a.pagado && !b.pagado) return 1;
-                if (!a.pagado && b.pagado) return -1;
-                return calcularDiasRestantes(a.diaPago) - calcularDiasRestantes(b.diaPago);
-            });
+            verificarNotificaciones();
+        }
+    } catch (error) {
+        console.error('Error inicializando deudas:', error);
+    }
+}
 
-            grid.innerHTML = deudasOrdenadas.map(deuda => {
-                const diasRestantes = calcularDiasRestantes(deuda.diaPago);
-                const urgente = diasRestantes <= 3 && diasRestantes >= 0;
-                const proximo = diasRestantes > 3 && diasRestantes <= 10;
-                
-                let estadoClase = '';
-                let estadoTexto = '';
-                
-                if (deuda.pagado) {
-                    estadoClase = 'pagado';
-                    estadoTexto = '✅ Pagado';
-                } else if (urgente) {
-                    estadoClase = 'urgente';
-                    estadoTexto = `⚠️ ${diasRestantes} día${diasRestantes !== 1 ? 's' : ''} restante${diasRestantes !== 1 ? 's' : ''}`;
-                } else if (proximo) {
-                    estadoClase = 'proximo';
-                    estadoTexto = `🔔 ${diasRestantes} días restantes`;
-                } else if (diasRestantes < 0) {
-                    estadoClase = 'urgente';
-                    estadoTexto = `❌ Vencido hace ${Math.abs(diasRestantes)} día${Math.abs(diasRestantes) !== 1 ? 's' : ''}`;
-                } else {
-                    estadoTexto = `📅 ${diasRestantes} días restantes`;
-                }
+function cargarDeudas() {
+    renderizarDeudas();
+}
 
-                const iconos = {
-                    'Arrendamiento': '🏠',
-                    'Luz': '💡',
-                    'Internet': '🌐',
-                    'Tarjeta de Crédito 1': '💳',
-                    'Tarjeta de Crédito 2': '💳',
-                    'Agua': '💧',
-                    'Gas': '🔥',
-                    'Teléfono': '📱',
-                    'Otro': '📋'
-                };
+function renderizarDeudas() {
+    const grid = document.getElementById('deudas-grid');
 
-                return `
-                    <div class="deuda-card ${estadoClase}">
-                        <div class="deuda-header-card">
-                            <h4 class="deuda-titulo">${deuda.nombre}</h4>
-                            <span class="deuda-icono">${iconos[deuda.tipo] || '📋'}</span>
-                        </div>
-                        
-                        <div class="deuda-info">
-                            <div class="deuda-info-item">
-                                <span class="deuda-info-label">Tipo:</span>
-                                <span class="deuda-info-value">${deuda.tipo}</span>
-                            </div>
-                            <div class="deuda-info-item">
-                                <span class="deuda-info-label">Día de pago:</span>
-                                <span class="deuda-info-value">${deuda.diaPago} de cada mes</span>
-                            </div>
-                            ${deuda.monto ? `
-                            <div class="deuda-info-item">
-                                <span class="deuda-info-label">Monto:</span>
-                                <span class="deuda-info-value">$${parseFloat(deuda.monto).toFixed(2)}</span>
-                            </div>
-                            ` : ''}
-                        </div>
-                        
-                        <div class="deuda-dias ${urgente ? 'urgente' : proximo ? 'proximo' : ''}">
-                            ${estadoTexto}
-                        </div>
-                        
-                        <div class="deuda-acciones">
-                            ${!deuda.pagado ? `
-                                <button class="btn-deuda btn-pagar" onclick="marcarComoPagado('${deuda.id}')">
-                                    ✓ Pagado
-                                </button>
-                            ` : `
-                                <button class="btn-deuda btn-pagar" onclick="marcarComoPendiente('${deuda.id}')">
-                                    ↺ Pendiente
-                                </button>
-                            `}
-                            <button class="btn-deuda btn-editar" onclick="editarDeuda('${deuda.id}')">
-                                ✏️
-                            </button>
-                            <button class="btn-deuda btn-eliminar" onclick="eliminarDeuda('${deuda.id}')">
-                                🗑️
-                            </button>
-                        </div>
-                    </div>
-                `;
-            }).join('');
+    if (!deudas || deudas.length === 0) {
+        grid.innerHTML = `
+            <div style="grid-column: 1/-1; text-align: center; padding: 60px 20px;">
+                <div style="font-size: 4rem; margin-bottom: 20px;">💳</div>
+                <h3 style="color: #333; margin-bottom: 10px;">No hay pagos registrados</h3>
+                <p style="color: #666; margin-bottom: 20px;">Comienza agregando tus compromisos financieros</p>
+                <button class="btn btn-primary" onclick="agregarDeuda()">➕ Agregar Primer Pago</button>
+            </div>
+        `;
+        return;
+    }
+
+    const deudasOrdenadas = [...deudas].sort((a, b) => {
+        if (a.pagado && !b.pagado) return 1;
+        if (!a.pagado && b.pagado) return -1;
+        return calcularDiasRestantes(a.diaPago) - calcularDiasRestantes(b.diaPago);
+    });
+
+    grid.innerHTML = deudasOrdenadas.map(deuda => {
+        const diasRestantes = calcularDiasRestantes(deuda.diaPago);
+        const urgente = diasRestantes <= 3 && diasRestantes >= 0;
+        const proximo = diasRestantes > 3 && diasRestantes <= 10;
+
+        let estadoClase = '';
+        let estadoTexto = '';
+
+        if (deuda.pagado) {
+            estadoClase = 'pagado';
+            estadoTexto = '✅ Pagado';
+        } else if (urgente) {
+            estadoClase = 'urgente';
+            estadoTexto = `⚠️ ${diasRestantes} día${diasRestantes !== 1 ? 's' : ''} restante${diasRestantes !== 1 ? 's' : ''}`;
+        } else if (proximo) {
+            estadoClase = 'proximo';
+            estadoTexto = `🔔 ${diasRestantes} días restantes`;
+        } else if (diasRestantes < 0) {
+            estadoClase = 'urgente';
+            estadoTexto = `❌ Vencido hace ${Math.abs(diasRestantes)} día${Math.abs(diasRestantes) !== 1 ? 's' : ''}`;
+        } else {
+            estadoTexto = `📅 ${diasRestantes} días restantes`;
         }
 
-        function calcularDiasRestantes(diaPago) {
-            const hoy = new Date();
-            const mesActual = hoy.getMonth();
-            const anioActual = hoy.getFullYear();
-            
-            let fechaPago = new Date(anioActual, mesActual, diaPago);
-            
-            // Si la fecha ya pasó este mes, usar el próximo mes
-            if (fechaPago < hoy) {
-                fechaPago = new Date(anioActual, mesActual + 1, diaPago);
-            }
-            
-            const diffTime = fechaPago - hoy;
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            
-            return diffDays;
-        }
+        const iconos = {
+            'Arrendamiento': '🏠',
+            'Luz': '💡',
+            'Internet': '🌐',
+            'Tarjeta de Crédito 1': '💳',
+            'Tarjeta de Crédito 2': '💳',
+            'Agua': '💧',
+            'Gas': '🔥',
+            'Teléfono': '📱',
+            'Otro': '📋'
+        };
 
-        function agregarDeuda() {
-            const tiposDeuda = [
-                'Arrendamiento',
-                'Luz',
-                'Internet',
-                'Tarjeta de Crédito 1',
-                'Tarjeta de Crédito 2',
-                'Agua',
-                'Gas',
-                'Teléfono',
-                'Otro'
-            ];
-
-            const tiposOptions = tiposDeuda.map(tipo => 
-                `<option value="${tipo}">${tipo}</option>`
-            ).join('');
-
-            Swal.fire({
-                title: '➕ Agregar Nuevo Pago',
-                html: `
-                    <div style="text-align: left; padding: 10px;">
-                        <div style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Tipo de Pago:</label>
-                            <select id="tipo-deuda" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-                                <option value="">Seleccionar tipo...</option>
-                                ${tiposOptions}
-                            </select>
-                        </div>
-                        
-                        <div style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Nombre/Descripción:</label>
-                            <input type="text" id="nombre-deuda" class="form-control" placeholder="Ej: Renta departamento, CFE, etc." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-                        </div>
-                        
-                        <div style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Día de Pago (1-31):</label>
-                            <input type="number" id="dia-pago" class="form-control" min="1" max="31" placeholder="Ej: 15" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-                        </div>
-                        
-                        <div style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Monto (opcional):</label>
-                            <input type="number" id="monto-deuda" class="form-control" step="0.01" min="0" placeholder="0.00" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-                        </div>
-                        
-                        <div style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Notas (opcional):</label>
-                            <textarea id="notas-deuda" class="form-control" rows="3" placeholder="Información adicional..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;"></textarea>
-                        </div>
-                    </div>
-                `,
-                width: '500px',
-                showCancelButton: true,
-                confirmButtonText: '💾 Guardar',
-                cancelButtonText: '❌ Cancelar',
-                preConfirm: () => {
-                    const tipo = document.getElementById('tipo-deuda').value;
-                    const nombre = document.getElementById('nombre-deuda').value;
-                    const diaPago = document.getElementById('dia-pago').value;
-                    const monto = document.getElementById('monto-deuda').value;
-                    const notas = document.getElementById('notas-deuda').value;
-
-                    if (!tipo || !nombre || !diaPago) {
-                        Swal.showValidationMessage('Por favor completa los campos obligatorios');
-                        return false;
-                    }
-
-                    if (diaPago < 1 || diaPago > 31) {
-                        Swal.showValidationMessage('El día debe estar entre 1 y 31');
-                        return false;
-                    }
-
-                    return {
-                        tipo,
-                        nombre,
-                        diaPago: parseInt(diaPago),
-                        monto: monto ? parseFloat(monto) : null,
-                        notas: notas || '',
-                        pagado: false,
-                        fechaCreacion: new Date().toISOString()
-                    };
-                }
-            }).then(async (result) => {
-                if (result.isConfirmed) {
-                    try {
-                        const response = await fetch('/api/deudas', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(result.value)
-                        });
-
-                        const data = await response.json();
-
-                        if (data.success) {
-                            Swal.fire({
-                                icon: 'success',
-                                title: '✅ Pago Agregado',
-                                text: 'El pago se ha registrado exitosamente',
-                                timer: 2000,
-                                showConfirmButton: false
-                            });
-                        } else {
-                            throw new Error(data.error || 'Error al guardar');
-                        }
-                    } catch (error) {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Error',
-                            text: 'No se pudo guardar el pago: ' + error.message
-                        });
-                    }
-                }
-            });
-        }
-
-        function editarDeuda(id) {
-            const deuda = deudas.find(d => d.id === id);
-            if (!deuda) return;
-
-            const tiposDeuda = [
-                'Arrendamiento',
-                'Luz',
-                'Internet',
-                'Tarjeta de Crédito 1',
-                'Tarjeta de Crédito 2',
-                'Agua',
-                'Gas',
-                'Teléfono',
-                'Otro'
-            ];
-
-            const tiposOptions = tiposDeuda.map(tipo => 
-                `<option value="${tipo}" ${deuda.tipo === tipo ? 'selected' : ''}>${tipo}</option>`
-            ).join('');
-
-            Swal.fire({
-                title: '✏️ Editar Pago',
-                html: `
-                    <div style="text-align: left; padding: 10px;">
-                        <div style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Tipo de Pago:</label>
-                            <select id="tipo-deuda" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-                                ${tiposOptions}
-                            </select>
-                        </div>
-                        
-                        <div style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Nombre/Descripción:</label>
-                            <input type="text" id="nombre-deuda" class="form-control" value="${deuda.nombre}" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-                        </div>
-                        
-                        <div style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Día de Pago (1-31):</label>
-                            <input type="number" id="dia-pago" class="form-control" min="1" max="31" value="${deuda.diaPago}" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-                        </div>
-                        
-                        <div style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Monto:</label>
-                            <input type="number" id="monto-deuda" class="form-control" step="0.01" min="0" value="${deuda.monto || ''}" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-                        </div>
-                        
-                        <div style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Notas:</label>
-                            <textarea id="notas-deuda" class="form-control" rows="3" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">${deuda.notas || ''}</textarea>
-                        </div>
-                    </div>
-                `,
-                width: '500px',
-                showCancelButton: true,
-                confirmButtonText: '💾 Actualizar',
-                cancelButtonText: '❌ Cancelar',
-                preConfirm: () => {
-                    const tipo = document.getElementById('tipo-deuda').value;
-                    const nombre = document.getElementById('nombre-deuda').value;
-                    const diaPago = document.getElementById('dia-pago').value;
-                    const monto = document.getElementById('monto-deuda').value;
-                    const notas = document.getElementById('notas-deuda').value;
-
-                    if (!tipo || !nombre || !diaPago) {
-                        Swal.showValidationMessage('Por favor completa los campos obligatorios');
-                        return false;
-                    }
-
-                    if (diaPago < 1 || diaPago > 31) {
-                        Swal.showValidationMessage('El día debe estar entre 1 y 31');
-                        return false;
-                    }
-
-                    return {
-                        tipo,
-                        nombre,
-                        diaPago: parseInt(diaPago),
-                        monto: monto ? parseFloat(monto) : null,
-                        notas: notas || ''
-                    };
-                }
-            }).then(async (result) => {
-                if (result.isConfirmed) {
-                    try {
-                        const response = await fetch(`/api/deudas/${id}`, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(result.value)
-                        });
-
-                        const data = await response.json();
-
-                        if (data.success) {
-                            Swal.fire({
-                                icon: 'success',
-                                title: '✅ Actualizado',
-                                text: 'El pago se ha actualizado exitosamente',
-                                timer: 2000,
-                                showConfirmButton: false
-                            });
-                        } else {
-                            throw new Error(data.error || 'Error al actualizar');
-                        }
-                    } catch (error) {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Error',
-                            text: 'No se pudo actualizar: ' + error.message
-                        });
-                    }
-                }
-            });
-        }
-
-        async function marcarComoPagado(id) {
-            try {
-                const response = await fetch(`/api/deudas/${id}/pagar`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pagado: true })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    Swal.fire({
-                        icon: 'success',
-                        title: '✅ Marcado como Pagado',
-                        timer: 1500,
-                        showConfirmButton: false
-                    });
-                } else {
-                    throw new Error(data.error || 'Error al actualizar');
-                }
-            } catch (error) {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: error.message
-                });
-            }
-        }
-
-        async function marcarComoPendiente(id) {
-            try {
-                const response = await fetch(`/api/deudas/${id}/pagar`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pagado: false })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    Swal.fire({
-                        icon: 'info',
-                        title: '📋 Marcado como Pendiente',
-                        timer: 1500,
-                        showConfirmButton: false
-                    });
-                } else {
-                    throw new Error(data.error || 'Error al actualizar');
-                }
-            } catch (error) {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: error.message
-                });
-            }
-        }
-
-        function eliminarDeuda(id) {
-            const deuda = deudas.find(d => d.id === id);
-            if (!deuda) return;
-
-            Swal.fire({
-                title: '¿Eliminar pago?',
-                html: `¿Estás seguro de que deseas eliminar <strong>${deuda.nombre}</strong>?<br>Esta acción no se puede deshacer.`,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#dc3545',
-                cancelButtonColor: '#6c757d',
-                confirmButtonText: 'Sí, eliminar',
-                cancelButtonText: 'Cancelar'
-            }).then(async (result) => {
-                if (result.isConfirmed) {
-                    try {
-                        const response = await fetch(`/api/deudas/${id}`, {
-                            method: 'DELETE'
-                        });
-
-                        const data = await response.json();
-
-                        if (data.success) {
-                            Swal.fire({
-                                icon: 'success',
-                                title: '✅ Eliminado',
-                                text: 'El pago se ha eliminado exitosamente',
-                                timer: 2000,
-                                showConfirmButton: false
-                            });
-                        } else {
-                            throw new Error(data.error || 'Error al eliminar');
-                        }
-                    } catch (error) {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Error',
-                            text: error.message
-                        });
-                    }
-                }
-            });
-        }
-
-        // ============================================
-        // SISTEMA DE NOTIFICACIONES
-        // ============================================
-        async function verificarNotificaciones() {
-            try {
-                const response = await fetch('/api/deudas/notificaciones');
-                const data = await response.json();
-
-                if (data.success && data.notificaciones) {
-                    notificacionesPendientes = data.notificaciones;
-                    
-                    // Actualizar badge
-                    const badge = document.getElementById('notification-badge');
-                    if (notificacionesPendientes.length > 0) {
-                        badge.textContent = notificacionesPendientes.length;
-                        badge.style.display = 'flex';
-                    } else {
-                        badge.style.display = 'none';
-                    }
-
-                    // Mostrar notificaciones urgentes
-                    const urgentes = notificacionesPendientes.filter(n => n.urgente);
-                    urgentes.forEach(notif => {
-                        mostrarNotificacionToast(notif);
-                    });
-                }
-            } catch (error) {
-                console.error('Error verificando notificaciones:', error);
-            }
-        }
-
-        function mostrarNotificacionToast(notif) {
-            const container = document.getElementById('notification-container');
-            const notifId = `notif-${Date.now()}`;
-            
-            const notifElement = document.createElement('div');
-            notifElement.id = notifId;
-            notifElement.className = `notification-item ${notif.urgente ? 'urgent' : ''}`;
-            notifElement.innerHTML = `
-                <div class="notification-icon">${notif.urgente ? '⚠️' : '🔔'}</div>
-                <div class="notification-content">
-                    <h6>${notif.titulo}</h6>
-                    <p>${notif.mensaje}</p>
+        return `
+            <div class="deuda-card ${estadoClase}">
+                <div class="deuda-header-card">
+                    <h4 class="deuda-titulo">${deuda.nombre}</h4>
+                    <span class="deuda-icono">${iconos[deuda.tipo] || '📋'}</span>
                 </div>
-            `;
-            
-            container.appendChild(notifElement);
+                <div class="deuda-info">
+                    <div class="deuda-info-item"><span class="deuda-info-label">Tipo:</span><span class="deuda-info-value">${deuda.tipo}</span></div>
+                    <div class="deuda-info-item"><span class="deuda-info-label">Día de pago:</span><span class="deuda-info-value">${deuda.diaPago} de cada mes</span></div>
+                    ${deuda.monto ? `<div class="deuda-info-item"><span class="deuda-info-label">Monto:</span><span class="deuda-info-value">$${parseFloat(deuda.monto).toFixed(2)}</span></div>` : ''}
+                </div>
+                <div class="deuda-dias ${urgente ? 'urgente' : proximo ? 'proximo' : ''}">${estadoTexto}</div>
+                <div class="deuda-acciones">
+                    ${!deuda.pagado
+                        ? `<button class="btn-deuda btn-pagar" onclick="marcarComoPagado('${deuda.id}')">✓ Pagado</button>`
+                        : `<button class="btn-deuda btn-pagar" onclick="marcarComoPendiente('${deuda.id}')">↺ Pendiente</button>`}
+                    <button class="btn-deuda btn-editar" onclick="editarDeuda('${deuda.id}')">✏️</button>
+                    <button class="btn-deuda btn-eliminar" onclick="eliminarDeuda('${deuda.id}')">🗑️</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
 
-            // Auto-remover después de 10 segundos
-            setTimeout(() => {
-                notifElement.style.animation = 'slideIn 0.3s ease reverse';
-                setTimeout(() => {
-                    notifElement.remove();
-                }, 300);
-            }, 10000);
+function calcularDiasRestantes(diaPago) {
+    const hoy = new Date();
+    const mesActual = hoy.getMonth();
+    const anioActual = hoy.getFullYear();
 
-            // Remover al hacer click
-            notifElement.addEventListener('click', () => {
-                notifElement.style.animation = 'slideIn 0.3s ease reverse';
-                setTimeout(() => {
-                    notifElement.remove();
-                }, 300);
-            });
-        }
+    let fechaPago = new Date(anioActual, mesActual, diaPago);
+    if (fechaPago < hoy) fechaPago = new Date(anioActual, mesActual + 1, diaPago);
 
-        // ============================================
-        // INICIALIZACIÓN CON API
-        // ============================================
-        async function inicializarDeudas() {
-            try {
-                const response = await fetch('/api/deudas');
-                const data = await response.json();
+    const diffTime = fechaPago - hoy;
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+}
 
-                if (data.success) {
-                    deudas = data.deudas || [];
-                    
-                    if (document.getElementById('deudas-page').style.display !== 'none') {
-                        renderizarDeudas();
-                    }
-                    
-                    verificarNotificaciones();
-                }
-            } catch (error) {
-                console.error('Error inicializando deudas:', error);
+// ============================================
+// NOTIFICACIONES
+// ============================================
+async function verificarNotificaciones() {
+    try {
+        const response = await fetch('/api/deudas/notificaciones');
+        const data = await response.json();
+
+        if (data.success && data.notificaciones) {
+            notificacionesPendientes = data.notificaciones;
+            const badge = document.getElementById('notification-badge');
+
+            if (notificacionesPendientes.length > 0) {
+                badge.textContent = notificacionesPendientes.length;
+                badge.style.display = 'flex';
+            } else {
+                badge.style.display = 'none';
             }
-        }
 
+            const urgentes = notificacionesPendientes.filter(n => n.urgente);
+            urgentes.forEach(notif => mostrarNotificacionToast(notif));
+        }
+    } catch (error) {
+        console.error('Error verificando notificaciones:', error);
+    }
+}
+
+function mostrarNotificacionToast(notif) {
+    const container = document.getElementById('notification-container');
+    const notifElement = document.createElement('div');
+    notifElement.className = `notification-item ${notif.urgente ? 'urgent' : ''}`;
+    notifElement.innerHTML = `
+        <div class="notification-icon">${notif.urgente ? '⚠️' : '🔔'}</div>
+        <div class="notification-content"><h6>${notif.titulo}</h6><p>${notif.mensaje}</p></div>
+    `;
+    container.appendChild(notifElement);
+    setTimeout(() => notifElement.remove(), 10000);
+}
 // ============================================
 // FUNCIONES DEL BOT
 // ============================================
