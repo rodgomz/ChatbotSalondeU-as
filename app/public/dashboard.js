@@ -1223,46 +1223,59 @@ async function eliminarDeuda(id) {
 
 //Cargar deuda
 async function cargarDeudas() {
-    const listaDeudas = document.getElementById('listaDeudas'); // ID del div
-    if (!listaDeudas) return;
+    const contenedor = document.getElementById('deudas-grid');
+    if (!contenedor) return;
 
-    listaDeudas.innerHTML = 'Cargando deudas...';
+    // Mostrar mensaje de carga
+    contenedor.innerHTML = `<p style="text-align: center; color: #999;">Cargando deudas...</p>`;
 
     try {
         const res = await fetch('/api/deudas');
         const data = await res.json();
 
-        if (!data.success) {
-            listaDeudas.innerHTML = '❌ Error al cargar deudas';
-            console.error(data.error);
+        if (!data.success || !data.deudas || data.deudas.length === 0) {
+            contenedor.innerHTML = `<p style="text-align: center; color: #999;">No hay deudas registradas.</p>`;
             return;
         }
 
-        const deudas = data.deudas || [];
-        if (deudas.length === 0) {
-            listaDeudas.innerHTML = '<p class="text-muted">No hay deudas registradas.</p>';
-            return;
-        }
+        // Limpiar contenedor
+        contenedor.innerHTML = '';
 
-        listaDeudas.innerHTML = ''; // limpiar lista anterior
+        data.deudas.forEach(deuda => {
+            const diasRestantes = calcularDiasRestantes(deuda.diaPago);
+            const estado = deuda.pagado
+                ? `<span class="badge bg-success">Pagado</span>`
+                : `<span class="badge bg-danger">Pendiente</span>`;
 
-        deudas.forEach(deuda => {
+            const fecha = deuda.fechaPago
+                ? new Date(deuda.fechaPago).toLocaleDateString()
+                : '-';
+
             const item = document.createElement('div');
-            item.className = 'deuda-item card mb-2 p-2';
+            item.className = 'card shadow-sm mb-3';
+            item.style.padding = '15px';
             item.innerHTML = `
-                <strong>${deuda.nombre}</strong> - ${deuda.tipo} - ${deuda.monto ? '$' + deuda.monto.toFixed(2) : 'Sin monto'}
-                <div class="mt-2">
-                    <button onclick="eliminarDeuda('${deuda.id}')" class="btn btn-danger btn-sm me-1">Eliminar</button>
-                    <button onclick="togglePago('${deuda.id}', ${deuda.pagado})" class="btn btn-${deuda.pagado ? 'warning' : 'success'} btn-sm">
-                        ${deuda.pagado ? 'Marcar Pendiente' : 'Marcar Pagada'}
+                <h5>${deuda.nombre}</h5>
+                <p>
+                    <strong>Tipo:</strong> ${deuda.tipo} <br>
+                    <strong>Día de pago:</strong> ${deuda.diaPago} <br>
+                    <strong>Monto:</strong> $${deuda.monto || '0.00'} <br>
+                    <strong>Estado:</strong> ${estado} <br>
+                    <strong>Fecha Pago:</strong> ${fecha} <br>
+                    <strong>Días restantes:</strong> ${diasRestantes >= 0 ? diasRestantes : 'Vencida'}
+                </p>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-primary" onclick="editarDeuda('${deuda.id}')">✏️ Editar</button>
+                    <button class="btn btn-sm btn-danger" onclick="eliminarDeuda('${deuda.id}')">🗑️ Eliminar</button>
+                    <button class="btn btn-sm btn-${deuda.pagado ? 'warning' : 'success'}" onclick="togglePago('${deuda.id}', ${deuda.pagado})">
+                        ${deuda.pagado ? '🔁 Marcar Pendiente' : '💰 Marcar Pagado'}
                     </button>
                 </div>
             `;
-            listaDeudas.appendChild(item);
+            contenedor.appendChild(item);
         });
-
     } catch (error) {
-        listaDeudas.innerHTML = '❌ Error al cargar deudas';
+        contenedor.innerHTML = `<p style="text-align: center; color: red;">Error al cargar las deudas: ${error.message}</p>`;
         console.error('Error cargando deudas:', error);
     }
 }
