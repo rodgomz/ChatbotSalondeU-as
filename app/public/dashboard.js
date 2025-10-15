@@ -1559,73 +1559,159 @@ async function resetearPagos() {
 // ============================================
 
 async function cargarNotificaciones() {
+    // Mostrar loading
+    Swal.fire({
+        title: '🔔 Cargando Notificaciones',
+        html: '<div class="spinner-border text-primary" role="status"></div>',
+        showConfirmButton: false,
+        allowOutsideClick: false,
+        customClass: { container: 'swal-on-top' }
+    });
+
     try {
         const res = await fetch('/api/deudas/notificaciones');
+        
+        if (!res.ok) {
+            throw new Error(`Error HTTP: ${res.status}`);
+        }
+        
         const data = await res.json();
         
-        if (!data.success || !data.notificaciones || data.notificaciones.length === 0) {
+        console.log('Notificaciones recibidas:', data); // Para debug
+        
+        if (!data.success) {
+            throw new Error(data.error || 'Error al obtener notificaciones');
+        }
+        
+        if (!data.notificaciones || data.notificaciones.length === 0) {
             Swal.fire({
                 icon: 'info',
                 title: '🔔 Notificaciones',
-                html: '<p style="color: #999; padding: 20px;">No hay notificaciones pendientes</p>',
+                html: `
+                    <div style="padding: 40px 20px; text-align: center;">
+                        <div style="font-size: 4rem; margin-bottom: 20px; opacity: 0.5;">✅</div>
+                        <h4 style="color: #666; margin-bottom: 10px;">¡Todo al día!</h4>
+                        <p style="color: #999;">No hay notificaciones pendientes en este momento</p>
+                    </div>
+                `,
                 customClass: { container: 'swal-on-top' }
             });
+            actualizarBadgeNotificaciones(0);
             return;
         }
         
         const notificaciones = data.notificaciones;
         actualizarBadgeNotificaciones(notificaciones.length);
         
-        const contenidoHTML = `
-            <div style="max-height: 500px; overflow-y: auto; text-align: left;">
-                ${notificaciones.map(notif => `
-                    <div class="notificacion-item" style="
-                        border-left: 4px solid ${notif.urgente ? '#dc3545' : '#ffc107'};
-                        padding: 15px;
-                        margin-bottom: 15px;
-                        background: ${notif.urgente ? '#fff5f5' : '#fffbf0'};
-                        border-radius: 8px;
-                    ">
-                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
-                            <strong style="color: ${notif.urgente ? '#dc3545' : '#856404'};">
-                                ${notif.titulo}
-                            </strong>
-                            <span style="background: ${notif.urgente ? '#dc3545' : '#ffc107'}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem;">
-                                ${notif.tipo}
-                            </span>
-                        </div>
-                        <p style="margin: 8px 0; color: #333;">${notif.mensaje}</p>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
-                            <span style="color: #666; font-size: 0.9rem;">💰 ${formatearMoneda(notif.monto)}</span>
-                            <button onclick="verDeudaDesdeNotificacion('${notif.id}')" class="btn btn-sm btn-primary">
-                                Ver Detalles
-                            </button>
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
-        `;
+        // Separar por urgencia
+        const urgentes = notificaciones.filter(n => n.urgente);
+        const normales = notificaciones.filter(n => !n.urgente);
+        
+        let contenidoHTML = '<div style="max-height: 500px; overflow-y: auto; text-align: left;">';
+        
+        // Mostrar urgentes primero
+        if (urgentes.length > 0) {
+            contenidoHTML += `
+                <div style="margin-bottom: 20px;">
+                    <h5 style="color: #dc3545; margin-bottom: 15px;">⚠️ Urgentes (${urgentes.length})</h5>
+                    ${urgentes.map(notif => crearTarjetaNotificacion(notif)).join('')}
+                </div>
+            `;
+        }
+        
+        // Mostrar normales
+        if (normales.length > 0) {
+            contenidoHTML += `
+                <div>
+                    <h5 style="color: #ffc107; margin-bottom: 15px;">🔔 Próximos (${normales.length})</h5>
+                    ${normales.map(notif => crearTarjetaNotificacion(notif)).join('')}
+                </div>
+            `;
+        }
+        
+        contenidoHTML += '</div>';
         
         Swal.fire({
-            title: '🔔 Notificaciones de Pagos',
+            title: `🔔 Notificaciones de Pagos (${notificaciones.length})`,
             html: contenidoHTML,
             width: '700px',
             showCloseButton: true,
             showConfirmButton: false,
             customClass: {
                 container: 'swal-on-top'
-            }
+            },
+            footer: `
+                <div style="text-align: center; color: #666; font-size: 0.9rem;">
+                    <p style="margin: 0;">💡 Las notificaciones se actualizan automáticamente cada 30 minutos</p>
+                </div>
+            `
         });
         
     } catch (error) {
         console.error('Error cargando notificaciones:', error);
         Swal.fire({
             icon: 'error',
-            title: '❌ Error',
-            text: 'No se pudieron cargar las notificaciones',
-            customClass: { container: 'swal-on-top' }
+            title: '❌ Error de Conexión',
+            html: `
+                <p>No se pudieron cargar las notificaciones</p>
+                <p style="color: #666; font-size: 0.9rem; margin-top: 10px;">
+                    <strong>Detalles:</strong> ${error.message}
+                </p>
+                <p style="color: #999; font-size: 0.85rem; margin-top: 10px;">
+                    Verifica tu conexión a internet e intenta nuevamente
+                </p>
+            `,
+            customClass: { container: 'swal-on-top' },
+            showConfirmButton: true,
+            confirmButtonText: '🔄 Reintentar'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                cargarNotificaciones();
+            }
         });
     }
+}
+
+function crearTarjetaNotificacion(notif) {
+    const esUrgente = notif.urgente;
+    const colorBorde = esUrgente ? '#dc3545' : '#ffc107';
+    const colorFondo = esUrgente ? '#fff5f5' : '#fffbf0';
+    const colorTexto = esUrgente ? '#dc3545' : '#856404';
+    
+    return `
+        <div class="notificacion-item" style="
+            border-left: 4px solid ${colorBorde};
+            padding: 15px;
+            margin-bottom: 15px;
+            background: ${colorFondo};
+            border-radius: 8px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        " onmouseover="this.style.transform='translateX(5px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)';" onmouseout="this.style.transform='translateX(0)'; this.style.boxShadow='none';">
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                <strong style="color: ${colorTexto}; font-size: 1.05rem;">
+                    ${notif.titulo}
+                </strong>
+                <span style="background: ${colorBorde}; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">
+                    ${notif.tipo}
+                </span>
+            </div>
+            <p style="margin: 8px 0; color: #333; font-size: 0.95rem;">${notif.mensaje}</p>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid ${esUrgente ? '#fdd' : '#ffe'};;">
+                <div>
+                    <span style="color: #666; font-size: 0.9rem; display: block;">💰 ${formatearMoneda(notif.monto)}</span>
+                    <span style="color: #999; font-size: 0.8rem;">
+                        ${notif.diasRestantes === 0 ? '⏰ Vence HOY' : 
+                          notif.diasRestantes === 1 ? '⏰ Vence MAÑANA' :
+                          notif.diasRestantes < 0 ? `❌ Vencido hace ${Math.abs(notif.diasRestantes)} día${Math.abs(notif.diasRestantes) !== 1 ? 's' : ''}` :
+                          `📅 En ${notif.diasRestantes} días`}
+                    </span>
+                </div>
+                <button onclick="verDeudaDesdeNotificacion('${notif.id}')" class="btn btn-sm btn-${esUrgente ? 'danger' : 'warning'}" style="font-weight: 500;">
+                    Ver Detalles →
+                </button>
+            </div>
+        </div>
+    `;
 }
 
 function actualizarBadgeNotificaciones(cantidad) {
