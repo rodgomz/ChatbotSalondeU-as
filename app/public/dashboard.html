@@ -1222,36 +1222,109 @@
     </div>
 
     <!-- PÁGINA DE DEUDAS (Modal/Overlay) -->
-    <div id="deudas-page" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); z-index: 10000; overflow-y: auto; padding: 20px;">
+   <div id="deudas-page" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); z-index: 10000; overflow-y: auto; padding: 20px;">
         <div style="max-width: 1400px; margin: 0 auto; background: white; border-radius: 15px; min-height: calc(100vh - 40px);">
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 15px 15px 0 0; position: sticky; top: 0; z-index: 100;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h2 style="margin: 0;">💳 Gestión de Deudas y Pagos</h2>
-                    <button onclick="cerrarDeudas()" style="background: rgba(255,255,255,0.2); border: none; color: white; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 1rem; transition: all 0.3s ease;">
+            
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 15px 15px 0 0; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                    <div>
+                        <h2 style="margin: 0 0 5px 0;">💳 Gestión de Deudas y Pagos</h2>
+                        <p style="margin: 0; opacity: 0.9; font-size: 0.95rem;">Administra tus compromisos financieros mensuales</p>
+                    </div>
+                    <button onclick="cerrarDeudas()" style="background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.3); color: white; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-size: 1rem; transition: all 0.3s ease; font-weight: 500;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">
                         ✕ Cerrar
                     </button>
                 </div>
             </div>
+ <!-- Resumen Estadístico -->
+            <div style="padding: 0 30px;">
+                <div id="resumen-stats" style="margin-top: -40px;">
+                    <div class="stat-item">
+                        <div class="stat-number">0</div>
+                        <div class="stat-label">Total Pagos</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number text-success">0</div>
+                        <div class="stat-label">Pagados</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number text-danger">0</div>
+                        <div class="stat-label">Pendientes</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number text-warning">0</div>
+                        <div class="stat-label">Por Vencer</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number">$0.00</div>
+                        <div class="stat-label">Total</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number text-danger">$0.00</div>
+                        <div class="stat-label">Pendiente</div>
+                    </div>
+                </div>
+            </div>
 
+            <!-- Contenido Principal -->
             <div class="deudas-container">
+                <!-- Header con botones de acción -->
                 <div class="deudas-header">
                     <div>
-                        <h3>Próximos Pagos</h3>
-                        <p style="color: #666; margin: 5px 0 0;">Gestiona tus compromisos financieros</p>
+                        <h3 style="margin: 0 0 5px 0; color: #333;">📋 Próximos Pagos</h3>
+                        <p style="color: #666; margin: 0; font-size: 0.9rem;">Gestiona tus compromisos financieros del mes</p>
                     </div>
-                    <button class="btn btn-success" onclick="agregarDeuda()">
-                        ➕ Agregar Pago
-                    </button>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn btn-success" onclick="agregarDeuda()">
+                            ➕ Agregar Pago
+                        </button>
+                        <button class="btn btn-info text-white" onclick="agregarDeudasLote()">
+                            📦 Agregar Varios
+                        </button>
+                        <button class="btn btn-primary" onclick="verDeudasPorTipo()">
+                            📊 Ver por Tipo
+                        </button>
+                        <button class="btn btn-warning" onclick="resetearPagos()">
+                            🔄 Resetear Pagos
+                        </button>
+                    </div>
                 </div>
+
+                <!-- Grid de Deudas -->
                 <div class="deudas-grid" id="deudas-grid">
-                    <p style="text-align: center; color: #999; padding: 40px;">
-                        Cargando deudas...
-                    </p>
+                    <div style="text-align: center; padding: 60px 20px; grid-column: 1 / -1;">
+                        <div style="font-size: 4rem; margin-bottom: 20px; opacity: 0.5;">💳</div>
+                        <h3 style="color: #999; margin-bottom: 10px;">Cargando pagos...</h3>
+                        <div class="spinner-border text-primary mt-3" role="status">
+                            <span class="visually-hidden">Cargando...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer con información adicional -->
+            <div style="padding: 30px; background: #f8f9fa; border-radius: 0 0 15px 15px; margin-top: 30px;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+                    <div style="text-align: center; padding: 20px;">
+                        <div style="font-size: 2rem; margin-bottom: 10px;">📅</div>
+                        <h5 style="color: #333; margin-bottom: 5px;">Pagos Automáticos</h5>
+                        <p style="color: #666; font-size: 0.9rem; margin: 0;">Configura recordatorios para cada pago</p>
+                    </div>
+                    <div style="text-align: center; padding: 20px;">
+                        <div style="font-size: 2rem; margin-bottom: 10px;">📊</div>
+                        <h5 style="color: #333; margin-bottom: 5px;">Historial</h5>
+                        <p style="color: #666; font-size: 0.9rem; margin: 0;">Consulta el historial de cada pago</p>
+                    </div>
+                    <div style="text-align: center; padding: 20px;">
+                        <div style="font-size: 2rem; margin-bottom: 10px;">🔔</div>
+                        <h5 style="color: #333; margin-bottom: 5px;">Notificaciones</h5>
+                        <p style="color: #666; font-size: 0.9rem; margin: 0;">Recibe alertas 10, 7, 3 y 1 día antes</p>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-
     <!-- Bootstrap JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
      <!-- Tu archivo dashboard.js -->

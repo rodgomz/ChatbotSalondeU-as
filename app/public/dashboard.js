@@ -974,22 +974,44 @@ function toggleProfileMenu() {
 function irADeudas() {
     document.getElementById('deudas-page').style.display = 'block';
     document.body.style.overflow = 'hidden';
-    // Cerrar dropdown si estaba abierto
     document.getElementById('profile-dropdown').classList.remove('show');
     cargarDeudas();
+    cargarResumenDeudas();
 }
-
 
 function cerrarDeudas() {
     document.getElementById('deudas-page').style.display = 'none';
     document.body.style.overflow = 'auto';
 }
 
+function verNotificaciones() {
+    document.getElementById('profile-dropdown').classList.remove('show');
+    cargarNotificaciones();
+}
+
+function configuracion() {
+    Swal.fire('⚙️ Configuración', 'Función en desarrollo', 'info');
+}
+
+function cerrarSesion() {
+    Swal.fire({
+        title: '🚪 Cerrar Sesión',
+        text: '¿Estás seguro de que deseas salir?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, salir',
+        cancelButtonText: 'Cancelar'
+    }).then(result => {
+        if (result.isConfirmed) {
+            window.location.href = '/login';
+        }
+    });
+}
+
 // ============================================
 // FUNCIONES AUXILIARES
 // ============================================
 
-// Calcula los días restantes hasta el próximo pago
 function calcularDiasRestantes(diaPago) {
     const hoy = new Date();
     const mesActual = hoy.getMonth();
@@ -1004,11 +1026,25 @@ function calcularDiasRestantes(diaPago) {
     return diffDays;
 }
 
+function formatearMoneda(monto) {
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD'
+    }).format(monto || 0);
+}
+
+function formatearFecha(fecha) {
+    if (!fecha) return '-';
+    return new Date(fecha).toLocaleDateString('es-MX', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+}
+
 // ============================================
 // FUNCIONES DE DEUDAS
 // ============================================
-
-// Inicializa la lista de deudas
 async function inicializarDeudas() {
     try {
         const res = await fetch('/api/deudas');
@@ -1025,45 +1061,96 @@ async function inicializarDeudas() {
     }
 }
 
-// Renderiza las tarjetas de deudas
 function renderizarDeudas() {
-    const contenedor = document.getElementById('lista-deudas') || document.getElementById('deudas-grid');
+    const contenedor = document.getElementById('deudas-grid');
     if (!contenedor) return;
 
     contenedor.innerHTML = '';
 
     if (deudas.length === 0) {
-        contenedor.innerHTML = '<p class="text-muted">No hay deudas registradas.</p>';
+        contenedor.innerHTML = `
+            <div style="text-align: center; padding: 60px 20px; grid-column: 1 / -1;">
+                <div style="font-size: 4rem; margin-bottom: 20px;">💳</div>
+                <h3 style="color: #666; margin-bottom: 10px;">No hay pagos registrados</h3>
+                <p style="color: #999;">Comienza agregando tu primer pago recurrente</p>
+            </div>
+        `;
         return;
     }
 
-    deudas.forEach(deuda => {
+    // Ordenar deudas: primero pendientes, luego por días restantes
+    const deudasOrdenadas = [...deudas].sort((a, b) => {
+        if (a.pagado !== b.pagado) return a.pagado ? 1 : -1;
+        return calcularDiasRestantes(a.diaPago) - calcularDiasRestantes(b.diaPago);
+    });
+
+    deudasOrdenadas.forEach(deuda => {
         const diasRestantes = calcularDiasRestantes(deuda.diaPago);
-        const estado = deuda.pagado
-            ? `<span class="badge bg-success">Pagado</span>`
-            : `<span class="badge bg-danger">Pendiente</span>`;
-        const fecha = deuda.fechaPago
-            ? new Date(deuda.fechaPago).toLocaleDateString()
-            : '-';
+        const urgente = diasRestantes <= 3 && !deuda.pagado;
+        const vencido = diasRestantes < 0 && !deuda.pagado;
+        
+        let estadoClass = 'success';
+        let estadoTexto = '✅ Pagado';
+        let diasTexto = '';
+        
+        if (!deuda.pagado) {
+            if (vencido) {
+                estadoClass = 'danger';
+                estadoTexto = '❌ Vencido';
+                diasTexto = `hace ${Math.abs(diasRestantes)} día${Math.abs(diasRestantes) !== 1 ? 's' : ''}`;
+            } else if (urgente) {
+                estadoClass = 'warning';
+                estadoTexto = '⚠️ Urgente';
+                diasTexto = diasRestantes === 0 ? 'HOY' : diasRestantes === 1 ? 'MAÑANA' : `en ${diasRestantes} días`;
+            } else {
+                estadoClass = 'info';
+                estadoTexto = '⏳ Pendiente';
+                diasTexto = `en ${diasRestantes} días`;
+            }
+        } else {
+            diasTexto = formatearFecha(deuda.fechaPago);
+        }
 
         const card = document.createElement('div');
-        card.className = 'card shadow-sm mb-3';
-        card.style.padding = '15px';
+        card.className = 'deuda-card';
+        card.style.borderLeft = `4px solid var(--bs-${estadoClass})`;
         card.innerHTML = `
-            <h5>${deuda.nombre}</h5>
-            <p>
-                <strong>Tipo:</strong> ${deuda.tipo} <br>
-                <strong>Día de pago:</strong> ${deuda.diaPago} <br>
-                <strong>Monto:</strong> $${deuda.monto || '0.00'} <br>
-                <strong>Estado:</strong> ${estado} <br>
-                <strong>Fecha Pago:</strong> ${fecha} <br>
-                <strong>Días restantes:</strong> ${diasRestantes >= 0 ? diasRestantes : 'Vencida'}
-            </p>
-            <div class="d-flex gap-2">
-                <button class="btn btn-sm btn-primary" onclick="editarDeuda('${deuda.id}')">✏️ Editar</button>
-                <button class="btn btn-sm btn-danger" onclick="eliminarDeuda('${deuda.id}')">🗑️ Eliminar</button>
+            <div class="deuda-card-header">
+                <div>
+                    <h5 style="margin: 0; color: #333;">${deuda.nombre}</h5>
+                    <small style="color: #666;">📋 ${deuda.tipo}</small>
+                </div>
+                <span class="badge bg-${estadoClass}">${estadoTexto}</span>
+            </div>
+            <div class="deuda-card-body">
+                <div class="deuda-info">
+                    <div class="deuda-info-item">
+                        <span class="deuda-label">💰 Monto</span>
+                        <span class="deuda-value">${formatearMoneda(deuda.monto)}</span>
+                    </div>
+                    <div class="deuda-info-item">
+                        <span class="deuda-label">📅 Día de pago</span>
+                        <span class="deuda-value">${deuda.diaPago}</span>
+                    </div>
+                    <div class="deuda-info-item">
+                        <span class="deuda-label">⏰ ${deuda.pagado ? 'Pagado' : 'Vence'}</span>
+                        <span class="deuda-value ${urgente ? 'text-danger fw-bold' : ''}">${diasTexto}</span>
+                    </div>
+                </div>
+                ${deuda.notas ? `<div class="deuda-notas">📝 ${deuda.notas}</div>` : ''}
+            </div>
+            <div class="deuda-card-footer">
+                <button class="btn btn-sm btn-outline-primary" onclick="verHistorial('${deuda.id}', '${deuda.nombre}')">
+                    📊 Historial
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" onclick="editarDeuda('${deuda.id}')">
+                    ✏️ Editar
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="eliminarDeuda('${deuda.id}')">
+                    🗑️
+                </button>
                 <button class="btn btn-sm btn-${deuda.pagado ? 'warning' : 'success'}" onclick="togglePago('${deuda.id}', ${deuda.pagado})">
-                    ${deuda.pagado ? '🔁 Marcar Pendiente' : '💰 Marcar Pagado'}
+                    ${deuda.pagado ? '🔁 Pendiente' : '✅ Pagar'}
                 </button>
             </div>
         `;
@@ -1071,18 +1158,18 @@ function renderizarDeudas() {
     });
 }
 
-// Cargar deudas en overlay
 async function cargarDeudas() {
     const contenedor = document.getElementById('deudas-grid');
     if (!contenedor) return;
-    contenedor.innerHTML = `<p style="text-align: center; color: #999;">Cargando deudas...</p>`;
+    contenedor.innerHTML = `<div style="text-align: center; padding: 40px; grid-column: 1 / -1;"><div class="spinner-border text-primary"></div><p style="margin-top: 10px; color: #999;">Cargando pagos...</p></div>`;
 
     try {
         const res = await fetch('/api/deudas');
         const data = await res.json();
 
         if (!data.success || !data.deudas || data.deudas.length === 0) {
-            contenedor.innerHTML = `<p style="text-align: center; color: #999;">No hay deudas registradas.</p>`;
+            deudas = [];
+            renderizarDeudas();
             return;
         }
 
@@ -1090,42 +1177,106 @@ async function cargarDeudas() {
         renderizarDeudas();
 
     } catch (error) {
-        contenedor.innerHTML = `<p style="text-align: center; color: red;">Error al cargar las deudas: ${error.message}</p>`;
+        contenedor.innerHTML = `<div style="text-align: center; padding: 40px; color: red; grid-column: 1 / -1;">❌ Error al cargar: ${error.message}</div>`;
         console.error('Error cargando deudas:', error);
     }
 }
 
-// Agregar deuda
+async function cargarResumenDeudas() {
+    try {
+        const res = await fetch('/api/deudas/resumen');
+        const data = await res.json();
+        
+        if (data.success) {
+            const resumen = data.resumen;
+            document.getElementById('resumen-stats').innerHTML = `
+                <div class="stat-item">
+                    <div class="stat-number">${resumen.totalDeudas}</div>
+                    <div class="stat-label">Total Pagos</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number text-success">${resumen.totalPagadas}</div>
+                    <div class="stat-label">Pagados</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number text-danger">${resumen.totalPendientes}</div>
+                    <div class="stat-label">Pendientes</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number text-warning">${resumen.proximasVencer}</div>
+                    <div class="stat-label">Por Vencer</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">${formatearMoneda(resumen.montoTotal)}</div>
+                    <div class="stat-label">Total</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number text-danger">${formatearMoneda(resumen.montoPendiente)}</div>
+                    <div class="stat-label">Pendiente</div>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error cargando resumen:', error);
+    }
+}
+
 async function agregarDeuda() {
-    const tipos = ['Arrendamiento','Luz','Agua','Internet','Teléfono','Gas','Tarjeta de Crédito 1','Tarjeta de Crédito 2','Otro'];
+    const tipos = ['Arrendamiento','Luz','Agua','Internet','Teléfono','Gas','Tarjeta de Crédito 1','Tarjeta de Crédito 2','Netflix','Spotify','Gimnasio','Seguro','Otro'];
     const opcionesTipo = tipos.map(t => `<option value="${t}">${t}</option>`).join('');
 
     Swal.fire({
-        title: '➕ Agregar Nueva Deuda',
+        title: '➕ Agregar Nuevo Pago',
         html: `
-            <div class="text-start">
-                <label>Nombre:</label>
-                <input type="text" id="nombre-deuda" class="form-control mb-2">
-                <label>Tipo:</label>
-                <select id="tipo-deuda" class="form-control mb-2">
-                    <option value="">Seleccionar tipo...</option>
-                    ${opcionesTipo}
-                </select>
-                <label>Día de Pago:</label>
-                <input type="number" id="dia-pago" class="form-control mb-2">
-                <label>Monto ($):</label>
-                <input type="number" id="monto-deuda" class="form-control mb-2">
+            <div class="text-start" style="max-width: 500px; margin: 0 auto;">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Nombre del Pago *</label>
+                    <input type="text" id="nombre-deuda" class="form-control" placeholder="Ej: Renta departamento">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Tipo de Pago *</label>
+                    <select id="tipo-deuda" class="form-control">
+                        <option value="">Seleccionar tipo...</option>
+                        ${opcionesTipo}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Día de Pago (1-31) *</label>
+                    <input type="number" id="dia-pago" class="form-control" min="1" max="31" placeholder="15">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Monto *</label>
+                    <input type="number" id="monto-deuda" class="form-control" step="0.01" placeholder="0.00">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Notas (opcional)</label>
+                    <textarea id="notas-deuda" class="form-control" rows="2" placeholder="Información adicional..."></textarea>
+                </div>
             </div>
         `,
-        confirmButtonText: '💾 Guardar',
+        confirmButtonText: '💾 Guardar Pago',
         showCancelButton: true,
+        cancelButtonText: 'Cancelar',
+        width: '600px',
+        customClass: {
+            container: 'swal-on-top'
+        },
         preConfirm: () => {
             const nombre = document.getElementById('nombre-deuda').value.trim();
             const tipo = document.getElementById('tipo-deuda').value;
             const diaPago = parseInt(document.getElementById('dia-pago').value);
             const monto = parseFloat(document.getElementById('monto-deuda').value || 0);
-            if (!nombre || !tipo || !diaPago) return Swal.showValidationMessage('Completa todos los campos');
-            return { nombre, tipo, diaPago, monto };
+            const notas = document.getElementById('notas-deuda').value.trim();
+            
+            if (!nombre || !tipo || !diaPago || !monto) {
+                Swal.showValidationMessage('Por favor completa todos los campos obligatorios');
+                return false;
+            }
+            if (diaPago < 1 || diaPago > 31) {
+                Swal.showValidationMessage('El día debe estar entre 1 y 31');
+                return false;
+            }
+            return { nombre, tipo, diaPago, monto, notas };
         }
     }).then(async (r) => {
         if (r.isConfirmed) {
@@ -1136,31 +1287,75 @@ async function agregarDeuda() {
             });
             const data = await res.json();
             if (data.success) {
-                Swal.fire('✅ Guardado','Deuda agregada','success');
-                inicializarDeudas();
-            } else Swal.fire('❌ Error',data.error || 'No se pudo guardar','error');
+                Swal.fire({
+                    icon: 'success',
+                    title: '✅ ¡Guardado!',
+                    text: 'Pago agregado exitosamente',
+                    timer: 2000,
+                    customClass: { container: 'swal-on-top' }
+                });
+                cargarDeudas();
+                cargarResumenDeudas();
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: '❌ Error',
+                    text: data.error || 'No se pudo guardar',
+                    customClass: { container: 'swal-on-top' }
+                });
+            }
         }
     });
 }
 
-// Editar deuda
 async function editarDeuda(id) {
     const deuda = deudas.find(d => d.id === id);
     if (!deuda) return;
 
+    const tipos = ['Arrendamiento','Luz','Agua','Internet','Teléfono','Gas','Tarjeta de Crédito 1','Tarjeta de Crédito 2','Netflix','Spotify','Gimnasio','Seguro','Otro'];
+    const opcionesTipo = tipos.map(t => `<option value="${t}" ${t === deuda.tipo ? 'selected' : ''}>${t}</option>`).join('');
+
     Swal.fire({
-        title: '✏️ Editar Deuda',
+        title: '✏️ Editar Pago',
         html: `
-            <input type="text" id="edit-nombre" class="form-control mb-2" value="${deuda.nombre}">
-            <input type="number" id="edit-dia" class="form-control mb-2" value="${deuda.diaPago}">
-            <input type="number" id="edit-monto" class="form-control mb-2" value="${deuda.monto || ''}">
+            <div class="text-start" style="max-width: 500px; margin: 0 auto;">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Nombre del Pago</label>
+                    <input type="text" id="edit-nombre" class="form-control" value="${deuda.nombre}">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Tipo de Pago</label>
+                    <select id="edit-tipo" class="form-control">
+                        ${opcionesTipo}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Día de Pago (1-31)</label>
+                    <input type="number" id="edit-dia" class="form-control" value="${deuda.diaPago}" min="1" max="31">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Monto</label>
+                    <input type="number" id="edit-monto" class="form-control" value="${deuda.monto || ''}" step="0.01">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Notas</label>
+                    <textarea id="edit-notas" class="form-control" rows="2">${deuda.notas || ''}</textarea>
+                </div>
+            </div>
         `,
         confirmButtonText: '💾 Guardar Cambios',
         showCancelButton: true,
+        cancelButtonText: 'Cancelar',
+        width: '600px',
+        customClass: {
+            container: 'swal-on-top'
+        },
         preConfirm: () => ({
             nombre: document.getElementById('edit-nombre').value.trim(),
+            tipo: document.getElementById('edit-tipo').value,
             diaPago: parseInt(document.getElementById('edit-dia').value),
-            monto: parseFloat(document.getElementById('edit-monto').value || 0)
+            monto: parseFloat(document.getElementById('edit-monto').value || 0),
+            notas: document.getElementById('edit-notas').value.trim()
         })
     }).then(async (r) => {
         if (r.isConfirmed) {
@@ -1171,34 +1366,66 @@ async function editarDeuda(id) {
             });
             const data = await res.json();
             if (data.success) {
-                Swal.fire('✅ Actualizado','Deuda modificada','success');
-                inicializarDeudas();
-            } else Swal.fire('❌ Error',data.error || 'No se pudo actualizar','error');
+                Swal.fire({
+                    icon: 'success',
+                    title: '✅ Actualizado',
+                    text: 'Pago modificado exitosamente',
+                    timer: 2000,
+                    customClass: { container: 'swal-on-top' }
+                });
+                cargarDeudas();
+                cargarResumenDeudas();
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: '❌ Error',
+                    text: data.error || 'No se pudo actualizar',
+                    customClass: { container: 'swal-on-top' }
+                });
+            }
         }
     });
 }
 
-// Eliminar deuda
 async function eliminarDeuda(id) {
     const result = await Swal.fire({
-        title: '🗑️ Eliminar Deuda',
-        text: '¿Seguro que deseas eliminar esta deuda?',
+        title: '🗑️ Eliminar Pago',
+        text: '¿Seguro que deseas eliminar este pago? Esta acción no se puede deshacer.',
         icon: 'warning',
         showCancelButton: true,
         confirmButtonText: 'Sí, eliminar',
-        cancelButtonText: 'Cancelar'
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#dc3545',
+        customClass: {
+            container: 'swal-on-top'
+        }
     });
+    
     if (!result.isConfirmed) return;
 
     const res = await fetch(`/api/deudas/${id}`, { method: 'DELETE' });
     const data = await res.json();
+    
     if (data.success) {
-        Swal.fire('✅ Eliminada','Deuda eliminada','success');
-        inicializarDeudas();
-    } else Swal.fire('❌ Error',data.error || 'No se pudo eliminar','error');
+        Swal.fire({
+            icon: 'success',
+            title: '✅ Eliminado',
+            text: 'Pago eliminado exitosamente',
+            timer: 2000,
+            customClass: { container: 'swal-on-top' }
+        });
+        cargarDeudas();
+        cargarResumenDeudas();
+    } else {
+        Swal.fire({
+            icon: 'error',
+            title: '❌ Error',
+            text: data.error || 'No se pudo eliminar',
+            customClass: { container: 'swal-on-top' }
+        });
+    }
 }
 
-// Marcar pagado / pendiente
 async function togglePago(id, pagado) {
     try {
         const res = await fetch(`/api/deudas/${id}/pagar`, {
@@ -1207,46 +1434,627 @@ async function togglePago(id, pagado) {
             body: JSON.stringify({ pagado: !pagado })
         });
         const data = await res.json();
+        
         if (data.success) {
-            Swal.fire({ icon: 'success', title: pagado ? '🔁 Marcado Pendiente' : '💰 Pago Registrado', timer: 1500, showConfirmButton: false });
-            inicializarDeudas();
+            // Agregar al historial si se marcó como pagado
+            if (!pagado) {
+                const deuda = deudas.find(d => d.id === id);
+                await fetch(`/api/deudas/${id}/agregar-historial`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        monto: deuda.monto,
+                        notas: 'Pago registrado desde el dashboard'
+                    })
+                });
+            }
+            
+            Swal.fire({
+                icon: 'success',
+                title: pagado ? '🔁 Marcado como Pendiente' : '✅ Pago Registrado',
+                timer: 1500,
+                showConfirmButton: false,
+                customClass: { container: 'swal-on-top' }
+            });
+            cargarDeudas();
+            cargarResumenDeudas();
         }
     } catch (error) {
-        Swal.fire('❌ Error','No se pudo actualizar el estado del pago','error');
+        Swal.fire({
+            icon: 'error',
+            title: '❌ Error',
+            text: 'No se pudo actualizar el estado del pago',
+            customClass: { container: 'swal-on-top' }
+        });
+    }
+}
+
+async function verHistorial(id, nombre) {
+    try {
+        const res = await fetch(`/api/deudas/historial/${id}`);
+        const data = await res.json();
+        
+        let contenidoHTML = '';
+        
+        if (data.success && data.historial && data.historial.length > 0) {
+            contenidoHTML = `
+                <div class="historial-container" style="max-height: 400px; overflow-y: auto;">
+                    ${data.historial.map(entrada => `
+                        <div class="historial-item" style="border-left: 3px solid #28a745; padding: 15px; margin-bottom: 15px; background: #f8f9fa; border-radius: 8px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                <strong style="color: #333;">💰 ${formatearMoneda(entrada.monto)}</strong>
+                                <span style="color: #666; font-size: 0.9rem;">${formatearFecha(entrada.fecha)}</span>
+                            </div>
+                            ${entrada.notas ? `<p style="margin: 0; color: #666; font-size: 0.9rem;">📝 ${entrada.notas}</p>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        } else {
+            contenidoHTML = '<p style="text-align: center; color: #999; padding: 40px;">📊 Sin historial de pagos</p>';
+        }
+        
+        Swal.fire({
+            title: `📊 Historial: ${nombre}`,
+            html: contenidoHTML,
+            width: '600px',
+            customClass: {
+                container: 'swal-on-top'
+            }
+        });
+    } catch (error) {
+        Swal.fire({
+            icon: 'error',
+            title: '❌ Error',
+            text: 'No se pudo cargar el historial',
+            customClass: { container: 'swal-on-top' }
+        });
+    }
+}
+
+async function resetearPagos() {
+    const result = await Swal.fire({
+        title: '🔄 Resetear Todos los Pagos',
+        text: '¿Deseas marcar todos los pagos como pendientes? Esto es útil al inicio de cada mes.',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, resetear',
+        cancelButtonText: 'Cancelar',
+        customClass: {
+            container: 'swal-on-top'
+        }
+    });
+    
+    if (!result.isConfirmed) return;
+    
+    try {
+        const res = await fetch('/api/deudas/resetear-pagos', {
+            method: 'POST'
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            Swal.fire({
+                icon: 'success',
+                title: '✅ Reseteado',
+                text: 'Todos los pagos han sido marcados como pendientes',
+                timer: 2000,
+                customClass: { container: 'swal-on-top' }
+            });
+            cargarDeudas();
+            cargarResumenDeudas();
+        }
+    } catch (error) {
+        Swal.fire({
+            icon: 'error',
+            title: '❌ Error',
+            text: 'No se pudo resetear los pagos',
+            customClass: { container: 'swal-on-top' }
+        });
     }
 }
 
 // ============================================
 // NOTIFICACIONES
 // ============================================
-function verificarNotificaciones() {
-    const hoy = new Date();
-    const diaActual = hoy.getDate();
 
-    const deudasProximas = deudas.filter(d => !d.pagado && d.diaPago - diaActual <= 2 && d.diaPago - diaActual >= 0);
-    const deudasVencidas = deudas.filter(d => !d.pagado && d.diaPago < diaActual);
-
-    if (deudasProximas.length > 0) mostrarNotificacionToast(`⚠️ ${deudasProximas.length} deudas próximas a vencer`, 'warning');
-    if (deudasVencidas.length > 0) mostrarNotificacionToast(`❌ ${deudasVencidas.length} deudas vencidas`, 'danger');
+async function cargarNotificaciones() {
+    try {
+        const res = await fetch('/api/deudas/notificaciones');
+        const data = await res.json();
+        
+        if (!data.success || !data.notificaciones || data.notificaciones.length === 0) {
+            Swal.fire({
+                icon: 'info',
+                title: '🔔 Notificaciones',
+                html: '<p style="color: #999; padding: 20px;">No hay notificaciones pendientes</p>',
+                customClass: { container: 'swal-on-top' }
+            });
+            return;
+        }
+        
+        const notificaciones = data.notificaciones;
+        actualizarBadgeNotificaciones(notificaciones.length);
+        
+        const contenidoHTML = `
+            <div style="max-height: 500px; overflow-y: auto; text-align: left;">
+                ${notificaciones.map(notif => `
+                    <div class="notificacion-item" style="
+                        border-left: 4px solid ${notif.urgente ? '#dc3545' : '#ffc107'};
+                        padding: 15px;
+                        margin-bottom: 15px;
+                        background: ${notif.urgente ? '#fff5f5' : '#fffbf0'};
+                        border-radius: 8px;
+                    ">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                            <strong style="color: ${notif.urgente ? '#dc3545' : '#856404'};">
+                                ${notif.titulo}
+                            </strong>
+                            <span style="background: ${notif.urgente ? '#dc3545' : '#ffc107'}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem;">
+                                ${notif.tipo}
+                            </span>
+                        </div>
+                        <p style="margin: 8px 0; color: #333;">${notif.mensaje}</p>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+                            <span style="color: #666; font-size: 0.9rem;">💰 ${formatearMoneda(notif.monto)}</span>
+                            <button onclick="verDeudaDesdeNotificacion('${notif.id}')" class="btn btn-sm btn-primary">
+                                Ver Detalles
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+        
+        Swal.fire({
+            title: '🔔 Notificaciones de Pagos',
+            html: contenidoHTML,
+            width: '700px',
+            showCloseButton: true,
+            showConfirmButton: false,
+            customClass: {
+                container: 'swal-on-top'
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error cargando notificaciones:', error);
+        Swal.fire({
+            icon: 'error',
+            title: '❌ Error',
+            text: 'No se pudieron cargar las notificaciones',
+            customClass: { container: 'swal-on-top' }
+        });
+    }
 }
 
-function mostrarNotificacionToast(mensaje, tipo='info') {
-    const colores = { success:'#28a745', warning:'#ffc107', danger:'#dc3545', info:'#17a2b8' };
+function actualizarBadgeNotificaciones(cantidad) {
+    const badge = document.getElementById('notification-badge');
+    if (badge) {
+        if (cantidad > 0) {
+            badge.textContent = cantidad;
+            badge.style.display = 'block';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+}
+
+async function verificarNotificaciones() {
+    try {
+        const res = await fetch('/api/deudas/notificaciones');
+        const data = await res.json();
+        
+        if (data.success && data.notificaciones) {
+            const cantidad = data.notificaciones.length;
+            actualizarBadgeNotificaciones(cantidad);
+            
+            // Mostrar toast si hay notificaciones urgentes
+            const urgentes = data.notificaciones.filter(n => n.urgente);
+            if (urgentes.length > 0) {
+                mostrarNotificacionToast(`⚠️ ${urgentes.length} pago${urgentes.length > 1 ? 's' : ''} urgente${urgentes.length > 1 ? 's' : ''}`, 'danger');
+            }
+        }
+    } catch (error) {
+        console.error('Error verificando notificaciones:', error);
+    }
+}
+
+function verDeudaDesdeNotificacion(id) {
+    Swal.close();
+    irADeudas();
+    setTimeout(() => {
+        const deuda = deudas.find(d => d.id === id);
+        if (deuda) {
+            editarDeuda(id);
+        }
+    }, 500);
+}
+
+function mostrarNotificacionToast(mensaje, tipo = 'info') {
+    const colores = {
+        success: '#28a745',
+        warning: '#ffc107',
+        danger: '#dc3545',
+        info: '#17a2b8'
+    };
+    
     const toast = document.createElement('div');
-    toast.className='toast align-items-center text-white border-0';
-    toast.style.backgroundColor = colores[tipo];
-    toast.innerHTML=`<div class="d-flex"><div class="toast-body">${mensaje}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
+    toast.className = 'toast align-items-center text-white border-0';
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 99999;
+        min-width: 300px;
+        background-color: ${colores[tipo]};
+    `;
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">${mensaje}</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
     document.body.appendChild(toast);
-    const bsToast = new bootstrap.Toast(toast,{delay:4000});
+    const bsToast = new bootstrap.Toast(toast, { delay: 4000 });
     bsToast.show();
-    toast.addEventListener('hidden.bs.toast',()=>toast.remove());
+    toast.addEventListener('hidden.bs.toast', () => toast.remove());
+}
+
+// ============================================
+// FUNCIONES ADICIONALES
+// ============================================
+
+async function verDeudasPorTipo() {
+    try {
+        const res = await fetch('/api/deudas/por-tipo');
+        const data = await res.json();
+        
+        if (!data.success || !data.porTipo) {
+            Swal.fire({
+                icon: 'info',
+                title: 'Sin Datos',
+                text: 'No hay deudas para mostrar',
+                customClass: { container: 'swal-on-top' }
+            });
+            return;
+        }
+        
+        const porTipo = data.porTipo;
+        let contenidoHTML = '<div style="text-align: left; max-height: 500px; overflow-y: auto;">';
+        
+        Object.keys(porTipo).forEach(tipo => {
+            const items = porTipo[tipo];
+            const total = items.reduce((sum, item) => sum + (item.monto || 0), 0);
+            const pendientes = items.filter(i => !i.pagado).length;
+            
+            contenidoHTML += `
+                <div style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h5 style="margin: 0; color: #333;">📋 ${tipo}</h5>
+                        <span class="badge bg-primary">${items.length} pago${items.length > 1 ? 's' : ''}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; color: #666; font-size: 0.9rem;">
+                        <span>💰 Total: ${formatearMoneda(total)}</span>
+                        <span>⏳ Pendientes: ${pendientes}</span>
+                    </div>
+                    <div style="margin-top: 10px;">
+                        ${items.map(item => `
+                            <div style="padding: 5px 0; border-top: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
+                                <span>${item.nombre}</span>
+                                <span class="badge bg-${item.pagado ? 'success' : 'warning'}">${item.pagado ? '✅' : '⏳'}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        });
+        
+        contenidoHTML += '</div>';
+        
+        Swal.fire({
+            title: '📊 Pagos por Tipo',
+            html: contenidoHTML,
+            width: '700px',
+            showCloseButton: true,
+            customClass: { container: 'swal-on-top' }
+        });
+        
+    } catch (error) {
+        console.error('Error:', error);
+        Swal.fire({
+            icon: 'error',
+            title: '❌ Error',
+            text: 'No se pudo cargar la información',
+            customClass: { container: 'swal-on-top' }
+        });
+    }
+}
+
+async function agregarDeudasLote() {
+    Swal.fire({
+        title: '📦 Agregar Múltiples Pagos',
+        html: `
+            <div class="text-start" style="max-width: 600px; margin: 0 auto;">
+                <p style="color: #666; margin-bottom: 15px;">
+                    Formato: Nombre | Tipo | Día | Monto (uno por línea)
+                    <br>
+                    <small>Ejemplo: Renta | Arrendamiento | 5 | 5000</small>
+                </p>
+                <textarea id="lote-deudas" class="form-control" rows="10" placeholder="Renta | Arrendamiento | 5 | 5000
+Luz CFE | Luz | 10 | 450
+Internet | Internet | 15 | 599"></textarea>
+            </div>
+        `,
+        confirmButtonText: '💾 Guardar Todos',
+        showCancelButton: true,
+        cancelButtonText: 'Cancelar',
+        width: '700px',
+        customClass: { container: 'swal-on-top' },
+        preConfirm: () => {
+            const texto = document.getElementById('lote-deudas').value.trim();
+            if (!texto) {
+                Swal.showValidationMessage('Ingresa al menos un pago');
+                return false;
+            }
+            
+            const lineas = texto.split('\n').filter(l => l.trim());
+            const deudas = [];
+            
+            for (let i = 0; i < lineas.length; i++) {
+                const partes = lineas[i].split('|').map(p => p.trim());
+                if (partes.length < 4) {
+                    Swal.showValidationMessage(`Error en línea ${i + 1}: formato incorrecto`);
+                    return false;
+                }
+                
+                deudas.push({
+                    nombre: partes[0],
+                    tipo: partes[1],
+                    diaPago: parseInt(partes[2]),
+                    monto: parseFloat(partes[3]),
+                    notas: partes[4] || ''
+                });
+            }
+            
+            return deudas;
+        }
+    }).then(async (result) => {
+        if (result.isConfirmed) {
+            try {
+                const res = await fetch('/api/deudas/batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ deudas: result.value })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: '✅ ¡Guardado!',
+                        text: data.message,
+                        timer: 2000,
+                        customClass: { container: 'swal-on-top' }
+                    });
+                    cargarDeudas();
+                    cargarResumenDeudas();
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: '❌ Error',
+                        text: data.error,
+                        customClass: { container: 'swal-on-top' }
+                    });
+                }
+            } catch (error) {
+                Swal.fire({
+                    icon: 'error',
+                    title: '❌ Error',
+                    text: 'No se pudieron guardar los pagos',
+                    customClass: { container: 'swal-on-top' }
+                });
+            }
+        }
+    });
 }
 
 // ============================================
 // INICIALIZACIÓN
 // ============================================
-document.addEventListener('DOMContentLoaded', inicializarDeudas);
-
+document.addEventListener('DOMContentLoaded', () => {
+    inicializarDeudas();
+    
+    // Verificar notificaciones cada 30 minutos
+    setInterval(verificarNotificaciones, 1800000);
+    
+    // Cerrar dropdown al hacer clic fuera
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('profile-dropdown');
+        const profileIcon = document.getElementById('profile-icon');
+        
+        if (dropdown && profileIcon && !profileIcon.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.classList.remove('show');
+        }
+    });
+    
+    // Agregar estilos CSS para SweetAlert on top
+    const style = document.createElement('style');
+    style.textContent = `
+        .swal-on-top {
+            z-index: 99999 !important;
+        }
+        
+        .deuda-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .deuda-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        }
+        
+        .deuda-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .deuda-card-body {
+            margin-bottom: 15px;
+        }
+        
+        .deuda-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .deuda-info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .deuda-label {
+            font-size: 0.85rem;
+            color: #666;
+            font-weight: 500;
+        }
+        
+        .deuda-value {
+            font-size: 1.1rem;
+            color: #333;
+            font-weight: 600;
+        }
+        
+        .deuda-notas {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            color: #555;
+            border-left: 3px solid #007bff;
+        }
+        
+        .deuda-card-footer {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .deudas-container {
+            padding: 30px;
+        }
+        
+        .deudas-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        .deudas-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        
+        #resumen-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .stat-number {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: white;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 0.85rem;
+            color: rgba(255,255,255,0.9);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .profile-dropdown {
+            display: none;
+            position: absolute;
+            top: 60px;
+            right: 0;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            min-width: 250px;
+            z-index: 1000;
+        }
+        
+        .profile-dropdown.show {
+            display: block;
+        }
+        
+        .notification-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: #dc3545;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: bold;
+        }
+        
+        @media (max-width: 768px) {
+            .deudas-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .deuda-card-footer {
+                flex-direction: column;
+            }
+            
+            .deuda-card-footer .btn {
+                width: 100%;
+            }
+            
+            #resumen-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    `;
+    document.head.appendChild(style);
+});
 // ============================================
 // FUNCIONES DEL BOT
 // ============================================
