@@ -1304,6 +1304,19 @@ async function togglePago(id, pagado) {
     }
 }
 
+// ============================================
+// Función para calcular días restantes hasta el día de pago
+// ============================================
+function calcularDiasRestantes(diaPago) {
+    const hoy = new Date();
+    const diaActual = hoy.getDate();
+    
+    // Calculamos la diferencia de días en el mes actual
+    let diasRestantes = diaPago - diaActual;
+
+    // Si el día de pago ya pasó, lo marcamos como vencido (negativo)
+    return diasRestantes;
+}
 
 
 // ============================================
