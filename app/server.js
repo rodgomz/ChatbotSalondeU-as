@@ -725,38 +725,7 @@ app.post('/api/deudas', async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
-/**
- * GET /api/deudas/:id
- * Obtener una deuda específica
- */
-app.get('/api/deudas/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const deudaRef = ref(db, `deudas/${id}`);
-        const snapshot = await get(deudaRef);
 
-        if (!snapshot.exists()) {
-            return res.status(404).json({
-                success: false,
-                error: 'Deuda no encontrada'
-            });
-        }
-
-        res.json({
-            success: true,
-            deuda: {
-                id: snapshot.key,
-                ...snapshot.val()
-            }
-        });
-    } catch (error) {
-        console.error('Error obteniendo deuda:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
 /**
  * PUT /api/deudas/:id
  * Actualizar una deuda
@@ -1042,39 +1011,6 @@ setInterval(verificarYEnviarNotificaciones, 3600000); // 1 hora
 // ============================================
 
 /**
- * POST /api/deudas/resetear-pagos
- * Resetear todos los pagos al inicio del mes (útil para pagos recurrentes)
- */
-app.post('/api/deudas/resetear-pagos', async (req, res) => {
-    try {
-        const snapshot = await get(ref(db, 'deudas'));
-        const updates = {};
-        
-        if (snapshot.exists()) {
-            snapshot.forEach((childSnapshot) => {
-                updates[`${childSnapshot.key}/pagado`] = false;
-                updates[`${childSnapshot.key}/fechaPago`] = null;
-                updates[`${childSnapshot.key}/fechaUltimaModificacion`] = new Date().toISOString();
-            });
-            
-            await update(ref(db, 'deudas'), updates);
-        }
-        
-        res.json({
-            success: true,
-            message: 'Todos los pagos han sido reseteados'
-        });
-    } catch (error) {
-        console.error('Error reseteando pagos:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-
-/**
  * GET /api/deudas/historial/:id
  * Obtener historial de pagos de una deuda específica
  */
@@ -1238,6 +1174,70 @@ app.post('/api/deudas/batch', async (req, res) => {
     }
 });
 
+/**
+ * POST /api/deudas/resetear-pagos
+ * Resetear todos los pagos al inicio del mes (útil para pagos recurrentes)
+ */
+app.post('/api/deudas/resetear-pagos', async (req, res) => {
+    try {
+        const snapshot = await get(ref(db, 'deudas'));
+        const updates = {};
+        
+        if (snapshot.exists()) {
+            snapshot.forEach((childSnapshot) => {
+                updates[`${childSnapshot.key}/pagado`] = false;
+                updates[`${childSnapshot.key}/fechaPago`] = null;
+                updates[`${childSnapshot.key}/fechaUltimaModificacion`] = new Date().toISOString();
+            });
+            
+            await update(ref(db, 'deudas'), updates);
+        }
+        
+        res.json({
+            success: true,
+            message: 'Todos los pagos han sido reseteados'
+        });
+    } catch (error) {
+        console.error('Error reseteando pagos:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
+ * GET /api/deudas/:id
+ * Obtener una deuda específica
+ */
+app.get('/api/deudas/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const deudaRef = ref(db, `deudas/${id}`);
+        const snapshot = await get(deudaRef);
+
+        if (!snapshot.exists()) {
+            return res.status(404).json({
+                success: false,
+                error: 'Deuda no encontrada'
+            });
+        }
+
+        res.json({
+            success: true,
+            deuda: {
+                id: snapshot.key,
+                ...snapshot.val()
+            }
+        });
+    } catch (error) {
+        console.error('Error obteniendo deuda:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
 
 // ==========================
 // Endpoint para reiniciar sesión
