@@ -1223,40 +1223,47 @@ async function eliminarDeuda(id) {
 
 //Cargar deuda
 async function cargarDeudas() {
+    const listaDeudas = document.getElementById('listaDeudas'); // ID del div
+    if (!listaDeudas) return;
+
+    listaDeudas.innerHTML = 'Cargando deudas...';
+
     try {
         const res = await fetch('/api/deudas');
         const data = await res.json();
 
-        if (data.success) {
-            const listaDeudas = document.getElementById('listaDeudas');
-            if (!listaDeudas) return; 
-
-            listaDeudas.innerHTML = '';
-
-            if (data.deudas.length === 0) {
-                listaDeudas.innerHTML = '<p class="text-muted">No hay deudas registradas.</p>';
-                return;
-            }
-
-            data.deudas.forEach(deuda => {
-                const item = document.createElement('div');
-                item.className = 'deuda-item card mb-2 p-2';
-                item.innerHTML = `
-                    <strong>${deuda.nombre}</strong> - ${deuda.tipo} - ${deuda.monto ? '$' + deuda.monto.toFixed(2) : 'Sin monto'}
-                    <div class="mt-2">
-                        <button onclick="eliminarDeuda('${deuda.id}')" class="btn btn-danger btn-sm me-1">Eliminar</button>
-                        <button onclick="togglePago('${deuda.id}', ${deuda.pagado})" class="btn btn-${deuda.pagado ? 'warning' : 'success'} btn-sm">
-                            ${deuda.pagado ? 'Marcar Pendiente' : 'Marcar Pagada'}
-                        </button>
-                    </div>
-                `;
-                listaDeudas.appendChild(item);
-            });
-        } else {
-            Swal.fire('❌ Error', data.error || 'No se pudieron cargar las deudas', 'error');
+        if (!data.success) {
+            listaDeudas.innerHTML = '❌ Error al cargar deudas';
+            console.error(data.error);
+            return;
         }
+
+        const deudas = data.deudas || [];
+        if (deudas.length === 0) {
+            listaDeudas.innerHTML = '<p class="text-muted">No hay deudas registradas.</p>';
+            return;
+        }
+
+        listaDeudas.innerHTML = ''; // limpiar lista anterior
+
+        deudas.forEach(deuda => {
+            const item = document.createElement('div');
+            item.className = 'deuda-item card mb-2 p-2';
+            item.innerHTML = `
+                <strong>${deuda.nombre}</strong> - ${deuda.tipo} - ${deuda.monto ? '$' + deuda.monto.toFixed(2) : 'Sin monto'}
+                <div class="mt-2">
+                    <button onclick="eliminarDeuda('${deuda.id}')" class="btn btn-danger btn-sm me-1">Eliminar</button>
+                    <button onclick="togglePago('${deuda.id}', ${deuda.pagado})" class="btn btn-${deuda.pagado ? 'warning' : 'success'} btn-sm">
+                        ${deuda.pagado ? 'Marcar Pendiente' : 'Marcar Pagada'}
+                    </button>
+                </div>
+            `;
+            listaDeudas.appendChild(item);
+        });
+
     } catch (error) {
-        Swal.fire('❌ Error', error.message || 'No se pudieron cargar las deudas', 'error');
+        listaDeudas.innerHTML = '❌ Error al cargar deudas';
+        console.error('Error cargando deudas:', error);
     }
 }
 
