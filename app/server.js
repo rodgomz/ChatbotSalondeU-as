@@ -695,52 +695,33 @@ app.get('/api/deudas', async (req, res) => {
  * Crear una nueva deuda
  */
 app.post('/api/deudas', async (req, res) => {
-    try {
-        const { tipo, nombre, diaPago, monto, notas } = req.body;
+  try {
+    const { tipo, nombre, diaPago, monto, notas } = req.body;
 
-        // Validaciones
-        if (!tipo || !nombre || !diaPago) {
-            return res.status(400).json({
-                success: false,
-                error: 'Faltan campos obligatorios'
-            });
-        }
-
-        if (diaPago < 1 || diaPago > 31) {
-            return res.status(400).json({
-                success: false,
-                error: 'El día debe estar entre 1 y 31'
-            });
-        }
-
-        // Crear nueva deuda
-        const nuevaDeuda = {
-            tipo,
-            nombre,
-            diaPago: parseInt(diaPago),
-            monto: monto ? parseFloat(monto) : null,
-            notas: notas || '',
-            pagado: false,
-            fechaCreacion: new Date().toISOString(),
-            fechaUltimaModificacion: new Date().toISOString()
-        };
-
-        const nuevaRef = await db.ref('deudas').push(nuevaDeuda);
-
-        res.json({
-            success: true,
-            id: nuevaRef.key,
-            deuda: nuevaDeuda
-        });
-    } catch (error) {
-        console.error('Error creando deuda:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+    if (!tipo || !nombre || !diaPago) {
+      return res.status(400).json({ success: false, error: 'Faltan campos obligatorios' });
     }
-});
 
+    const nuevaDeuda = {
+      tipo,
+      nombre,
+      diaPago: parseInt(diaPago),
+      monto: monto ? parseFloat(monto) : null,
+      notas: notas || '',
+      pagado: false,
+      fechaCreacion: new Date().toISOString(),
+      fechaUltimaModificacion: new Date().toISOString()
+    };
+
+    const nuevaDeudaRef = push(ref(db, 'deudas')); // genera una nueva key
+    await set(nuevaDeudaRef, nuevaDeuda);
+
+    res.json({ success: true, id: nuevaDeudaRef.key, deuda: nuevaDeuda });
+  } catch (error) {
+    console.error('Error creando deuda:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 /**
  * GET /api/deudas/:id
  * Obtener una deuda específica
@@ -778,57 +759,27 @@ app.get('/api/deudas/:id', async (req, res) => {
  * Actualizar una deuda
  */
 app.put('/api/deudas/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { tipo, nombre, diaPago, monto, notas } = req.body;
+  try {
+    const deudaId = req.params.id;
+    const { tipo, nombre, diaPago, monto, notas, pagado } = req.body;
 
-        // Verificar que la deuda existe
-        const snapshot = await db.ref(`deudas/${id}`).once('value');
-        if (!snapshot.exists()) {
-            return res.status(404).json({
-                success: false,
-                error: 'Deuda no encontrada'
-            });
-        }
+    const deudaRef = ref(db, `deudas/${deudaId}`);
 
-        // Validaciones
-        if (!tipo || !nombre || !diaPago) {
-            return res.status(400).json({
-                success: false,
-                error: 'Faltan campos obligatorios'
-            });
-        }
+    await update(deudaRef, {
+      tipo,
+      nombre,
+      diaPago: diaPago ? parseInt(diaPago) : undefined,
+      monto: monto ? parseFloat(monto) : undefined,
+      notas: notas || undefined,
+      pagado: pagado !== undefined ? pagado : undefined,
+      fechaUltimaModificacion: new Date().toISOString()
+    });
 
-        if (diaPago < 1 || diaPago > 31) {
-            return res.status(400).json({
-                success: false,
-                error: 'El día debe estar entre 1 y 31'
-            });
-        }
-
-        // Actualizar deuda
-        const actualizacion = {
-            tipo,
-            nombre,
-            diaPago: parseInt(diaPago),
-            monto: monto ? parseFloat(monto) : null,
-            notas: notas || '',
-            fechaUltimaModificacion: new Date().toISOString()
-        };
-
-        await db.ref(`deudas/${id}`).update(actualizacion);
-
-        res.json({
-            success: true,
-            message: 'Deuda actualizada exitosamente'
-        });
-    } catch (error) {
-        console.error('Error actualizando deuda:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
+    res.json({ success: true, message: 'Deuda actualizada correctamente' });
+  } catch (error) {
+    console.error('Error actualizando deuda:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 /**
@@ -876,32 +827,17 @@ app.post('/api/deudas/:id/pagar', async (req, res) => {
  * Eliminar una deuda
  */
 app.delete('/api/deudas/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
+  try {
+    const deudaId = req.params.id;
+    const deudaRef = ref(db, `deudas/${deudaId}`);
 
-        // Verificar que la deuda existe
-        const snapshot = await db.ref(`deudas/${id}`).once('value');
-        if (!snapshot.exists()) {
-            return res.status(404).json({
-                success: false,
-                error: 'Deuda no encontrada'
-            });
-        }
+    await remove(deudaRef);
 
-        // Eliminar deuda
-        await db.ref(`deudas/${id}`).remove();
-
-        res.json({
-            success: true,
-            message: 'Deuda eliminada exitosamente'
-        });
-    } catch (error) {
-        console.error('Error eliminando deuda:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
+    res.json({ success: true, message: 'Deuda eliminada correctamente' });
+  } catch (error) {
+    console.error('Error eliminando deuda:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 /**
