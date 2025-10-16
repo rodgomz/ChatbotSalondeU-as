@@ -585,7 +585,7 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
                     <label for="cliente" style="display: block; margin-bottom: 5px; font-weight: bold;">Cliente:</label>
                     <div style="display: flex; gap: 5px;">
                         <select id="cliente" class="form-control" required style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
-                            <option value="">Seleccionar cliente...</option>
+                            <option value="">Buscar cliente...</option>
                             ${clientesOptions}
                         </select>
                         <button type="button" onclick="agregarClienteRapido()" class="btn btn-sm btn-info" style="white-space: nowrap;">➕ Nuevo</button>
@@ -596,7 +596,7 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
                     <label for="servicio" style="display: block; margin-bottom: 5px; font-weight: bold;">Servicio:</label>
                     <div style="display: flex; gap: 5px;">
                         <select id="servicio" class="form-control" required style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
-                            <option value="">Seleccionar servicio...</option>
+                            <option value="">Buscar servicio...</option>
                             ${serviciosOptions}
                         </select>
                         <button type="button" onclick="agregarServicioRapido()" class="btn btn-sm btn-info" style="white-space: nowrap;">➕ Nuevo</button>
@@ -622,10 +622,51 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
                 </div>
             </div>
         `,
-        width: '500px',
+        width: '550px',
         showCancelButton: true,
         confirmButtonText: '💾 Crear Cita',
         cancelButtonText: '❌ Cancelar',
+        didOpen: () => {
+            // Inicializar Select2 para clientes
+            $('#cliente').select2({
+                dropdownParent: $('.swal2-container'),
+                placeholder: 'Buscar cliente...',
+                allowClear: true,
+                width: '100%',
+                language: {
+                    noResults: function() {
+                        return "No se encontraron clientes";
+                    },
+                    searching: function() {
+                        return "Buscando...";
+                    }
+                }
+            });
+
+            // Inicializar Select2 para servicios
+            $('#servicio').select2({
+                dropdownParent: $('.swal2-container'),
+                placeholder: 'Buscar servicio...',
+                allowClear: true,
+                width: '100%',
+                language: {
+                    noResults: function() {
+                        return "No se encontraron servicios";
+                    },
+                    searching: function() {
+                        return "Buscando...";
+                    }
+                }
+            });
+
+            // Inicializar Select2 para hora (opcional)
+            $('#hora').select2({
+                dropdownParent: $('.swal2-container'),
+                placeholder: 'Seleccionar hora...',
+                allowClear: true,
+                width: '100%'
+            });
+        },
         preConfirm: () => {
             const clienteId = document.getElementById('cliente').value;
             const servicioId = document.getElementById('servicio').value;
@@ -646,6 +687,12 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
                 manicuristaId: manicurista || 'Sin asignar',
                 notas
             };
+        },
+        willClose: () => {
+            // Destruir Select2 al cerrar
+            $('#cliente').select2('destroy');
+            $('#servicio').select2('destroy');
+            $('#hora').select2('destroy');
         }
     }).then(async (result) => {
         if (result.isConfirmed) {
@@ -654,7 +701,9 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
     });
 }
 
-// Función para agregar cliente rápidamente
+// ============================================
+// FUNCIÓN PARA AGREGAR CLIENTE RÁPIDO
+// ============================================
 function agregarClienteRapido() {
     Swal.fire({
         title: '➕ Agregar Nuevo Cliente',
@@ -694,6 +743,16 @@ function agregarClienteRapido() {
                 if (result.success) {
                     // Recargar clientes
                     await loadClientes();
+                    
+                    // Actualizar Select2 con el nuevo cliente
+                    const nuevoClienteOption = new Option(
+                        `${nombre} (${telefono})`,
+                        result.id || result.clienteId,
+                        true,
+                        true
+                    );
+                    $('#cliente').append(nuevoClienteOption).trigger('change');
+                    
                     Swal.fire('Éxito', 'Cliente agregado correctamente', 'success');
                     return { nombre, telefono };
                 } else {
@@ -707,7 +766,9 @@ function agregarClienteRapido() {
     });
 }
 
-// Función para agregar servicio rápidamente
+// ============================================
+// FUNCIÓN PARA AGREGAR SERVICIO RÁPIDO
+// ============================================
 function agregarServicioRapido() {
     Swal.fire({
         title: '➕ Agregar Nuevo Servicio',
@@ -752,6 +813,16 @@ function agregarServicioRapido() {
                 if (result.success) {
                     // Recargar servicios
                     await loadServicios();
+                    
+                    // Actualizar Select2 con el nuevo servicio
+                    const nuevoServicioOption = new Option(
+                        `${nombre} - ${precio} (${duracion}min)`,
+                        result.id || result.servicioId,
+                        true,
+                        true
+                    );
+                    $('#servicio').append(nuevoServicioOption).trigger('change');
+                    
                     Swal.fire('Éxito', 'Servicio agregado correctamente', 'success');
                     return { nombre, precio, duracion };
                 } else {
@@ -1746,15 +1817,103 @@ async function verificarNotificaciones() {
     }
 }
 
-function verDeudaDesdeNotificacion(id) {
+async function verDeudaDesdeNotificacion(id) {
     Swal.close();
-    irADeudas();
-    setTimeout(() => {
-        const deuda = deudas.find(d => d.id === id);
-        if (deuda) {
-            editarDeuda(id);
+    
+    // Buscar la deuda
+    const deuda = deudas.find(d => d.id === id);
+    if (!deuda) {
+        Swal.fire({
+            icon: 'error',
+            title: '❌ Error',
+            text: 'No se encontró el pago',
+            customClass: { container: 'swal-on-top' }
+        });
+        return;
+    }
+    
+    const diasRestantes = calcularDiasRestantes(deuda.diaPago);
+    const vencido = diasRestantes < 0;
+    
+    let estadoHTML = '';
+    if (vencido) {
+        estadoHTML = `<span class="badge bg-danger">❌ Vencido hace ${Math.abs(diasRestantes)} día${Math.abs(diasRestantes) !== 1 ? 's' : ''}</span>`;
+    } else if (diasRestantes === 0) {
+        estadoHTML = `<span class="badge bg-warning">⏰ Vence HOY</span>`;
+    } else if (diasRestantes === 1) {
+        estadoHTML = `<span class="badge bg-warning">⏰ Vence MAÑANA</span>`;
+    } else {
+        estadoHTML = `<span class="badge bg-info">📅 Vence en ${diasRestantes} días</span>`;
+    }
+    
+    Swal.fire({
+        title: `💳 ${deuda.nombre}`,
+        html: `
+            <div class="text-start" style="max-width: 500px; margin: 0 auto;">
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h5 style="margin: 0; color: #333;">📋 ${deuda.tipo}</h5>
+                        ${estadoHTML}
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                        <div>
+                            <div style="color: #666; font-size: 0.9rem; margin-bottom: 5px;">💰 Monto</div>
+                            <div style="font-size: 1.5rem; font-weight: bold; color: #333;">${formatearMoneda(deuda.monto)}</div>
+                        </div>
+                        <div>
+                            <div style="color: #666; font-size: 0.9rem; margin-bottom: 5px;">📅 Día de Pago</div>
+                            <div style="font-size: 1.5rem; font-weight: bold; color: #333;">${deuda.diaPago}</div>
+                        </div>
+                    </div>
+                    
+                    ${deuda.notas ? `
+                        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #dee2e6;">
+                            <div style="color: #666; font-size: 0.9rem; margin-bottom: 5px;">📝 Notas</div>
+                            <div style="color: #555;">${deuda.notas}</div>
+                        </div>
+                    ` : ''}
+                </div>
+                
+                ${!deuda.pagado ? `
+                    <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin-bottom: 15px;">
+                        <strong style="color: #856404;">⚠️ Este pago está pendiente</strong>
+                        <p style="margin: 8px 0 0 0; color: #856404; font-size: 0.9rem;">
+                            ¿Deseas marcarlo como pagado?
+                        </p>
+                    </div>
+                ` : `
+                    <div style="background: #d4edda; padding: 15px; border-radius: 8px; border-left: 4px solid #28a745; margin-bottom: 15px;">
+                        <strong style="color: #155724;">✅ Este pago ya fue registrado</strong>
+                        <p style="margin: 8px 0 0 0; color: #155724; font-size: 0.9rem;">
+                            Pagado el ${formatearFecha(deuda.fechaPago)}
+                        </p>
+                    </div>
+                `}
+            </div>
+        `,
+        showCancelButton: true,
+        showDenyButton: !deuda.pagado,
+        confirmButtonText: deuda.pagado ? '🔁 Marcar como Pendiente' : '✅ Marcar como Pagado',
+        denyButtonText: '✏️ Editar Pago',
+        cancelButtonText: '❌ Cancelar',
+        confirmButtonColor: deuda.pagado ? '#ffc107' : '#28a745',
+        denyButtonColor: '#007bff',
+        width: '600px',
+        customClass: { container: 'swal-on-top' }
+    }).then(async (result) => {
+        if (result.isConfirmed) {
+            // Marcar como pagado o pendiente
+            await togglePago(id, deuda.pagado);
+            verificarNotificaciones();
+        } else if (result.isDenied) {
+            // Ir a editar
+            irADeudas();
+            setTimeout(() => {
+                editarDeuda(id);
+            }, 500);
         }
-    }, 500);
+    });
 }
 
 function mostrarNotificacionToast(mensaje, tipo = 'info') {
@@ -2141,6 +2300,61 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
     document.head.appendChild(style);
 });
+
+// ============================================
+// ESTILOS CSS PARA SELECT2
+// ============================================
+const select2Styles = `
+/* Estilos para Select2 dentro de SweetAlert2 */
+.select2-container {
+    z-index: 99999 !important;
+}
+
+.select2-dropdown {
+    z-index: 99999 !important;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.select2-container--default .select2-selection--single {
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    height: 38px;
+    padding: 6px 12px;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 24px;
+    color: #333;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 36px;
+}
+
+.select2-container--default .select2-results__option--highlighted[aria-selected] {
+    background-color: #007bff;
+}
+
+.select2-search--dropdown .select2-search__field {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 6px 12px;
+}
+
+.select2-container--default .select2-results__option[aria-selected=true] {
+    background-color: #f0f0f0;
+}
+`;
+
+// Agregar estilos al documento si aún no existen
+if (!document.getElementById('select2-custom-styles')) {
+    const styleElement = document.createElement('style');
+    styleElement.id = 'select2-custom-styles';
+    styleElement.textContent = select2Styles;
+    document.head.appendChild(styleElement);
+}
 // ============================================
 // FUNCIONES DEL BOT
 // ============================================
