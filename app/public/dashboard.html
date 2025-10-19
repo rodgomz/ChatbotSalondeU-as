@@ -750,48 +750,164 @@
             padding-bottom: 10px;
         }
           /* Deudas responsive */
-            .deudas-wrapper {
-                margin: 0;
-                height: 100vh;
-                border-radius: 0;
-            }
-
-            .deudas-fixed-header {
+            #deudas-page {
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                z-index: 10000;
+                overflow-y: auto;
                 padding: 20px;
-                border-radius: 0;
             }
 
-            .deudas-header-title h2 {
-                font-size: 1.5rem;
+            /* Contenedor interno */
+            .deudas-wrapper {
+                max-width: 1400px;
+                margin: 0 auto;
+                background: white;
+                border-radius: 15px;
+                min-height: calc(100vh - 40px);
+            }
+
+            /* Header principal fijo */
+            .deudas-header-main {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 30px;
+                border-radius: 15px 15px 0 0;
+                position: sticky;
+                top: 0;
+                z-index: 100;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             }
 
             .deudas-header-content {
-                flex-direction: column;
-                align-items: flex-start;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 15px;
             }
 
-            .btn-close-deudas {
-                width: 100%;
+            .deudas-header-content h2 {
+                margin: 0 0 5px 0;
             }
 
-            #resumen-stats {
-                grid-template-columns: repeat(2, 1fr);
-                padding: 20px;
+            .deudas-header-content p {
+                margin: 0;
+                opacity: 0.9;
+                font-size: 0.95rem;
+            }
+
+            /* Botón cerrar */
+            .btn-cerrar {
+                background: rgba(255, 255, 255, 0.2);
+                border: 2px solid rgba(255, 255, 255, 0.3);
+                color: white;
+                padding: 12px 24px;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 1rem;
+                transition: all 0.3s ease;
+                font-weight: 500;
+            }
+
+            .btn-cerrar:hover {
+                background: rgba(255, 255, 255, 0.3);
+            }
+
+            /* Resumen */
+            .resumen-container {
+                padding: 0 30px;
+                margin-top: -40px;
+            }
+
+            /* Subheader */
+            .deudas-subheader {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex-wrap: wrap;
                 gap: 10px;
+                padding: 20px 30px;
             }
 
-            .deudas-container {
+            .deudas-subheader h3 {
+                margin: 0 0 5px 0;
+                color: #333;
+            }
+
+            .deudas-subheader p {
+                color: #666;
+                margin: 0;
+                font-size: 0.9rem;
+            }
+
+            .deudas-buttons {
+                display: flex;
+                gap: 10px;
+                flex-wrap: wrap;
+            }
+
+            /* Grid de deudas */
+            .deudas-grid {
+                padding: 30px;
+            }
+
+            .deudas-loading {
+                text-align: center;
+                padding: 60px 20px;
+            }
+
+            .deudas-icon {
+                font-size: 4rem;
+                margin-bottom: 20px;
+                opacity: 0.5;
+            }
+
+            .deudas-loading h3 {
+                color: #999;
+                margin-bottom: 10px;
+            }
+
+            /* Footer */
+            .deudas-footer {
+                padding: 30px;
+                background: #f8f9fa;
+                border-radius: 0 0 15px 15px;
+                margin-top: 30px;
+            }
+
+            .footer-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                gap: 20px;
+            }
+
+            .footer-item {
+                text-align: center;
                 padding: 20px;
             }
 
-            .deudas-grid {
-                grid-template-columns: 1fr;
+            .footer-icon {
+                font-size: 2rem;
+                margin-bottom: 10px;
             }
 
-            .deudas-header {
-                flex-direction: column;
-                align-items: flex-start;
+            .footer-item h5 {
+                color: #333;
+                margin-bottom: 5px;
             }
+
+            .footer-item p {
+                color: #666;
+                font-size: 0.9rem;
+                margin: 0;
+            }
+
 
         @media (max-width: 768px) {
             .calendar-grid {
@@ -1267,109 +1383,101 @@
     </div>
 
     <!-- PÁGINA DE DEUDAS (Modal/Overlay) -->
-   <div id="deudas-page" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); z-index: 10000; overflow-y: auto; padding: 20px;">
-        <div style="max-width: 1400px; margin: 0 auto; background: white; border-radius: 15px; min-height: calc(100vh - 40px);">
-            
-            <!-- Header -->
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 15px 15px 0 0; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
-                    <div>
-                        <h2 style="margin: 0 0 5px 0;">💳 Gestión de Deudas y Pagos</h2>
-                        <p style="margin: 0; opacity: 0.9; font-size: 0.95rem;">Administra tus compromisos financieros mensuales</p>
-                    </div>
-                    <button onclick="cerrarDeudas()" style="background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.3); color: white; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-size: 1rem; transition: all 0.3s ease; font-weight: 500;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">
-                        ✕ Cerrar
-                    </button>
+   <div id="deudas-page">
+    <div class="deudas-wrapper">
+        
+        <!-- Header -->
+        <div class="deudas-header-main">
+            <div class="deudas-header-content">
+                <div>
+                    <h2>💳 Gestión de Deudas y Pagos</h2>
+                    <p>Administra tus compromisos financieros mensuales</p>
+                </div>
+                <button class="btn-cerrar" onclick="cerrarDeudas()">✕ Cerrar</button>
+            </div>
+        </div>
+
+        <!-- Resumen Estadístico -->
+        <div class="resumen-container">
+            <div id="resumen-stats">
+                <div class="stat-item">
+                    <div class="stat-number">0</div>
+                    <div class="stat-label">Total Pagos</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number text-success">0</div>
+                    <div class="stat-label">Pagados</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number text-danger">0</div>
+                    <div class="stat-label">Pendientes</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number text-warning">0</div>
+                    <div class="stat-label">Por Vencer</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">$0.00</div>
+                    <div class="stat-label">Total</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number text-danger">$0.00</div>
+                    <div class="stat-label">Pendiente</div>
                 </div>
             </div>
- <!-- Resumen Estadístico -->
-            <div style="padding: 0 30px;">
-                <div id="resumen-stats" style="margin-top: -40px;">
-                    <div class="stat-item">
-                        <div class="stat-number">0</div>
-                        <div class="stat-label">Total Pagos</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-number text-success">0</div>
-                        <div class="stat-label">Pagados</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-number text-danger">0</div>
-                        <div class="stat-label">Pendientes</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-number text-warning">0</div>
-                        <div class="stat-label">Por Vencer</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-number">$0.00</div>
-                        <div class="stat-label">Total</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-number text-danger">$0.00</div>
-                        <div class="stat-label">Pendiente</div>
-                    </div>
-                </div>
-            </div>
+        </div>
 
-            <!-- Contenido Principal -->
-            <div class="deudas-container">
-                <!-- Header con botones de acción -->
-                <div class="deudas-header">
-                    <div>
-                        <h3 style="margin: 0 0 5px 0; color: #333;">📋 Próximos Pagos</h3>
-                        <p style="color: #666; margin: 0; font-size: 0.9rem;">Gestiona tus compromisos financieros del mes</p>
-                    </div>
-                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <button class="btn btn-success" onclick="agregarDeuda()">
-                            ➕ Agregar Pago
-                        </button>
-                        <button class="btn btn-info text-white" onclick="agregarDeudasLote()">
-                            📦 Agregar Varios
-                        </button>
-                        <button class="btn btn-primary" onclick="verDeudasPorTipo()">
-                            📊 Ver por Tipo
-                        </button>
-                        <button class="btn btn-warning" onclick="resetearPagos()">
-                            🔄 Resetear Pagos
-                        </button>
-                    </div>
+        <!-- Contenido Principal -->
+        <div class="deudas-container">
+            <!-- Header con botones de acción -->
+            <div class="deudas-subheader">
+                <div>
+                    <h3>📋 Próximos Pagos</h3>
+                    <p>Gestiona tus compromisos financieros del mes</p>
                 </div>
-
-                <!-- Grid de Deudas -->
-                <div class="deudas-grid" id="deudas-grid">
-                    <div style="text-align: center; padding: 60px 20px; grid-column: 1 / -1;">
-                        <div style="font-size: 4rem; margin-bottom: 20px; opacity: 0.5;">💳</div>
-                        <h3 style="color: #999; margin-bottom: 10px;">Cargando pagos...</h3>
-                        <div class="spinner-border text-primary mt-3" role="status">
-                            <span class="visually-hidden">Cargando...</span>
-                        </div>
-                    </div>
+                <div class="deudas-buttons">
+                    <button class="btn btn-success" onclick="agregarDeuda()">➕ Agregar Pago</button>
+                    <button class="btn btn-info text-white" onclick="agregarDeudasLote()">📦 Agregar Varios</button>
+                    <button class="btn btn-primary" onclick="verDeudasPorTipo()">📊 Ver por Tipo</button>
+                    <button class="btn btn-warning" onclick="resetearPagos()">🔄 Resetear Pagos</button>
                 </div>
             </div>
 
-            <!-- Footer con información adicional -->
-            <div style="padding: 30px; background: #f8f9fa; border-radius: 0 0 15px 15px; margin-top: 30px;">
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
-                    <div style="text-align: center; padding: 20px;">
-                        <div style="font-size: 2rem; margin-bottom: 10px;">📅</div>
-                        <h5 style="color: #333; margin-bottom: 5px;">Pagos Automáticos</h5>
-                        <p style="color: #666; font-size: 0.9rem; margin: 0;">Configura recordatorios para cada pago</p>
-                    </div>
-                    <div style="text-align: center; padding: 20px;">
-                        <div style="font-size: 2rem; margin-bottom: 10px;">📊</div>
-                        <h5 style="color: #333; margin-bottom: 5px;">Historial</h5>
-                        <p style="color: #666; font-size: 0.9rem; margin: 0;">Consulta el historial de cada pago</p>
-                    </div>
-                    <div style="text-align: center; padding: 20px;">
-                        <div style="font-size: 2rem; margin-bottom: 10px;">🔔</div>
-                        <h5 style="color: #333; margin-bottom: 5px;">Notificaciones</h5>
-                        <p style="color: #666; font-size: 0.9rem; margin: 0;">Recibe alertas 10, 7, 3 y 1 día antes</p>
+            <!-- Grid de Deudas -->
+            <div class="deudas-grid" id="deudas-grid">
+                <div class="deudas-loading">
+                    <div class="deudas-icon">💳</div>
+                    <h3>Cargando pagos...</h3>
+                    <div class="spinner-border text-primary mt-3" role="status">
+                        <span class="visually-hidden">Cargando...</span>
                     </div>
                 </div>
             </div>
         </div>
+
+        <!-- Footer -->
+        <div class="deudas-footer">
+            <div class="footer-grid">
+                <div class="footer-item">
+                    <div class="footer-icon">📅</div>
+                    <h5>Pagos Automáticos</h5>
+                    <p>Configura recordatorios para cada pago</p>
+                </div>
+                <div class="footer-item">
+                    <div class="footer-icon">📊</div>
+                    <h5>Historial</h5>
+                    <p>Consulta el historial de cada pago</p>
+                </div>
+                <div class="footer-item">
+                    <div class="footer-icon">🔔</div>
+                    <h5>Notificaciones</h5>
+                    <p>Recibe alertas 10, 7, 3 y 1 día antes</p>
+                </div>
+            </div>
+        </div>
     </div>
+</div>
+
     <!-- Bootstrap JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
      <!-- Tu archivo dashboard.js -->
