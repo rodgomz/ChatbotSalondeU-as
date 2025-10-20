@@ -611,7 +611,7 @@ function selectDate(date) {
 // ============================================
 function showNewAppointmentForm(dateStr, defaultHour = '') {
     console.log('🔍 showNewAppointmentForm llamada con:', { dateStr, defaultHour });
-    
+
     let fecha = new Date(dateStr);
     if (isNaN(fecha.getTime())) {
         const parts = dateStr.split('-');
@@ -619,210 +619,85 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
             fecha = new Date(parts[0], parts[1] - 1, parts[2]);
         }
     }
-    
-    console.log('📅 Fecha procesada:', fecha);
-    
-    const fechaFormateada = `${fecha.getDate().toString().padStart(2, '0')}/${(fecha.getMonth() + 1).toString().padStart(2, '0')}/${fecha.getFullYear()}`;
-    
-    console.log('👥 Total clientes:', clientes.length);
-    console.log('✂️ Total servicios:', servicios.length);
-    
-    const clientesOptions = clientes.map(cliente => 
-        `<option value="${cliente.id}">${cliente.nombre} (${cliente.telefono})</option>`
-    ).join('');
 
-    const serviciosOptions = servicios.map(servicio => 
-        `<option value="${servicio.id}">${servicio.nombre} - ${servicio.precio} (${servicio.duracion}min)</option>`
-    ).join('');
+    const fechaFormateada = `${fecha.getDate().toString().padStart(2, '0')}/${
+        (fecha.getMonth() + 1).toString().padStart(2, '0')
+    }/${fecha.getFullYear()}`;
+
+    const clientesOptions = clientes.map(c => `<option value="${c.id}">${c.nombre} (${c.telefono})</option>`).join('');
+    const serviciosOptions = servicios.map(s => `<option value="${s.id}">${s.nombre} - ${s.precio} (${s.duracion}min)</option>`).join('');
 
     const horasOptions = [];
-    for (let hora = BUSINESS_HOURS.start; hora < BUSINESS_HOURS.end; hora++) {
-        for (let minuto = 0; minuto < 60; minuto += BUSINESS_HOURS.interval) {
-            const horaStr = `${hora.toString().padStart(2, '0')}:${minuto.toString().padStart(2, '0')}`;
-            const selected = defaultHour === horaStr ? 'selected' : '';
-            horasOptions.push(`<option value="${horaStr}" ${selected}>${horaStr}</option>`);
+    for (let h = BUSINESS_HOURS.start; h < BUSINESS_HOURS.end; h++) {
+        for (let m = 0; m < 60; m += BUSINESS_HOURS.interval) {
+            const horaStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+            horasOptions.push(`<option value="${horaStr}" ${defaultHour === horaStr ? 'selected' : ''}>${horaStr}</option>`);
         }
     }
-
-    console.log('🕐 Total horas generadas:', horasOptions.length);
-    console.log('🚀 Abriendo modal SweetAlert...');
 
     Swal.fire({
         title: `➕ Nueva Cita - ${fecha.toLocaleDateString('es-ES')}`,
         html: `
-            <div class="new-appointment-form" style="text-align: left;">
-                <div class="form-group" style="margin-bottom: 15px;">
-                    <label for="cliente" style="display: block; margin-bottom: 5px; font-weight: bold;">Cliente:</label>
-                    <div style="display: flex; gap: 5px;">
-                        <select id="cliente" class="form-control" required style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
-                            <option value="">Buscar cliente...</option>
-                            ${clientesOptions}
-                        </select>
-                        <button type="button" onclick="agregarClienteRapido()" class="btn btn-sm btn-info" style="white-space: nowrap;">➕ Nuevo</button>
-                    </div>
-                </div>
-                
-                <div class="form-group" style="margin-bottom: 15px;">
-                    <label for="servicio" style="display: block; margin-bottom: 5px; font-weight: bold;">Servicio:</label>
-                    <div style="display: flex; gap: 5px;">
-                        <select id="servicio" class="form-control" required style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
-                            <option value="">Buscar servicio...</option>
-                            ${serviciosOptions}
-                        </select>
-                        <button type="button" onclick="agregarServicioRapido()" class="btn btn-sm btn-info" style="white-space: nowrap;">➕ Nuevo</button>
-                    </div>
-                </div>
-                
-                <div class="form-group" style="margin-bottom: 15px;">
-                    <label for="hora" style="display: block; margin-bottom: 5px; font-weight: bold;">Hora:</label>
-                    <select id="hora" class="form-control" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
-                        <option value="">Seleccionar hora...</option>
-                        ${horasOptions.join('')}
-                    </select>
-                </div>
-                
-                <div class="form-group" style="margin-bottom: 15px;">
-                    <label for="manicurista" style="display: block; margin-bottom: 5px; font-weight: bold;">Manicurista:</label>
-                    <input type="text" id="manicurista" class="form-control" placeholder="Nombre del manicurista (opcional)" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
-                </div>
-                
-                <div class="form-group">
-                    <label for="notas" style="display: block; margin-bottom: 5px; font-weight: bold;">Notas:</label>
-                    <textarea id="notas" class="form-control" rows="3" placeholder="Notas adicionales (opcional)" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;"></textarea>
-                </div>
-            </div>
+        <div class="new-appointment-form">
+            <label>Cliente:</label>
+            <select id="cliente" class="form-control">
+                <option value="">Buscar cliente...</option>${clientesOptions}
+            </select>
+            <button type="button" onclick="agregarClienteRapido()" class="btn btn-info btn-sm">➕ Nuevo</button>
+
+            <label>Servicio:</label>
+            <select id="servicio" class="form-control">
+                <option value="">Buscar servicio...</option>${serviciosOptions}
+            </select>
+            <button type="button" onclick="agregarServicioRapido()" class="btn btn-info btn-sm">➕ Nuevo</button>
+
+            <label>Hora:</label>
+            <select id="hora" class="form-control">
+                <option value="">Seleccionar hora...</option>${horasOptions.join('')}
+            </select>
+
+            <label>Manicurista:</label>
+            <input type="text" id="manicurista" class="form-control" placeholder="Opcional">
+
+            <label>Notas:</label>
+            <textarea id="notas" class="form-control" rows="3" placeholder="Opcional"></textarea>
+        </div>
         `,
-        width: '550px',
         showCancelButton: true,
         confirmButtonText: '💾 Crear Cita',
         cancelButtonText: '❌ Cancelar',
-        confirmButtonColor: '#28a745',
-        cancelButtonColor: '#6c757d',
+        width: '550px',
         didOpen: () => {
-            console.log('✅ Modal abierto - inicializando Select2...');
-            
-            // Inicializar Select2 para clientes
             try {
-                $('#cliente').select2({
-                    dropdownParent: $('.swal2-container'),
-                    placeholder: 'Buscar cliente...',
-                    allowClear: true,
-                    width: '100%',
-                    language: {
-                        noResults: function() {
-                            return "No se encontraron clientes";
-                        },
-                        searching: function() {
-                            return "Buscando...";
-                        }
-                    }
+                $('#cliente, #servicio, #hora').each(function () {
+                    $(this).select2({ dropdownParent: $('.swal2-popup'), width: '100%' });
                 });
-                console.log('✅ Select2 de clientes inicializado');
             } catch (e) {
-                console.error('❌ Error al inicializar Select2 de clientes:', e);
-            }
-
-            // Inicializar Select2 para servicios
-            try {
-                $('#servicio').select2({
-                    dropdownParent: $('.swal2-container'),
-                    placeholder: 'Buscar servicio...',
-                    allowClear: true,
-                    width: '100%',
-                    language: {
-                        noResults: function() {
-                            return "No se encontraron servicios";
-                        },
-                        searching: function() {
-                            return "Buscando...";
-                        }
-                    }
-                });
-                console.log('✅ Select2 de servicios inicializado');
-            } catch (e) {
-                console.error('❌ Error al inicializar Select2 de servicios:', e);
-            }
-
-            // Inicializar Select2 para hora
-            try {
-                $('#hora').select2({
-                    dropdownParent: $('.swal2-container'),
-                    placeholder: 'Seleccionar hora...',
-                    allowClear: true,
-                    width: '100%'
-                });
-                console.log('✅ Select2 de hora inicializado');
-            } catch (e) {
-                console.error('❌ Error al inicializar Select2 de hora:', e);
+                console.error('Error al inicializar Select2:', e);
             }
         },
         preConfirm: () => {
-            console.log('📝 Validando formulario...');
-            
-            const clienteId = document.getElementById('cliente').value;
-            const servicioId = document.getElementById('servicio').value;
-            const hora = document.getElementById('hora').value;
-            const manicurista = document.getElementById('manicurista').value;
-            const notas = document.getElementById('notas').value;
-
-            console.log('Valores del formulario:', { clienteId, servicioId, hora, manicurista, notas });
+            const clienteId = $('#cliente').val();
+            const servicioId = $('#servicio').val();
+            const hora = $('#hora').val();
+            const manicurista = $('#manicurista').val();
+            const notas = $('#notas').val();
 
             if (!clienteId || !servicioId || !hora) {
                 Swal.showValidationMessage('Por favor completa todos los campos obligatorios');
                 return false;
             }
 
-            return {
-                clienteId,
-                servicioId,
-                fecha: fechaFormateada,
-                hora,
-                manicuristaId: manicurista || 'Sin asignar',
-                notas
-            };
+            return { clienteId, servicioId, fecha: fechaFormateada, hora, manicuristaId: manicurista || 'Sin asignar', notas };
         },
         willClose: () => {
-            console.log('🔒 Cerrando modal - destruyendo Select2...');
-            
-            try {
-                if ($('#cliente').data('select2')) {
-                    $('#cliente').select2('destroy');
-                }
-            } catch (e) {
-                console.warn('Error al destruir Select2 de cliente:', e);
-            }
-            
-            try {
-                if ($('#servicio').data('select2')) {
-                    $('#servicio').select2('destroy');
-                }
-            } catch (e) {
-                console.warn('Error al destruir Select2 de servicio:', e);
-            }
-            
-            try {
-                if ($('#hora').data('select2')) {
-                    $('#hora').select2('destroy');
-                }
-            } catch (e) {
-                console.warn('Error al destruir Select2 de hora:', e);
-            }
+            try { $('#cliente, #servicio, #hora').select2('destroy'); } catch {}
         }
-    }).then(async (result) => {
-        console.log('📊 Resultado del modal:', result);
-        
-        if (result.isConfirmed) {
-            console.log('✅ Confirmado - creando cita...');
-            await createNewAppointment(result.value);
-        } else {
-            console.log('❌ Cancelado');
-        }
-    }).catch(error => {
-        console.error('❌ Error en SweetAlert:', error);
+    }).then(result => {
+        if (result.isConfirmed) createNewAppointment(result.value);
     });
-    
-    console.log('🏁 Fin de showNewAppointmentForm');
 }
+
 
 // Función auxiliar global para inicializar Select2 de forma segura (opcional, puedes ponerla fuera)
 function initSelect2Safe(selector, options = {}) {
