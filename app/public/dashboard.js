@@ -610,6 +610,8 @@ function selectDate(date) {
 // FORMULARIO DE NUEVAS CITAS
 // ============================================
 function showNewAppointmentForm(dateStr, defaultHour = '') {
+    console.log('🔍 showNewAppointmentForm llamada con:', { dateStr, defaultHour });
+    
     let fecha = new Date(dateStr);
     if (isNaN(fecha.getTime())) {
         const parts = dateStr.split('-');
@@ -618,7 +620,12 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
         }
     }
     
+    console.log('📅 Fecha procesada:', fecha);
+    
     const fechaFormateada = `${fecha.getDate().toString().padStart(2, '0')}/${(fecha.getMonth() + 1).toString().padStart(2, '0')}/${fecha.getFullYear()}`;
+    
+    console.log('👥 Total clientes:', clientes.length);
+    console.log('✂️ Total servicios:', servicios.length);
     
     const clientesOptions = clientes.map(cliente => 
         `<option value="${cliente.id}">${cliente.nombre} (${cliente.telefono})</option>`
@@ -636,6 +643,9 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
             horasOptions.push(`<option value="${horaStr}" ${selected}>${horaStr}</option>`);
         }
     }
+
+    console.log('🕐 Total horas generadas:', horasOptions.length);
+    console.log('🚀 Abriendo modal SweetAlert...');
 
     Swal.fire({
         title: `➕ Nueva Cita - ${fecha.toLocaleDateString('es-ES')}`,
@@ -686,75 +696,76 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
         showCancelButton: true,
         confirmButtonText: '💾 Crear Cita',
         cancelButtonText: '❌ Cancelar',
+        confirmButtonColor: '#28a745',
+        cancelButtonColor: '#6c757d',
         didOpen: () => {
-            // Función helper para inicializar Select2 de forma segura
-            const initSelect2Safe = (selector, options) => {
-                const $element = $(selector);
-                if ($element.length === 0) return;
-                
-                // Verificar si ya tiene Select2 inicializado
-                if ($element.data('select2')) {
-                    try {
-                        $element.select2('destroy');
-                    } catch (e) {
-                        console.warn('Error al destruir Select2 previo:', e);
-                    }
-                }
-                
-                // Inicializar Select2
-                try {
-                    $element.select2(options);
-                } catch (e) {
-                    console.error('Error al inicializar Select2:', e);
-                }
-            };
-
+            console.log('✅ Modal abierto - inicializando Select2...');
+            
             // Inicializar Select2 para clientes
-            initSelect2Safe('#cliente', {
-                dropdownParent: $('.swal2-container'),
-                placeholder: 'Buscar cliente...',
-                allowClear: true,
-                width: '100%',
-                language: {
-                    noResults: function() {
-                        return "No se encontraron clientes";
-                    },
-                    searching: function() {
-                        return "Buscando...";
+            try {
+                $('#cliente').select2({
+                    dropdownParent: $('.swal2-container'),
+                    placeholder: 'Buscar cliente...',
+                    allowClear: true,
+                    width: '100%',
+                    language: {
+                        noResults: function() {
+                            return "No se encontraron clientes";
+                        },
+                        searching: function() {
+                            return "Buscando...";
+                        }
                     }
-                }
-            });
+                });
+                console.log('✅ Select2 de clientes inicializado');
+            } catch (e) {
+                console.error('❌ Error al inicializar Select2 de clientes:', e);
+            }
 
             // Inicializar Select2 para servicios
-            initSelect2Safe('#servicio', {
-                dropdownParent: $('.swal2-container'),
-                placeholder: 'Buscar servicio...',
-                allowClear: true,
-                width: '100%',
-                language: {
-                    noResults: function() {
-                        return "No se encontraron servicios";
-                    },
-                    searching: function() {
-                        return "Buscando...";
+            try {
+                $('#servicio').select2({
+                    dropdownParent: $('.swal2-container'),
+                    placeholder: 'Buscar servicio...',
+                    allowClear: true,
+                    width: '100%',
+                    language: {
+                        noResults: function() {
+                            return "No se encontraron servicios";
+                        },
+                        searching: function() {
+                            return "Buscando...";
+                        }
                     }
-                }
-            });
+                });
+                console.log('✅ Select2 de servicios inicializado');
+            } catch (e) {
+                console.error('❌ Error al inicializar Select2 de servicios:', e);
+            }
 
             // Inicializar Select2 para hora
-            initSelect2Safe('#hora', {
-                dropdownParent: $('.swal2-container'),
-                placeholder: 'Seleccionar hora...',
-                allowClear: true,
-                width: '100%'
-            });
+            try {
+                $('#hora').select2({
+                    dropdownParent: $('.swal2-container'),
+                    placeholder: 'Seleccionar hora...',
+                    allowClear: true,
+                    width: '100%'
+                });
+                console.log('✅ Select2 de hora inicializado');
+            } catch (e) {
+                console.error('❌ Error al inicializar Select2 de hora:', e);
+            }
         },
         preConfirm: () => {
+            console.log('📝 Validando formulario...');
+            
             const clienteId = document.getElementById('cliente').value;
             const servicioId = document.getElementById('servicio').value;
             const hora = document.getElementById('hora').value;
             const manicurista = document.getElementById('manicurista').value;
             const notas = document.getElementById('notas').value;
+
+            console.log('Valores del formulario:', { clienteId, servicioId, hora, manicurista, notas });
 
             if (!clienteId || !servicioId || !hora) {
                 Swal.showValidationMessage('Por favor completa todos los campos obligatorios');
@@ -771,31 +782,46 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
             };
         },
         willClose: () => {
-            // Función helper para destruir Select2 de forma segura
-            const destroySelect2Safe = (selector) => {
-                const $element = $(selector);
-                if ($element.length === 0) return;
-                
-                // Solo destruir si tiene Select2 inicializado
-                if ($element.data('select2')) {
-                    try {
-                        $element.select2('destroy');
-                    } catch (e) {
-                        console.warn(`Error al destruir Select2 en ${selector}:`, e);
-                    }
+            console.log('🔒 Cerrando modal - destruyendo Select2...');
+            
+            try {
+                if ($('#cliente').data('select2')) {
+                    $('#cliente').select2('destroy');
                 }
-            };
-
-            // Destruir Select2 al cerrar
-            destroySelect2Safe('#cliente');
-            destroySelect2Safe('#servicio');
-            destroySelect2Safe('#hora');
+            } catch (e) {
+                console.warn('Error al destruir Select2 de cliente:', e);
+            }
+            
+            try {
+                if ($('#servicio').data('select2')) {
+                    $('#servicio').select2('destroy');
+                }
+            } catch (e) {
+                console.warn('Error al destruir Select2 de servicio:', e);
+            }
+            
+            try {
+                if ($('#hora').data('select2')) {
+                    $('#hora').select2('destroy');
+                }
+            } catch (e) {
+                console.warn('Error al destruir Select2 de hora:', e);
+            }
         }
     }).then(async (result) => {
+        console.log('📊 Resultado del modal:', result);
+        
         if (result.isConfirmed) {
+            console.log('✅ Confirmado - creando cita...');
             await createNewAppointment(result.value);
+        } else {
+            console.log('❌ Cancelado');
         }
+    }).catch(error => {
+        console.error('❌ Error en SweetAlert:', error);
     });
+    
+    console.log('🏁 Fin de showNewAppointmentForm');
 }
 
 // Función auxiliar global para inicializar Select2 de forma segura (opcional, puedes ponerla fuera)
@@ -2395,7 +2421,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         .stat-label {
             font-size: 0.85rem;
-            color: rgba(255,255,255,0.9);
+            color: rgba(36, 35, 35, 0.9);
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
