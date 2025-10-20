@@ -648,6 +648,11 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
     console.log('🕐 Total horas generadas:', horasOptions.length);
     console.log('🚀 Abriendo modal SweetAlert...');
 
+    // Destruir cualquier Select2 existente antes de abrir el modal
+    setTimeout(() => {
+        $('.select2-container').remove();
+    }, 50);
+
     Swal.fire({
         title: `➕ Nueva Cita - ${fecha.toLocaleDateString('es-ES')}`,
         html: `
@@ -700,40 +705,69 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
         confirmButtonColor: '#28a745',
         cancelButtonColor: '#6c757d',
         allowOutsideClick: false,
+        allowEscapeKey: true,
+        focusConfirm: false,
         didOpen: () => {
             console.log('✅ Modal abierto - inicializando Select2...');
             
-            // Prevenir que el modal se cierre al hacer clic fuera
             const popup = Swal.getPopup();
+            
+            // Prevenir propagación de eventos que puedan cerrar el modal
             if (popup) {
-                popup.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                });
+                popup.style.pointerEvents = 'auto';
             }
             
-            // Usar setTimeout para inicializar Select2 después de que el modal esté completamente renderizado
+            // Inicializar Select2 con un delay más largo y sin bloquear el hilo principal
             setTimeout(() => {
-                ['#cliente', '#servicio', '#hora'].forEach(selector => {
-                    if ($(selector).length) {
-                        try {
-                            $(selector).select2({
-                                dropdownParent: $('.swal2-popup'),
-                                placeholder: 'Seleccione...',
-                                allowClear: true,
-                                width: '100%',
-                                language: {
-                                    noResults: function() { return "No se encontraron resultados"; },
-                                    searching: function() { return "Buscando..."; }
-                                },
-                                closeOnSelect: true
-                            });
-                            console.log(`✅ Select2 de ${selector} inicializado`);
-                        } catch (e) {
-                            console.error(`❌ Error al inicializar Select2 de ${selector}:`, e);
-                        }
+                try {
+                    // Cliente
+                    if ($('#cliente').length && !$('#cliente').hasClass('select2-hidden-accessible')) {
+                        $('#cliente').select2({
+                            dropdownParent: popup ? $(popup) : $('.swal2-popup'),
+                            placeholder: 'Buscar cliente...',
+                            allowClear: true,
+                            width: '100%',
+                            language: {
+                                noResults: function() { return "No se encontraron resultados"; },
+                                searching: function() { return "Buscando..."; }
+                            }
+                        });
+                        console.log('✅ Select2 de #cliente inicializado');
                     }
-                });
-            }, 100);
+
+                    // Servicio
+                    if ($('#servicio').length && !$('#servicio').hasClass('select2-hidden-accessible')) {
+                        $('#servicio').select2({
+                            dropdownParent: popup ? $(popup) : $('.swal2-popup'),
+                            placeholder: 'Buscar servicio...',
+                            allowClear: true,
+                            width: '100%',
+                            language: {
+                                noResults: function() { return "No se encontraron resultados"; },
+                                searching: function() { return "Buscando..."; }
+                            }
+                        });
+                        console.log('✅ Select2 de #servicio inicializado');
+                    }
+
+                    // Hora
+                    if ($('#hora').length && !$('#hora').hasClass('select2-hidden-accessible')) {
+                        $('#hora').select2({
+                            dropdownParent: popup ? $(popup) : $('.swal2-popup'),
+                            placeholder: 'Seleccionar hora...',
+                            allowClear: true,
+                            width: '100%',
+                            language: {
+                                noResults: function() { return "No se encontraron resultados"; },
+                                searching: function() { return "Buscando..."; }
+                            }
+                        });
+                        console.log('✅ Select2 de #hora inicializado');
+                    }
+                } catch (e) {
+                    console.error('❌ Error al inicializar Select2:', e);
+                }
+            }, 300);
         },
         preConfirm: () => {
             console.log('📝 Validando formulario...');
@@ -762,16 +796,17 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
         },
         willClose: () => {
             console.log('🔒 Cerrando modal - destruyendo Select2...');
-            ['#cliente', '#servicio', '#hora'].forEach(selector => {
-                if ($(selector).data('select2')) {
-                    try {
-                        $(selector).select2('destroy');
+            try {
+                ['#cliente', '#servicio', '#hora'].forEach(selector => {
+                    const element = $(selector);
+                    if (element.length && element.hasClass('select2-hidden-accessible')) {
+                        element.select2('destroy');
                         console.log(`✅ Select2 de ${selector} destruido`);
-                    } catch (e) {
-                        console.warn(`⚠️ Error al destruir Select2 de ${selector}:`, e);
                     }
-                }
-            });
+                });
+            } catch (e) {
+                console.warn('⚠️ Error al destruir Select2:', e);
+            }
         }
     }).then(async (result) => {
         console.log('📊 Resultado del modal:', result);
@@ -787,7 +822,6 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
 
     console.log('🏁 Fin de showNewAppointmentForm');
 }
-
 
 // Función auxiliar global para inicializar Select2 de forma segura (opcional, puedes ponerla fuera)
 function initSelect2Safe(selector, options = {}) {
