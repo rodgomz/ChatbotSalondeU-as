@@ -776,6 +776,7 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
     console.log('🏁 Fin de showNewAppointmentForm');
 }
 
+
 // Función auxiliar global para inicializar Select2 de forma segura (opcional, puedes ponerla fuera)
 function initSelect2Safe(selector, options = {}) {
     const $element = $(selector);
