@@ -699,29 +699,41 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
         cancelButtonText: '❌ Cancelar',
         confirmButtonColor: '#28a745',
         cancelButtonColor: '#6c757d',
+        allowOutsideClick: false,
         didOpen: () => {
             console.log('✅ Modal abierto - inicializando Select2...');
             
-            // Inicializar Select2 solo si el elemento existe
-            ['#cliente', '#servicio', '#hora'].forEach(selector => {
-                if ($(selector).length) {
-                    try {
-                        $(selector).select2({
-                            dropdownParent: $('.swal2-container'),
-                            placeholder: 'Seleccione...',
-                            allowClear: true,
-                            width: '100%',
-                            language: {
-                                noResults: function() { return "No se encontraron resultados"; },
-                                searching: function() { return "Buscando..."; }
-                            }
-                        });
-                        console.log(`✅ Select2 de ${selector} inicializado`);
-                    } catch (e) {
-                        console.error(`❌ Error al inicializar Select2 de ${selector}:`, e);
+            // Prevenir que el modal se cierre al hacer clic fuera
+            const popup = Swal.getPopup();
+            if (popup) {
+                popup.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                });
+            }
+            
+            // Usar setTimeout para inicializar Select2 después de que el modal esté completamente renderizado
+            setTimeout(() => {
+                ['#cliente', '#servicio', '#hora'].forEach(selector => {
+                    if ($(selector).length) {
+                        try {
+                            $(selector).select2({
+                                dropdownParent: $('.swal2-popup'),
+                                placeholder: 'Seleccione...',
+                                allowClear: true,
+                                width: '100%',
+                                language: {
+                                    noResults: function() { return "No se encontraron resultados"; },
+                                    searching: function() { return "Buscando..."; }
+                                },
+                                closeOnSelect: true
+                            });
+                            console.log(`✅ Select2 de ${selector} inicializado`);
+                        } catch (e) {
+                            console.error(`❌ Error al inicializar Select2 de ${selector}:`, e);
+                        }
                     }
-                }
-            });
+                });
+            }, 100);
         },
         preConfirm: () => {
             console.log('📝 Validando formulario...');
