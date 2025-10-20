@@ -183,19 +183,41 @@ function getAppointmentsForSlot(date, hour, minute = 0) {
     const slotStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, minute, 0);
     const slotEnd = new Date(slotStart.getTime() + BUSINESS_HOURS.interval * 60000);
     
-    return appointments.filter(apt => {
+    console.log('🔍 Buscando citas para:', {
+        fecha: date.toLocaleDateString('es-ES'),
+        hora: `${hour}:${minute}`,
+        slotStart: slotStart.toLocaleString('es-ES'),
+        slotEnd: slotEnd.toLocaleString('es-ES'),
+        totalCitas: appointments.length
+    });
+    
+    const citasEncontradas = appointments.filter(apt => {
         // Solo contar citas confirmadas o en proceso (no canceladas)
         if (!['Reservada', 'Confirmada', 'En Proceso', 'Finalizada'].includes(apt.status)) {
             return false;
         }
         
         const aptStart = apt.date;
-        const aptEnd = apt.endTime; // Usa la hora de fin calculada por duracion
+        const aptEnd = apt.endTime;
         
         // Verificar si hay superposición de tiempo
-        // Si la cita ocupa este slot, no está disponible
-        return !(aptEnd <= slotStart || aptStart >= slotEnd);
+        const haySuperposicion = !(aptEnd <= slotStart || aptStart >= slotEnd);
+        
+        if (haySuperposicion) {
+            console.log('✅ Cita encontrada:', {
+                cliente: apt.client,
+                servicio: apt.service,
+                inicio: aptStart.toLocaleString('es-ES'),
+                fin: aptEnd.toLocaleString('es-ES')
+            });
+        }
+        
+        return haySuperposicion;
     });
+    
+    console.log(`📊 Total de citas en este horario: ${citasEncontradas.length}`);
+    
+    return citasEncontradas;
 }
 
 // Calcular horas ocupadas considerando la duración real del servicio
@@ -351,18 +373,37 @@ function handleHourClick(dateStr, hour, minute = 0) {
             showAppointmentDetails(aptsInSlot[0].id);
         } else {
             // Si hay múltiples citas, mostrar lista para seleccionar
-            const citasHtml = aptsInSlot.map(apt => `
-                <div style="background: #f8f9fa; padding: 10px; margin-bottom: 10px; border-radius: 6px; cursor: pointer;" onclick="showAppointmentDetails('${apt.id}')">
-                    <div><strong>👤 ${apt.client}</strong></div>
-                    <div>✂️ ${apt.service} (${apt.duracion}min)</div>
-                    <div style="font-size: 0.85rem; color: #666;">📊 ${apt.status}</div>
+            const citasHtml = aptsInSlot.map((apt, index) => `
+                <div style="background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 8px; cursor: pointer; border: 2px solid #e1e5f7; transition: all 0.2s;" 
+                     onmouseover="this.style.borderColor='#667eea'; this.style.background='#f0f4ff';" 
+                     onmouseout="this.style.borderColor='#e1e5f7'; this.style.background='#f8f9fa';"
+                     onclick="event.stopPropagation(); showAppointmentDetails('${apt.id}'); Swal.close();">
+                    <div style="font-size: 1.1rem; margin-bottom: 8px;">
+                        <strong>👤 ${apt.client}</strong>
+                    </div>
+                    <div style="margin-bottom: 5px;">
+                        ✂️ ${apt.service} (${apt.duracion}min)
+                    </div>
+                    <div style="margin-bottom: 5px; color: #666;">
+                        🕐 ${apt.date.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})} - ${apt.endTime.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}
+                    </div>
+                    <div style="font-size: 0.85rem; padding: 5px 10px; background: ${getStatusColor(apt.status)}; border-radius: 4px; display: inline-block; color: white;">
+                        📊 ${apt.status}
+                    </div>
                 </div>
             `).join('');
             
             Swal.fire({
-                title: `📋 Citas en este horario`,
-                html: citasHtml,
-                width: '500px',
+                title: `📋 Citas en este horario (${aptsInSlot.length})`,
+                html: `
+                    <div style="text-align: left; max-height: 400px; overflow-y: auto;">
+                        ${citasHtml}
+                    </div>
+                    <div style="margin-top: 15px; padding: 10px; background: #f8f9ff; border-radius: 6px; font-size: 0.9rem; color: #666;">
+                        💡 Haz clic en una cita para ver todos sus detalles
+                    </div>
+                `,
+                width: '600px',
                 showConfirmButton: false,
                 showCloseButton: true
             });
@@ -370,19 +411,38 @@ function handleHourClick(dateStr, hour, minute = 0) {
         return;
     }
     
+// Función auxiliar para obtener colores según el estado
+function getStatusColor(status) {
+    const colors = {
+        'Reservada': '#17a2b8',
+        'Confirmada': '#28a745',
+        'En Proceso': '#ffc107',
+        'Finalizada': '#6c757d',
+        'Cancelada': '#dc3545'
+    };
+    return colors[status] || '#6c757d';
+}
+
     // Si el horario está disponible, mostrar opción de agregar cita
     const hourStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-    const dateFormatted = date.toLocaleDateString('es-ES');
+    const dateFormatted = date.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     
     Swal.fire({
-        title: `📅 ${dateFormatted} - ${hourStr}`,
+        title: `📅 ${dateFormatted}`,
         html: `
-            <div style="text-align: center; padding: 15px; background: #d4edda; border-radius: 8px;">
-                <p style="margin-bottom: 10px;">
-                    ✅ <strong>Disponible</strong>
+            <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+                <div style="font-size: 3rem; margin-bottom: 15px;">✅</div>
+                <p style="margin-bottom: 15px; font-size: 1.2rem; color: #155724;">
+                    <strong>Horario Disponible</strong>
                 </p>
-                <button onclick="showNewAppointmentForm('${dateStr}', '${hourStr}')" 
-                        class="btn btn-success">
+                <p style="margin-bottom: 20px; font-size: 1.4rem; color: #155724; font-weight: 600;">
+                    🕐 ${hourStr}
+                </p>
+                <button onclick="showNewAppointmentForm('${dateStr}', '${hourStr}'); Swal.close();" 
+                        class="btn btn-success"
+                        style="padding: 12px 30px; font-size: 1.1rem; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.15); transition: all 0.3s;"
+                        onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 15px rgba(0,0,0,0.2)';"
+                        onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 10px rgba(0,0,0,0.15)';">
                     ➕ Agregar Nueva Cita
                 </button>
             </div>
@@ -874,11 +934,23 @@ async function createNewAppointment(appointmentData) {
 }
 
 function showAppointmentDetails(appointmentId) {
-    const apt = appointments.find(a => a.id === appointmentId);
+    console.log('🔍 Buscando cita con ID:', appointmentId);
+    console.log('📋 Todas las citas disponibles:', appointments.map(a => ({ id: a.id, cliente: a.client })));
+    
+    const apt = appointments.find(a => a.id === appointmentId || a.id === String(appointmentId));
+    
     if (!apt) {
-        Swal.fire('Error', 'Cita no encontrada', 'error');
+        console.error('❌ Cita no encontrada. ID buscado:', appointmentId);
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Cita no encontrada',
+            confirmButtonColor: '#667eea'
+        });
         return;
     }
+
+    console.log('✅ Cita encontrada:', apt);
 
     const estados = ['Reservada', 'Confirmada', 'En Proceso', 'Finalizada', 'Cancelada'];
     const estadosOptions = estados.map(estado => 
@@ -894,12 +966,12 @@ function showAppointmentDetails(appointmentId) {
             
             <div style="background: white; padding: 15px; border: 1px solid #e1e5f7; border-radius: 8px; margin-bottom: 15px;">
                 <p style="margin: 8px 0;"><strong>👤 Cliente:</strong> ${apt.client}</p>
-                <p style="margin: 8px 0;"><strong>📞 Teléfono:</strong> ${apt.telefono}</p>
+                <p style="margin: 8px 0;"><strong>📞 Teléfono:</strong> ${apt.telefono || 'No disponible'}</p>
             </div>
             
             <div style="background: white; padding: 15px; border: 1px solid #e1e5f7; border-radius: 8px; margin-bottom: 15px;">
                 <p style="margin: 8px 0;"><strong>✂️ Servicio:</strong> ${apt.service}</p>
-                <p style="margin: 8px 0;"><strong>💅 Manicurista:</strong> ${apt.manicurista}</p>
+                <p style="margin: 8px 0;"><strong>💅 Manicurista:</strong> ${apt.manicurista || 'No asignado'}</p>
                 <p style="margin: 8px 0;"><strong>⏱️ Duración:</strong> ${apt.duracion} minutos</p>
                 ${apt.precio ? `<p style="margin: 8px 0;"><strong>💰 Precio:</strong> ${apt.precio}</p>` : ''}
             </div>
