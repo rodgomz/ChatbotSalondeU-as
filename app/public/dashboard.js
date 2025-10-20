@@ -649,11 +649,17 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
     console.log('🚀 Abriendo modal SweetAlert...');
 
     // Destruir cualquier Select2 existente antes de abrir el modal
+    $('.select2-container').remove();
+    
+    // Detener propagación de eventos globales que puedan cerrar el modal
     setTimeout(() => {
-        $('.select2-container').remove();
-    }, 50);
+        $(document).off('click.closeModal');
+        $(document).off('mousedown.closeModal');
+    }, 10);
 
-    Swal.fire({
+    // Usar setTimeout para evitar que eventos síncronos cierren el modal
+    setTimeout(() => {
+        Swal.fire({
         title: `➕ Nueva Cita - ${fecha.toLocaleDateString('es-ES')}`,
         html: `
             <div class="new-appointment-form" style="text-align: left;">
@@ -816,9 +822,10 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
         } else {
             console.log('❌ Cancelado');
         }
-    }).catch(error => {
-        console.error('❌ Error en SweetAlert:', error);
-    });
+        }).catch(error => {
+            console.error('❌ Error en SweetAlert:', error);
+        });
+    }, 100); // Delay de 100ms antes de abrir el modal
 
     console.log('🏁 Fin de showNewAppointmentForm');
 }
