@@ -687,8 +687,30 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
         confirmButtonText: '💾 Crear Cita',
         cancelButtonText: '❌ Cancelar',
         didOpen: () => {
+            // Función helper para inicializar Select2 de forma segura
+            const initSelect2Safe = (selector, options) => {
+                const $element = $(selector);
+                if ($element.length === 0) return;
+                
+                // Verificar si ya tiene Select2 inicializado
+                if ($element.data('select2')) {
+                    try {
+                        $element.select2('destroy');
+                    } catch (e) {
+                        console.warn('Error al destruir Select2 previo:', e);
+                    }
+                }
+                
+                // Inicializar Select2
+                try {
+                    $element.select2(options);
+                } catch (e) {
+                    console.error('Error al inicializar Select2:', e);
+                }
+            };
+
             // Inicializar Select2 para clientes
-            $('#cliente').select2({
+            initSelect2Safe('#cliente', {
                 dropdownParent: $('.swal2-container'),
                 placeholder: 'Buscar cliente...',
                 allowClear: true,
@@ -704,7 +726,7 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
             });
 
             // Inicializar Select2 para servicios
-            $('#servicio').select2({
+            initSelect2Safe('#servicio', {
                 dropdownParent: $('.swal2-container'),
                 placeholder: 'Buscar servicio...',
                 allowClear: true,
@@ -719,8 +741,8 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
                 }
             });
 
-            // Inicializar Select2 para hora (opcional)
-            $('#hora').select2({
+            // Inicializar Select2 para hora
+            initSelect2Safe('#hora', {
                 dropdownParent: $('.swal2-container'),
                 placeholder: 'Seleccionar hora...',
                 allowClear: true,
@@ -749,16 +771,73 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
             };
         },
         willClose: () => {
+            // Función helper para destruir Select2 de forma segura
+            const destroySelect2Safe = (selector) => {
+                const $element = $(selector);
+                if ($element.length === 0) return;
+                
+                // Solo destruir si tiene Select2 inicializado
+                if ($element.data('select2')) {
+                    try {
+                        $element.select2('destroy');
+                    } catch (e) {
+                        console.warn(`Error al destruir Select2 en ${selector}:`, e);
+                    }
+                }
+            };
+
             // Destruir Select2 al cerrar
-            $('#cliente').select2('destroy');
-            $('#servicio').select2('destroy');
-            $('#hora').select2('destroy');
+            destroySelect2Safe('#cliente');
+            destroySelect2Safe('#servicio');
+            destroySelect2Safe('#hora');
         }
     }).then(async (result) => {
         if (result.isConfirmed) {
             await createNewAppointment(result.value);
         }
     });
+}
+
+// Función auxiliar global para inicializar Select2 de forma segura (opcional, puedes ponerla fuera)
+function initSelect2Safe(selector, options = {}) {
+    const $element = $(selector);
+    
+    if ($element.length === 0) {
+        console.warn(`Elemento ${selector} no encontrado`);
+        return null;
+    }
+    
+    // Destruir instancia previa si existe
+    if ($element.data('select2')) {
+        try {
+            $element.select2('destroy');
+        } catch (e) {
+            console.warn('Error al destruir Select2 previo:', e);
+        }
+    }
+    
+    // Inicializar Select2
+    try {
+        return $element.select2(options);
+    } catch (e) {
+        console.error('Error al inicializar Select2:', e);
+        return null;
+    }
+}
+
+// Función auxiliar global para destruir Select2 de forma segura (opcional)
+function destroySelect2Safe(selector) {
+    const $element = $(selector);
+    
+    if ($element.length === 0) return;
+    
+    if ($element.data('select2')) {
+        try {
+            $element.select2('destroy');
+        } catch (e) {
+            console.warn(`Error al destruir Select2 en ${selector}:`, e);
+        }
+    }
 }
 
 // ============================================
