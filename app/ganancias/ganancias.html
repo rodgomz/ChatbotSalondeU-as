@@ -51,7 +51,7 @@
                 <select id="selectAnio"></select>
             </section>
 
-            <!-- Tabla de Citas -->
+            <!-- Tabla de Citas Mensuales -->
             <section class="tabla-section">
                 <h2>🧾 Detalle de Citas Finalizadas</h2>
                 <table>
@@ -73,13 +73,45 @@
                 </table>
             </section>
 
-            <!-- Gráfica -->
+            <!-- Gráfica Mensual -->
             <section class="grafica-section">
                 <h2>📊 Ganancias por Mes (<span id="anioGrafica">2025</span>)</h2>
                 <div class="chart-container">
                     <canvas id="graficaGananciasMes"></canvas>
                 </div>
             </section>
+
+            <!-- NUEVA SECCIÓN: Ganancias Semanales -->
+            <section class="grafica-section">
+                <h2>📊 Ganancias Semanales (<span id="anioGraficaSem">2025</span>)</h2>
+                <div class="chart-container">
+                    <canvas id="graficaGananciasSemanal"></canvas>
+                </div>
+            </section>
+
+            <section class="tabla-section">
+                <h2>🧾 Detalle de Citas Semanales</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Semana</th>
+                            <th>Fecha</th>
+                            <th>Hora</th>
+                            <th>Servicio</th>
+                            <th>Precio</th>
+                            <th>Manicurista</th>
+                            <th>Cliente</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaGananciasSemanal">
+                        <tr>
+                            <td colspan="7" class="no-data">Cargando...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+
         </main>
     </div>
 

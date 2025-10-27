@@ -270,3 +270,16 @@ tbody tr:nth-child(even) {
         height: 300px;
     }
 }
+.tabla-semanal table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+}
+
+.tabla-semanal th {
+    background: #34495e;
+    color: white;
+}
