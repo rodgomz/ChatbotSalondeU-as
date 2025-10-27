@@ -163,20 +163,36 @@ async function loadServicios() {
 
 function parseDate(fechaStr, horaStr) {
     try {
-        const [dia, mes, anio] = fechaStr.split('/').map(num => parseInt(num, 10));
-        const [hora, minuto] = horaStr.split(':').map(num => parseInt(num, 10));
+        let fecha;
         
-        if (isNaN(dia) || isNaN(mes) || isNaN(anio) || isNaN(hora) || isNaN(minuto)) {
-            console.error('Fecha inválida:', fechaStr, horaStr);
-            return new Date();
+        if (fechaStr.includes('T')) {
+            // Caso ISO completo de Firebase
+            fecha = new Date(fechaStr);
+        } else if (fechaStr.includes('-')) {
+            // Caso yyyy-mm-dd
+            const [anio, mes, dia] = fechaStr.split('-').map(num => parseInt(num, 10));
+            fecha = new Date(anio, mes - 1, dia);
+        } else {
+            // Caso dd/mm/yyyy
+            const [dia, mes, anio] = fechaStr.split('/').map(num => parseInt(num, 10));
+            fecha = new Date(anio, mes - 1, dia);
         }
-        
-        return new Date(anio, mes - 1, dia, hora, minuto, 0);
+
+        // Si horaStr viene separado (ej. "14:30")
+        if (horaStr) {
+            const [hora, minuto] = horaStr.split(':').map(num => parseInt(num, 10));
+            fecha.setHours(hora || 0, minuto || 0, 0, 0);
+        }
+
+        if (isNaN(fecha.getTime())) throw new Error('Fecha inválida');
+
+        return fecha;
     } catch (error) {
-        console.error('Error parseando fecha:', error);
+        console.error('Error parseando fecha:', fechaStr, horaStr, error);
         return new Date();
     }
 }
+
 
 // ============================================
 // FUNCIONES AUXILIARES
