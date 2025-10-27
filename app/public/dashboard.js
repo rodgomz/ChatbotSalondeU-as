@@ -1824,20 +1824,42 @@ async function resetearPagos() {
 async function marcarPagado(id) {
     try {
         const res = await fetch(`/api/deudas/${id}/pagar`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' }
+            method: 'PUT',  // PUT para actualizar
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pagado: true }) // enviamos el body
         });
+
+        // Manejo de errores HTTP antes de parsear JSON
+        if (!res.ok) {
+            if (res.status === 404) {
+                Swal.fire({
+                    icon: 'error',
+                    title: '❌ Deuda no encontrada',
+                    text: 'No se encontró la deuda que intentas pagar',
+                    customClass: { container: 'swal-on-top' }
+                });
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: '❌ Error del servidor',
+                    text: `Código ${res.status}: ${res.statusText}`,
+                    customClass: { container: 'swal-on-top' }
+                });
+            }
+            return; // Salimos para no intentar leer JSON
+        }
+
         const data = await res.json();
-        
+
         if (data.success) {
             Swal.fire({
                 icon: 'success',
                 title: '✅ ¡Pagado!',
-                text: 'Pago marcado como realizado',
+                text: data.message || 'Pago marcado como realizado',
                 timer: 2000,
                 customClass: { container: 'swal-on-top' }
             });
-            cargarDeudas();
+            cargarDeudas(); // refresca lista
         } else {
             Swal.fire({
                 icon: 'error',
@@ -1846,10 +1868,18 @@ async function marcarPagado(id) {
                 customClass: { container: 'swal-on-top' }
             });
         }
+
     } catch (error) {
         console.error('Error marcando como pagado:', error);
+        Swal.fire({
+            icon: 'error',
+            title: '❌ Error',
+            text: 'Ocurrió un error inesperado',
+            customClass: { container: 'swal-on-top' }
+        });
     }
 }
+
 
 // Editar deuda
 async function editarDeuda(id) {
@@ -2082,6 +2112,13 @@ function closeDeudas() {
     modal.classList.remove('active');
     document.body.style.overflow = '';
 }
+
+document.getElementById('deudas-page').addEventListener('click', function(e) {
+    if (e.target.id === 'deudas-page') { // solo si clic fuera del contenido
+        closeDeudas();
+    }
+});
+
 
 // ============================================
 // FUNCIONES DE GASTOS

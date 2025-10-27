@@ -281,17 +281,17 @@
         }
 
         /* MODAL DE DEUDAS - CORREGIDO */
-        #deudas-page {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 9998;
-            overflow-y: auto;
-        }
+    #deudas-page {
+    position: fixed;   /* Fijo sobre la página */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5); /* overlay semitransparente */
+    z-index: 1000;
+    display: none;
+    overflow-y: auto;  /* si el modal es alto y necesita scroll */
+}
 
         #deudas-page.active {
             display: block;

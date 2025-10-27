@@ -755,13 +755,21 @@ app.put('/api/deudas/:id', async (req, res) => {
 });
 
 /**
- * POST /api/deudas/:id/pagar
+ * PUT /api/deudas/:id/pagar
  * Marcar una deuda como pagada o pendiente
  */
-app.post('/api/deudas/:id/pagar', async (req, res) => {
+app.put('/api/deudas/:id/pagar', async (req, res) => {
     try {
         const { id } = req.params;
         const { pagado } = req.body;
+
+        // Validación: el body debe incluir pagado
+        if (typeof pagado !== 'boolean') {
+            return res.status(400).json({
+                success: false,
+                error: 'El campo "pagado" es obligatorio y debe ser booleano'
+            });
+        }
 
         // Verificar que la deuda existe
         const deudaRef = ref(db, `deudas/${id}`);
@@ -776,8 +784,8 @@ app.post('/api/deudas/:id/pagar', async (req, res) => {
 
         // Actualizar estado de pago
         const actualizacion = {
-            pagado: pagado === true,
-            fechaPago: pagado === true ? new Date().toISOString() : null,
+            pagado,
+            fechaPago: pagado ? new Date().toISOString() : null,
             fechaUltimaModificacion: new Date().toISOString()
         };
 
@@ -787,14 +795,16 @@ app.post('/api/deudas/:id/pagar', async (req, res) => {
             success: true,
             message: pagado ? 'Deuda marcada como pagada' : 'Deuda marcada como pendiente'
         });
+
     } catch (error) {
         console.error('Error actualizando estado de pago:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: 'Error interno del servidor'
         });
     }
 });
+
 
 /**
  * DELETE /api/deudas/:id
