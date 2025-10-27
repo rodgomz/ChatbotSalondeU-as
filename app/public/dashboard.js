@@ -1545,10 +1545,6 @@ async function verHistorial(id) {
     }
 }
 
-
-
-
-
 // Agregar una sola deuda
 async function agregarDeuda() {
     const tipos = ['Arrendamiento','Luz','Agua','Internet','Teléfono','Gas','Tarjeta de Crédito 1','Tarjeta de Crédito 2','Netflix','Spotify','Gimnasio','Seguro','Otro'];

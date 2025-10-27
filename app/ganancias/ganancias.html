@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ganancias</title>
     <link rel="stylesheet" href="/ganancias/ganancias.css">
 </head>
+
 <body>
     <div class="container">
         <div class="header">
@@ -26,6 +28,20 @@
                 <div class="card">
                     <h3>Ganancia Anual</h3>
                     <p id="gananciaAnual">$0.00</p>
+                </div>
+
+                <!-- NUEVAS CARDS -->
+                <div class="card" style="background: #f8d7da; border-left: 5px solid #dc3545;">
+                    <h3>Total Gastos</h3>
+                    <p id="totalGastos">$0.00</p>
+                </div>
+                <div class="card" style="background: #fff3cd; border-left: 5px solid #ffc107;">
+                    <h3>Total Deudas</h3>
+                    <p id="totalDeudas">$0.00</p>
+                </div>
+                <div class="card" style="background: #d1e7dd; border-left: 5px solid #28a745;">
+                    <h3>Ganancia Neta</h3>
+                    <p id="gananciaNeta">$0.00</p>
                 </div>
             </div>
 
@@ -52,7 +68,9 @@
                         </tr>
                     </thead>
                     <tbody id="tablaGanancias">
-                        <tr><td colspan="6" class="no-data">Cargando...</td></tr>
+                        <tr>
+                            <td colspan="6" class="no-data">Cargando...</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -70,4 +88,5 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/ganancias/ganancias.js"></script>
 </body>
+
 </html>
