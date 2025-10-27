@@ -2035,7 +2035,7 @@ async function exportarDeudas() {
                     `"${d.tipo}"`,
                     d.monto,
                     d.diaPago,
-                    d.pagado ? 'Pagado' : 'Pendiente',
+                    d.pagado ? 'Pagado' : 'Pendient',
                     `"${d.notas || ''}"`
                 ].join(',')
             )
