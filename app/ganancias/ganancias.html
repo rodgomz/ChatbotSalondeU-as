@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ganancias</title>
+    <link rel="stylesheet" href="/ganancias/ganancias.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>💰 Ganancias</h1>
+        </div>
+
+        <div class="content">
+            <!-- Cards de Estadísticas -->
+            <div class="stats">
+                <div class="card">
+                    <h3>Ganancia Semanal</h3>
+                    <p id="gananciaSemanal">$0.00</p>
+                </div>
+                <div class="card">
+                    <h3>Ganancia Mensual</h3>
+                    <p id="gananciaMensual">$0.00</p>
+                </div>
+                <div class="card">
+                    <h3>Ganancia Anual</h3>
+                    <p id="gananciaAnual">$0.00</p>
+                </div>
+            </div>
+
+            <!-- Selector de Año -->
+            <div class="section">
+                <div class="selector-anio">
+                    <label for="selectAnio">Selecciona año:</label>
+                    <select id="selectAnio"></select>
+                </div>
+            </div>
+
+            <!-- Tabla de Citas -->
+            <div class="section">
+                <h2>🧾 Detalle de Citas Finalizadas</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Hora</th>
+                            <th>Servicio</th>
+                            <th>Precio</th>
+                            <th>Manicurista</th>
+                            <th>Cliente</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaGanancias">
+                        <tr><td colspan="6" class="no-data">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Gráfica -->
+            <div class="section">
+                <h2>📊 Ganancias por Mes (<span id="anioGrafica">2025</span>)</h2>
+                <div class="chart-container">
+                    <canvas id="graficaGananciasMes"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/ganancias/ganancias.js"></script>
+</body>
+</html>
