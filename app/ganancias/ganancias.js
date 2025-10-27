@@ -13,9 +13,9 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
         const responseGastos = await resGastos.json();
         const responseDeudas = await resDeudas.json();
 
-        // Extraer arrays correctamente de las respuestas
-        const gastosArray = responseGastos.success ? responseGastos.gastos : [];
-        const deudasArray = responseDeudas.success ? responseDeudas.deudas : [];
+        // Extraer datos según la estructura de respuesta
+        const gastosArray = responseGastos.gastos || [];
+        const deudasArray = responseDeudas.deudas || [];
         const citasArray = Object.values(dataGanancias.citasGanancia || {});
         const clientesObj = dataGanancias.clientes || {};
 
@@ -36,7 +36,7 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
         const gananciaNeta = dataGanancias.totalAnual - (totalGastos + totalDeudas);
         document.getElementById('gananciaNeta').textContent = `$${gananciaNeta.toFixed(2)}`;
 
-        // --- Tabla de Citas ---
+        // --- Tabla de Citas Mensuales ---
         const citasFiltradas = citasArray.filter(c => {
             const [dia, mes, anio] = c.fecha.split('/').map(n => parseInt(n, 10));
             return anio === anioFiltro;
@@ -92,27 +92,28 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
         document.getElementById('anioGrafica').textContent = anioFiltro;
 
         // --- Ganancia, Gastos y Deudas Semanal ---
-        const semanasMap = {}; // { semana: {ganancia, gasto, deuda} }
+        const semanasMap = {}; // { semana: {ganancia, gasto, deuda, citas: []} }
 
         citasFiltradas.forEach(cita => {
             const [dia, mes, anio] = cita.fecha.split('/').map(n => parseInt(n, 10));
             const fecha = new Date(anio, mes - 1, dia);
             const semana = getWeekNumber(fecha);
-            if (!semanasMap[semana]) semanasMap[semana] = { ganancia: 0, gasto: 0, deuda: 0 };
+            if (!semanasMap[semana]) semanasMap[semana] = { ganancia: 0, gasto: 0, deuda: 0, citas: [] };
             semanasMap[semana].ganancia += cita.precio;
+            semanasMap[semana].citas.push(cita);
         });
 
         gastosAnio.forEach(g => {
             const fecha = new Date(g.fecha);
             const semana = getWeekNumber(fecha);
-            if (!semanasMap[semana]) semanasMap[semana] = { ganancia: 0, gasto: 0, deuda: 0 };
+            if (!semanasMap[semana]) semanasMap[semana] = { ganancia: 0, gasto: 0, deuda: 0, citas: [] };
             semanasMap[semana].gasto += parseFloat(g.monto);
         });
 
         deudasAnio.forEach(d => {
             const fecha = new Date(d.fechaCreacion);
             const semana = getWeekNumber(fecha);
-            if (!semanasMap[semana]) semanasMap[semana] = { ganancia: 0, gasto: 0, deuda: 0 };
+            if (!semanasMap[semana]) semanasMap[semana] = { ganancia: 0, gasto: 0, deuda: 0, citas: [] };
             semanasMap[semana].deuda += parseFloat(d.monto || 0);
         });
 
@@ -122,11 +123,41 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
         const deudaSemanal = semanaLabels.map(s => semanasMap[s].deuda);
 
         actualizarGraficaSemanal(semanaLabels, gananciaSemanal, gastoSemanal, deudaSemanal);
+        document.getElementById('anioGraficaSem').textContent = anioFiltro;
+
+        // --- Tabla de Citas Semanales ---
+        const tbodySemanal = document.getElementById('tablaGananciasSemanal');
+        tbodySemanal.innerHTML = '';
+        
+        if (semanaLabels.length === 0) {
+            tbodySemanal.innerHTML = '<tr><td colspan="7" class="no-data">No hay citas finalizadas en este año.</td></tr>';
+        } else {
+            semanaLabels.forEach(semana => {
+                const citasSemana = semanasMap[semana].citas;
+                citasSemana.forEach((cita, index) => {
+                    const clienteNombre = clientesObj[cita.clienteId]?.nombre || cita.clienteId;
+                    const manicuristaNombre = cita.manicurista || 'Sin asignar';
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${index === 0 ? `Semana ${semana}` : ''}</td>
+                        <td>${cita.fecha}</td>
+                        <td>${cita.hora}</td>
+                        <td>${cita.servicio}</td>
+                        <td>$${cita.precio.toFixed(2)}</td>
+                        <td>${manicuristaNombre}</td>
+                        <td>${clienteNombre}</td>
+                    `;
+                    tbodySemanal.appendChild(tr);
+                });
+            });
+        }
 
     } catch (error) {
         console.error('Error al cargar ganancias:', error);
         document.getElementById('tablaGanancias').innerHTML =
             '<tr><td colspan="6" class="no-data">Error al cargar ganancias.</td></tr>';
+        document.getElementById('tablaGananciasSemanal').innerHTML =
+            '<tr><td colspan="7" class="no-data">Error al cargar ganancias.</td></tr>';
     }
 }
 
@@ -148,38 +179,14 @@ function actualizarGraficaNeta(netaMes, anio) {
         type: 'bar',
         data: {
             labels: ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],
-            datasets: [{ 
-                label: `Ganancia Neta ${anio}`, 
-                data: netaMes, 
-                backgroundColor:'#28a745',
-                borderColor: '#1e7e34',
-                borderWidth: 1
-            }]
+            datasets: [{ label: `Ganancia Neta ${anio}`, data: netaMes, backgroundColor:'#28a745' }]
         },
-        options: { 
-            responsive:true, 
-            maintainAspectRatio:false,
-            plugins: {
-                legend: {
-                    display: true
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        callback: function(value) {
-                            return '$' + value.toFixed(2);
-                        }
-                    }
-                }
-            }
-        }
+        options: { responsive:true, maintainAspectRatio:false }
     });
 }
 
 function actualizarGraficaSemanal(labels, ganancia, gasto, deuda) {
-    const ctx = document.getElementById('graficaSemanal').getContext('2d');
+    const ctx = document.getElementById('graficaGananciasSemanal').getContext('2d');
     if (chartSemanalInstance) chartSemanalInstance.destroy();
 
     chartSemanalInstance = new Chart(ctx, {
@@ -187,49 +194,12 @@ function actualizarGraficaSemanal(labels, ganancia, gasto, deuda) {
         data: {
             labels: labels.map(s => `Semana ${s}`),
             datasets: [
-                { 
-                    label: 'Ganancia', 
-                    data: ganancia, 
-                    backgroundColor:'#28a745',
-                    borderColor: '#1e7e34',
-                    borderWidth: 1
-                },
-                { 
-                    label: 'Gastos', 
-                    data: gasto, 
-                    backgroundColor:'#ffc107',
-                    borderColor: '#e0a800',
-                    borderWidth: 1
-                },
-                { 
-                    label: 'Deudas', 
-                    data: deuda, 
-                    backgroundColor:'#dc3545',
-                    borderColor: '#bd2130',
-                    borderWidth: 1
-                }
+                { label: 'Ganancia', data: ganancia, backgroundColor:'#28a745' },
+                { label: 'Gastos', data: gasto, backgroundColor:'#ffc107' },
+                { label: 'Deudas', data: deuda, backgroundColor:'#dc3545' }
             ]
         },
-        options: { 
-            responsive:true, 
-            maintainAspectRatio:false,
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'top'
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        callback: function(value) {
-                            return '$' + value.toFixed(2);
-                        }
-                    }
-                }
-            }
-        }
+        options: { responsive:true, maintainAspectRatio:false }
     });
 }
 
