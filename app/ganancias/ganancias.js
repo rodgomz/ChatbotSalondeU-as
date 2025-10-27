@@ -2,6 +2,7 @@ let chartInstance = null;
 
 async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
     try {
+        // Peticiones concurrentes
         const [resGanancias, resGastos, resDeudas] = await Promise.all([
             fetch('/api/ganancias'),
             fetch('/api/gastos'),
@@ -12,44 +13,50 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
         const dataGastos = await resGastos.json();
         const dataDeudas = await resDeudas.json();
 
-        // Paneles
-        document.getElementById('gananciaSemanal').textContent = `$${dataGanancias.totalSemanal.toFixed(2)}`;
-        document.getElementById('gananciaMensual').textContent = `$${dataGanancias.totalMensual.toFixed(2)}`;
-        document.getElementById('gananciaAnual').textContent = `$${dataGanancias.totalAnual.toFixed(2)}`;
+        // === Paneles de Ganancias ===
+        document.getElementById('gananciaSemanal').textContent = `$${(dataGanancias.totalSemanal || 0).toFixed(2)}`;
+        document.getElementById('gananciaMensual').textContent = `$${(dataGanancias.totalMensual || 0).toFixed(2)}`;
+        document.getElementById('gananciaAnual').textContent = `$${(dataGanancias.totalAnual || 0).toFixed(2)}`;
+
+        // Asegurarse de que gastos y deudas sean arrays
+        const gastosArray = Array.isArray(dataGastos.gastos) ? dataGastos.gastos : [];
+        const deudasArray = Array.isArray(dataDeudas.deudas) ? dataDeudas.deudas : [];
 
         // Filtrar por año
-        const gastosAnio = dataGastos.filter(g => new Date(g.fecha).getFullYear() === anioFiltro);
-        const deudasAnio = dataDeudas.filter(d => new Date(d.fechaCreacion).getFullYear() === anioFiltro);
+        const gastosAnio = gastosArray.filter(g => new Date(g.fecha).getFullYear() === anioFiltro);
+        const deudasAnio = deudasArray.filter(d => new Date(d.fechaCreacion).getFullYear() === anioFiltro);
 
-        const totalGastos = gastosAnio.reduce((acc, g) => acc + parseFloat(g.monto), 0);
-        const totalDeudas = deudasAnio.reduce((acc, d) => acc + parseFloat(d.monto), 0);
+        const totalGastos = gastosAnio.reduce((acc, g) => acc + parseFloat(g.monto || 0), 0);
+        const totalDeudas = deudasAnio.reduce((acc, d) => acc + parseFloat(d.monto || 0), 0);
 
         document.getElementById('totalGastos').textContent = `$${totalGastos.toFixed(2)}`;
         document.getElementById('totalDeudas').textContent = `$${totalDeudas.toFixed(2)}`;
 
-        const gananciaNeta = dataGanancias.totalAnual - (totalGastos + totalDeudas);
+        // Ganancia Neta
+        const gananciaNeta = (dataGanancias.totalAnual || 0) - (totalGastos + totalDeudas);
         document.getElementById('gananciaNeta').textContent = `$${gananciaNeta.toFixed(2)}`;
 
-        // Tabla de citas (igual que antes)
-        const citasFiltradas = dataGanancias.citasGanancia.filter(c => {
+        // === Tabla de Citas ===
+        const citasFiltradas = (dataGanancias.citasGanancia || []).filter(c => {
             const [dia, mes, anio] = c.fecha.split('/').map(n => parseInt(n, 10));
             return anio === anioFiltro;
         });
 
         const tbody = document.getElementById('tablaGanancias');
         tbody.innerHTML = '';
+
         if (citasFiltradas.length === 0) {
             tbody.innerHTML = '<tr><td colspan="6" class="no-data">No hay citas finalizadas en este año.</td></tr>';
         } else {
             citasFiltradas.forEach(cita => {
-                const clienteNombre = dataGanancias.clientes[cita.clienteId]?.nombre || cita.clienteId;
+                const clienteNombre = dataGanancias.clientes?.[cita.clienteId]?.nombre || cita.clienteId;
                 const manicuristaNombre = cita.manicurista || 'Sin asignar';
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${cita.fecha}</td>
                     <td>${cita.hora}</td>
                     <td>${cita.servicio}</td>
-                    <td>$${cita.precio.toFixed(2)}</td>
+                    <td>$${(cita.precio || 0).toFixed(2)}</td>
                     <td>${manicuristaNombre}</td>
                     <td>${clienteNombre}</td>
                 `;
@@ -57,7 +64,7 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
             });
         }
 
-        // Calcular Ganancia Neta por mes
+        // === Ganancia Neta por Mes ===
         const gananciasMes = new Array(12).fill(0);
         const gastosMes = new Array(12).fill(0);
         const deudasMes = new Array(12).fill(0);
@@ -65,17 +72,17 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
 
         citasFiltradas.forEach(cita => {
             const [dia, mes] = cita.fecha.split('/').map(n => parseInt(n, 10));
-            gananciasMes[mes - 1] += cita.precio;
+            gananciasMes[mes - 1] += cita.precio || 0;
         });
 
         gastosAnio.forEach(g => {
             const fecha = new Date(g.fecha);
-            gastosMes[fecha.getMonth()] += parseFloat(g.monto);
+            gastosMes[fecha.getMonth()] += parseFloat(g.monto || 0);
         });
 
         deudasAnio.forEach(d => {
             const fecha = new Date(d.fechaCreacion);
-            deudasMes[fecha.getMonth()] += parseFloat(d.monto);
+            deudasMes[fecha.getMonth()] += parseFloat(d.monto || 0);
         });
 
         for (let i = 0; i < 12; i++) {
@@ -83,7 +90,6 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
         }
 
         actualizarGraficaNeta(netaMes, anioFiltro);
-
         document.getElementById('anioGrafica').textContent = anioFiltro;
 
     } catch (error) {
@@ -91,68 +97,6 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
         document.getElementById('tablaGanancias').innerHTML =
             '<tr><td colspan="6" class="no-data">Error al cargar ganancias.</td></tr>';
     }
-}
-
-function actualizarGrafica(datos, anio) {
-    const ctx = document.getElementById('graficaGananciasMes').getContext('2d');
-
-    if (chartInstance) {
-        chartInstance.destroy();
-    }
-
-    chartInstance = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'],
-            datasets: [{
-                label: `Ganancias ${anio}`,
-                data: datos,
-                backgroundColor: '#667eea',
-                borderColor: '#764ba2',
-                borderWidth: 2,
-                borderRadius: 8,
-                tension: 0.4
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: true,
-                    labels: {
-                        color: '#333',
-                        font: {
-                            size: 12,
-                            weight: '500'
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        callback: function (value) {
-                            return '$' + value.toFixed(0);
-                        },
-                        color: '#666'
-                    },
-                    grid: {
-                        color: 'rgba(0, 0, 0, 0.05)'
-                    }
-                },
-                x: {
-                    ticks: {
-                        color: '#666'
-                    },
-                    grid: {
-                        display: false
-                    }
-                }
-            }
-        }
-    });
 }
 
 function actualizarGraficaNeta(netaMes, anio) {
@@ -163,7 +107,7 @@ function actualizarGraficaNeta(netaMes, anio) {
     chartInstance = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'],
+            labels: ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],
             datasets: [{
                 label: `Ganancia Neta ${anio}`,
                 data: netaMes,
@@ -180,28 +124,25 @@ function actualizarGraficaNeta(netaMes, anio) {
                 legend: { display: true },
                 tooltip: {
                     callbacks: {
-                        label: function (context) {
-                            return `$${context.raw.toFixed(2)}`;
-                        }
+                        label: context => `$${context.raw.toFixed(2)}`
                     }
                 }
             },
             scales: {
                 y: {
                     beginAtZero: true,
-                    ticks: { callback: value => '$' + value.toFixed(0) }
+                    ticks: { callback: value => `$${value.toFixed(0)}` }
                 }
             }
         }
     });
 }
+
 function cargarComboAnio() {
     const select = document.getElementById('selectAnio');
     const actual = new Date().getFullYear();
 
-    // Limpiar opciones previas
     select.innerHTML = '';
-
     for (let i = actual; i >= actual - 5; i--) {
         const option = document.createElement('option');
         option.value = i;
@@ -210,12 +151,10 @@ function cargarComboAnio() {
     }
 
     select.value = actual;
-    select.addEventListener('change', (e) => {
-        cargarGanancias(parseInt(e.target.value));
-    });
+    select.addEventListener('change', e => cargarGanancias(parseInt(e.target.value)));
 }
 
-// Inicializar cuando carga el DOM
+// Inicialización
 document.addEventListener('DOMContentLoaded', () => {
     cargarComboAnio();
     cargarGanancias();

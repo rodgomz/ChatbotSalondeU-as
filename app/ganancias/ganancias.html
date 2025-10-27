@@ -10,51 +10,49 @@
 
 <body>
     <div class="container">
-        <div class="header">
+        <header class="header">
             <h1>💰 Ganancias</h1>
-        </div>
+        </header>
 
-        <div class="content">
+        <main class="content">
             <!-- Cards de Estadísticas -->
-            <div class="stats">
-                <div class="card">
+            <section class="stats">
+                <div class="card card-blue">
                     <h3>Ganancia Semanal</h3>
                     <p id="gananciaSemanal">$0.00</p>
                 </div>
-                <div class="card">
+                <div class="card card-blue">
                     <h3>Ganancia Mensual</h3>
                     <p id="gananciaMensual">$0.00</p>
                 </div>
-                <div class="card">
+                <div class="card card-blue">
                     <h3>Ganancia Anual</h3>
                     <p id="gananciaAnual">$0.00</p>
                 </div>
 
                 <!-- NUEVAS CARDS -->
-                <div class="card" style="background: #f8d7da; border-left: 5px solid #dc3545;">
+                <div class="card card-red">
                     <h3>Total Gastos</h3>
                     <p id="totalGastos">$0.00</p>
                 </div>
-                <div class="card" style="background: #fff3cd; border-left: 5px solid #ffc107;">
+                <div class="card card-yellow">
                     <h3>Total Deudas</h3>
                     <p id="totalDeudas">$0.00</p>
                 </div>
-                <div class="card" style="background: #d1e7dd; border-left: 5px solid #28a745;">
+                <div class="card card-green">
                     <h3>Ganancia Neta</h3>
                     <p id="gananciaNeta">$0.00</p>
                 </div>
-            </div>
+            </section>
 
             <!-- Selector de Año -->
-            <div class="section">
-                <div class="selector-anio">
-                    <label for="selectAnio">Selecciona año:</label>
-                    <select id="selectAnio"></select>
-                </div>
-            </div>
+            <section class="selector-anio-section">
+                <label for="selectAnio">Selecciona año:</label>
+                <select id="selectAnio"></select>
+            </section>
 
             <!-- Tabla de Citas -->
-            <div class="section">
+            <section class="tabla-section">
                 <h2>🧾 Detalle de Citas Finalizadas</h2>
                 <table>
                     <thead>
@@ -73,16 +71,16 @@
                         </tr>
                     </tbody>
                 </table>
-            </div>
+            </section>
 
             <!-- Gráfica -->
-            <div class="section">
+            <section class="grafica-section">
                 <h2>📊 Ganancias por Mes (<span id="anioGrafica">2025</span>)</h2>
                 <div class="chart-container">
                     <canvas id="graficaGananciasMes"></canvas>
                 </div>
-            </div>
-        </div>
+            </section>
+        </main>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
