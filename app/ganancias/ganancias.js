@@ -1,8 +1,15 @@
 let chartInstance = null;
 let chartSemanalInstance = null;
+let todasLasCitas = [];
+let todosLosGastos = [];
+let todasLasDeudas = [];
+let clientesGlobal = {};
+let anioActual = new Date().getFullYear();
 
 async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
     try {
+        anioActual = anioFiltro;
+        
         const [resGanancias, resGastos, resDeudas] = await Promise.all([
             fetch('/api/ganancias'),
             fetch('/api/gastos'),
@@ -17,7 +24,12 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
         const gastosArray = responseGastos.gastos || [];
         const deudasArray = responseDeudas.deudas || [];
         const citasArray = Object.values(dataGanancias.citasGanancia || {});
-        const clientesObj = dataGanancias.clientes || {};
+        clientesGlobal = dataGanancias.clientes || {};
+
+        // Guardar datos globalmente
+        todasLasCitas = citasArray;
+        todosLosGastos = gastosArray;
+        todasLasDeudas = deudasArray;
 
         // --- Paneles ---
         document.getElementById('gananciaSemanal').textContent = `$${dataGanancias.totalSemanal.toFixed(2)}`;
@@ -48,7 +60,7 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
             tbody.innerHTML = '<tr><td colspan="6" class="no-data">No hay citas finalizadas en este año.</td></tr>';
         } else {
             citasFiltradas.forEach(cita => {
-                const clienteNombre = clientesObj[cita.clienteId]?.nombre || cita.clienteId;
+                const clienteNombre = clientesGlobal[cita.clienteId]?.nombre || cita.clienteId;
                 const manicuristaNombre = cita.manicurista || 'Sin asignar';
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -92,13 +104,24 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
         document.getElementById('anioGrafica').textContent = anioFiltro;
 
         // --- Ganancia, Gastos y Deudas Semanal ---
-        const semanasMap = {}; // { semana: {ganancia, gasto, deuda, citas: []} }
+        const semanasMap = {}; // { semana: {ganancia, gasto, deuda, citas: [], fechaInicio, fechaFin} }
 
         citasFiltradas.forEach(cita => {
             const [dia, mes, anio] = cita.fecha.split('/').map(n => parseInt(n, 10));
             const fecha = new Date(anio, mes - 1, dia);
             const semana = getWeekNumber(fecha);
-            if (!semanasMap[semana]) semanasMap[semana] = { ganancia: 0, gasto: 0, deuda: 0, citas: [] };
+            
+            if (!semanasMap[semana]) {
+                const rangoSemana = obtenerRangoSemana(fecha);
+                semanasMap[semana] = { 
+                    ganancia: 0, 
+                    gasto: 0, 
+                    deuda: 0, 
+                    citas: [],
+                    fechaInicio: rangoSemana.inicio,
+                    fechaFin: rangoSemana.fin
+                };
+            }
             semanasMap[semana].ganancia += cita.precio;
             semanasMap[semana].citas.push(cita);
         });
@@ -106,14 +129,34 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
         gastosAnio.forEach(g => {
             const fecha = new Date(g.fecha);
             const semana = getWeekNumber(fecha);
-            if (!semanasMap[semana]) semanasMap[semana] = { ganancia: 0, gasto: 0, deuda: 0, citas: [] };
+            if (!semanasMap[semana]) {
+                const rangoSemana = obtenerRangoSemana(fecha);
+                semanasMap[semana] = { 
+                    ganancia: 0, 
+                    gasto: 0, 
+                    deuda: 0, 
+                    citas: [],
+                    fechaInicio: rangoSemana.inicio,
+                    fechaFin: rangoSemana.fin
+                };
+            }
             semanasMap[semana].gasto += parseFloat(g.monto);
         });
 
         deudasAnio.forEach(d => {
             const fecha = new Date(d.fechaCreacion);
             const semana = getWeekNumber(fecha);
-            if (!semanasMap[semana]) semanasMap[semana] = { ganancia: 0, gasto: 0, deuda: 0, citas: [] };
+            if (!semanasMap[semana]) {
+                const rangoSemana = obtenerRangoSemana(fecha);
+                semanasMap[semana] = { 
+                    ganancia: 0, 
+                    gasto: 0, 
+                    deuda: 0, 
+                    citas: [],
+                    fechaInicio: rangoSemana.inicio,
+                    fechaFin: rangoSemana.fin
+                };
+            }
             semanasMap[semana].deuda += parseFloat(d.monto || 0);
         });
 
@@ -125,31 +168,12 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
         actualizarGraficaSemanal(semanaLabels, gananciaSemanal, gastoSemanal, deudaSemanal);
         document.getElementById('anioGraficaSem').textContent = anioFiltro;
 
-        // --- Tabla de Citas Semanales ---
-        const tbodySemanal = document.getElementById('tablaGananciasSemanal');
-        tbodySemanal.innerHTML = '';
-        
-        if (semanaLabels.length === 0) {
-            tbodySemanal.innerHTML = '<tr><td colspan="7" class="no-data">No hay citas finalizadas en este año.</td></tr>';
-        } else {
-            semanaLabels.forEach(semana => {
-                const citasSemana = semanasMap[semana].citas;
-                citasSemana.forEach((cita, index) => {
-                    const clienteNombre = clientesObj[cita.clienteId]?.nombre || cita.clienteId;
-                    const manicuristaNombre = cita.manicurista || 'Sin asignar';
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td>${index === 0 ? `Semana ${semana}` : ''}</td>
-                        <td>${cita.fecha}</td>
-                        <td>${cita.hora}</td>
-                        <td>${cita.servicio}</td>
-                        <td>$${cita.precio.toFixed(2)}</td>
-                        <td>${manicuristaNombre}</td>
-                        <td>${clienteNombre}</td>
-                    `;
-                    tbodySemanal.appendChild(tr);
-                });
-            });
+        // Cargar selector de semanas
+        cargarSelectorSemanas(semanasMap, semanaLabels);
+
+        // Mostrar primera semana por defecto
+        if (semanaLabels.length > 0) {
+            mostrarCitasSemana(semanaLabels[0], semanasMap);
         }
 
     } catch (error) {
@@ -159,6 +183,113 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
         document.getElementById('tablaGananciasSemanal').innerHTML =
             '<tr><td colspan="7" class="no-data">Error al cargar ganancias.</td></tr>';
     }
+}
+
+// Función para obtener el rango de fechas de una semana
+function obtenerRangoSemana(fecha) {
+    const date = new Date(fecha);
+    const day = date.getDay();
+    const diff = date.getDate() - day; // Domingo como inicio
+    
+    const inicio = new Date(date.setDate(diff));
+    const fin = new Date(date.setDate(diff + 6));
+    
+    return {
+        inicio: formatearFecha(inicio),
+        fin: formatearFecha(fin)
+    };
+}
+
+// Función para formatear fecha como DD/MM/YYYY
+function formatearFecha(fecha) {
+    const dia = String(fecha.getDate()).padStart(2, '0');
+    const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+    const anio = fecha.getFullYear();
+    return `${dia}/${mes}/${anio}`;
+}
+
+// Cargar selector de semanas
+function cargarSelectorSemanas(semanasMap, semanaLabels) {
+    const select = document.getElementById('selectSemana');
+    if (!select) return;
+    
+    select.innerHTML = '<option value="">-- Todas las semanas --</option>';
+    
+    semanaLabels.forEach(semana => {
+        const datos = semanasMap[semana];
+        const option = document.createElement('option');
+        option.value = semana;
+        option.textContent = `Semana ${semana} (${datos.fechaInicio} - ${datos.fechaFin})`;
+        select.appendChild(option);
+    });
+    
+    // Event listener
+    select.removeEventListener('change', handleSemanaChange);
+    select.addEventListener('change', (e) => {
+        if (e.target.value === '') {
+            mostrarTodasLasSemanas(semanasMap, semanaLabels);
+        } else {
+            mostrarCitasSemana(e.target.value, semanasMap);
+        }
+    });
+}
+
+// Mostrar citas de una semana específica
+function mostrarCitasSemana(semana, semanasMap) {
+    const datos = semanasMap[semana];
+    const tbodySemanal = document.getElementById('tablaGananciasSemanal');
+    tbodySemanal.innerHTML = '';
+    
+    if (!datos || datos.citas.length === 0) {
+        tbodySemanal.innerHTML = '<tr><td colspan="7" class="no-data">No hay citas en esta semana.</td></tr>';
+        return;
+    }
+    
+    datos.citas.forEach((cita, index) => {
+        const clienteNombre = clientesGlobal[cita.clienteId]?.nombre || cita.clienteId;
+        const manicuristaNombre = cita.manicurista || 'Sin asignar';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${index === 0 ? `Semana ${semana}<br><small>(${datos.fechaInicio} - ${datos.fechaFin})</small>` : ''}</td>
+            <td>${cita.fecha}</td>
+            <td>${cita.hora}</td>
+            <td>${cita.servicio}</td>
+            <td>$${cita.precio.toFixed(2)}</td>
+            <td>${manicuristaNombre}</td>
+            <td>${clienteNombre}</td>
+        `;
+        tbodySemanal.appendChild(tr);
+    });
+}
+
+// Mostrar todas las semanas
+function mostrarTodasLasSemanas(semanasMap, semanaLabels) {
+    const tbodySemanal = document.getElementById('tablaGananciasSemanal');
+    tbodySemanal.innerHTML = '';
+    
+    if (semanaLabels.length === 0) {
+        tbodySemanal.innerHTML = '<tr><td colspan="7" class="no-data">No hay citas finalizadas en este año.</td></tr>';
+        return;
+    }
+    
+    semanaLabels.forEach(semana => {
+        const citasSemana = semanasMap[semana].citas;
+        citasSemana.forEach((cita, index) => {
+            const clienteNombre = clientesGlobal[cita.clienteId]?.nombre || cita.clienteId;
+            const manicuristaNombre = cita.manicurista || 'Sin asignar';
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${index === 0 ? `Semana ${semana}<br><small>(${semanasMap[semana].fechaInicio} - ${semanasMap[semana].fechaFin})</small>` : ''}</td>
+                <td>${cita.fecha}</td>
+                <td>${cita.hora}</td>
+                <td>${cita.servicio}</td>
+                <td>$${cita.precio.toFixed(2)}</td>
+                <td>${manicuristaNombre}</td>
+                <td>${clienteNombre}</td>
+            `;
+            tbodySemanal.appendChild(tr);
+        });
+    });
 }
 
 // --- Función para obtener número de semana ---
@@ -215,6 +346,11 @@ function cargarComboAnio() {
     }
     select.value = actual;
     select.addEventListener('change', e => cargarGanancias(parseInt(e.target.value)));
+}
+
+// Handler para evitar duplicación de eventos
+function handleSemanaChange(e) {
+    // Implementado en cargarSelectorSemanas
 }
 
 document.addEventListener('DOMContentLoaded', () => {
