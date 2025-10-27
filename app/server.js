@@ -374,13 +374,23 @@ app.get('/api/servicios', async (req, res) => {
 // Endpoint para obtener todas las citas
 app.get('/api/citas', async (req, res) => {
     try {
+        console.log('📅 Solicitando citas desde Firebase...');
+
         const citas = await getCitas();
         const clientes = await getClientes();
         const servicios = await getServicios();
 
+        // Convertir servicios array a objeto para búsqueda rápida
         const serviciosObj = {};
         servicios.forEach(s => serviciosObj[s.id] = s);
 
+        // Validar que existan citas
+        if (!citas || Object.keys(citas).length === 0) {
+            console.warn('⚠️ No hay citas registradas.');
+            return res.json([]);
+        }
+
+        // Procesar citas (excluye canceladas)
         const citasProcesadas = Object.entries(citas)
             .filter(([id, cita]) => {
                 const estado = cita.estado || 'Reservada';
@@ -391,40 +401,36 @@ app.get('/api/citas', async (req, res) => {
                     nombre: 'Cliente desconocido', 
                     telefono: cita.clienteId 
                 };
+
                 const servicio = serviciosObj[cita.servicioId] || { 
                     nombre: 'Servicio desconocido', 
                     duracion: 60, 
                     precio: 0 
                 };
 
-                // Calcular fecha y hora reales
-                const [hora, minuto] = cita.hora.split(':').map(Number);
-                const fechaInicio = new Date(cita.fecha);
-                fechaInicio.setHours(hora, minuto, 0, 0);
-                const fechaFin = new Date(fechaInicio.getTime() + servicio.duracion * 60000);
-
                 return {
                     id: id,
                     client: cliente.nombre,
                     service: servicio.nombre,
+                    fecha: cita.fecha,              // ← el frontend usará parseDate()
+                    hora: cita.hora,                // ← el frontend también la usa
                     status: cita.estado || 'Reservada',
-                    manicurista: cita.manicuristaId,
+                    manicurista: cita.manicuristaId || 'Sin asignar',
                     notas: cita.notas || '',
                     telefono: cliente.telefono,
                     duracion: servicio.duracion || 60,
-                    precio: servicio.precio || 0,
-                    date: fechaInicio.toISOString(),
-                    endTime: fechaFin.toISOString()
+                    precio: servicio.precio || 0
                 };
             });
 
+        console.log(`✅ ${citasProcesadas.length} citas procesadas correctamente.`);
         res.json(citasProcesadas);
+
     } catch (error) {
-        console.error('Error en /api/citas:', error);
-        res.status(500).json({ error: 'Error al obtener citas' });
+        console.error('❌ Error en /api/citas:', error);
+        res.status(500).json({ error: 'Error al obtener citas: ' + error.message });
     }
 });
-
 
 // Endpoint para crear una nueva cita
 app.post('/api/citas', async (req, res) => {
