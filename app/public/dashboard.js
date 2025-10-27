@@ -1466,13 +1466,21 @@ async function verHistorial(id) {
     try {
         const res = await fetch(`/api/deudas/historial/${id}`);
         const data = await res.json();
-        
+
         const deuda = deudas.find(d => d.id === id);
-        
+
         if (data.success) {
-            const historialHTML = data.historial.length > 0 
-                ? data.historial.map(h => `
-                    <div style="padding: 10px; margin: 5px 0; background: #f8f9fa; border-left: 3px solid #667eea; border-radius: 4px;">
+            const historialHTML = data.historial.length > 0
+                ? data.historial.map((h, index) => `
+                    <div class="historial-item" style="
+                        padding: 10px; 
+                        margin: 5px 0; 
+                        background: #f8f9fa; 
+                        border-left: 3px solid #667eea; 
+                        border-radius: 4px;
+                        transition: background 0.5s;
+                        ${index === 0 ? 'background: #d1e7dd; border-left-color: #28a745;' : ''}
+                    ">
                         <strong>📅 ${new Date(h.fecha).toLocaleDateString('es-MX', { 
                             year: 'numeric', 
                             month: 'long', 
@@ -1483,17 +1491,30 @@ async function verHistorial(id) {
                     </div>
                 `).join('')
                 : '<p style="text-align: center; color: #999; padding: 20px;">No hay historial de pagos</p>';
-            
+
             Swal.fire({
                 title: `📜 Historial: ${deuda.nombre}`,
                 html: `
-                    <div style="text-align: left; max-height: 400px; overflow-y: auto;">
+                    <div id="historial-container" style="text-align: left; max-height: 400px; overflow-y: auto;">
                         ${historialHTML}
                     </div>
                 `,
                 width: '600px',
                 showCloseButton: true,
-                customClass: { container: 'swal-on-top' }
+                customClass: { container: 'swal-on-top' },
+                didOpen: () => {
+                    // Scrollea automáticamente al último pago (el primero del historial ordenado)
+                    const container = document.getElementById('historial-container');
+                    const firstItem = container.querySelector('.historial-item');
+                    if (firstItem) {
+                        firstItem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        // Efecto de parpadeo suave para resaltar
+                        firstItem.style.background = '#ffc107';
+                        setTimeout(() => {
+                            firstItem.style.background = '#d1e7dd';
+                        }, 800);
+                    }
+                }
             });
         }
     } catch (error) {
@@ -1505,6 +1526,8 @@ async function verHistorial(id) {
         });
     }
 }
+
+
 
 // Agregar una sola deuda
 async function agregarDeuda() {
@@ -1829,12 +1852,11 @@ async function resetearPagos() {
 async function marcarPagado(id) {
     try {
         const res = await fetch(`/api/deudas/${id}/pagar`, {
-            method: 'POST',  // ✅ Cambiado a POST
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pagado: true }) // enviamos el body
+            body: JSON.stringify({ pagado: true })
         });
 
-        // Manejo de errores HTTP antes de parsear JSON
         if (!res.ok) {
             if (res.status === 404) {
                 Swal.fire({
@@ -1861,10 +1883,13 @@ async function marcarPagado(id) {
                 icon: 'success',
                 title: '✅ ¡Pagado!',
                 text: data.message || 'Pago marcado como realizado',
-                timer: 2000,
-                customClass: { container: 'swal-on-top' }
+                timer: 1500,
+                customClass: { container: 'swal-on-top' },
+                willClose: () => {
+                    cargarDeudas();    // Refresca la lista
+                    verHistorial(id);  // Abre el historial inmediatamente
+                }
             });
-            cargarDeudas(); // refresca lista
         } else {
             Swal.fire({
                 icon: 'error',
@@ -1884,6 +1909,7 @@ async function marcarPagado(id) {
         });
     }
 }
+
 
 
 // Editar deuda
