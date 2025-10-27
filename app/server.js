@@ -771,7 +771,6 @@ app.post('/api/deudas/:id/pagar', async (req, res) => {
             });
         }
 
-        // Referencia a la deuda
         const deudaRef = ref(db, `deudas/${id}`);
         const snapshot = await get(deudaRef);
 
@@ -782,7 +781,7 @@ app.post('/api/deudas/:id/pagar', async (req, res) => {
             });
         }
 
-        // Actualización del estado de pago
+        // Actualización de la deuda
         const actualizacion = {
             pagado,
             fechaPago: pagado ? new Date().toISOString() : null,
@@ -791,9 +790,20 @@ app.post('/api/deudas/:id/pagar', async (req, res) => {
 
         await update(deudaRef, actualizacion);
 
+        // Registrar en historial
+        const historialRef = ref(db, `historial/${id}`);
+        const nuevaEntrada = {
+            fecha: new Date().toISOString(),
+            pagado,
+            mensaje: pagado ? 'Pago realizado' : 'Pago revertido',
+            deuda: snapshot.val() // opcional: guardar info completa de la deuda
+        };
+        const newHistRef = push(historialRef); // genera ID único
+        await set(newHistRef, nuevaEntrada);
+
         res.json({
             success: true,
-            message: pagado ? 'Deuda marcada como pagada' : 'Deuda marcada como pendiente'
+            message: pagado ? 'Deuda marcada como pagada y registrada en historial' : 'Deuda marcada como pendiente y registrada en historial'
         });
 
     } catch (error) {
@@ -804,6 +814,7 @@ app.post('/api/deudas/:id/pagar', async (req, res) => {
         });
     }
 });
+
 
 /**
  * DELETE /api/deudas/:id

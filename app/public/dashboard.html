@@ -203,22 +203,27 @@
             max-width: 400px;
         }
 
-        .notification-item {
-            background: white;
-            border-radius: 12px;
-            padding: 15px;
-            margin-bottom: 10px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-            display: flex;
-            align-items: start;
-            gap: 12px;
-            animation: slideIn 0.3s ease;
-            border-left: 4px solid #ffc107;
-        }
+       .notification-item {
+    background: white;
+    border-radius: 12px;
+    padding: 15px;
+    margin-bottom: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    display: flex;
+    align-items: start;
+    gap: 12px;
+    border-left: 4px solid #ffc107;
+    opacity: 1;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
 
         .notification-item.urgent {
             border-left-color: #dc3545;
         }
+        .notification-item.removing {
+    opacity: 0;
+    transform: translateX(100px);
+}
 
         @keyframes slideIn {
             from {

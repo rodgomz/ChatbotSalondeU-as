@@ -1257,14 +1257,20 @@ function mostrarNotificaciones(notificaciones) {
                     ${notif.monto ? `<small>Monto: $${notif.monto.toFixed(2)}</small>` : ''}
                 </div>
             `;
-            
+
+            // Remover notificación al hacer click
+            notifElement.addEventListener('click', () => {
+                notifElement.classList.add('removing');
+                setTimeout(() => notifElement.remove(), 300);
+            });
+
             contenedor.appendChild(notifElement);
             
-            // Auto-remover después de 10 segundos
+            // Auto-remover después de 5 segundos
             setTimeout(() => {
-                notifElement.style.opacity = '0';
+                notifElement.classList.add('removing');
                 setTimeout(() => notifElement.remove(), 300);
-            }, 10000);
+            }, 5000);
         }, index * 500);
     });
 }
