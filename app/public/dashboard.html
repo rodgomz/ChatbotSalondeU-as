@@ -281,21 +281,16 @@
         }
 
         /* MODAL DE DEUDAS - CORREGIDO */
-    #deudas-page {
-    position: fixed;   /* Fijo sobre la página */
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.5); /* overlay semitransparente */
-    z-index: 1000;
+#deudas-page {
     display: none;
-    overflow-y: auto;  /* si el modal es alto y necesita scroll */
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+#deudas-page.active {
+    display: block;
+    opacity: 1;
 }
 
-        #deudas-page.active {
-            display: block;
-        }
 
         .deudas-wrapper {
             max-width: 1400px;

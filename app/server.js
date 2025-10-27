@@ -755,15 +755,15 @@ app.put('/api/deudas/:id', async (req, res) => {
 });
 
 /**
- * PUT /api/deudas/:id/pagar
+ * POST /api/deudas/:id/pagar
  * Marcar una deuda como pagada o pendiente
  */
-app.put('/api/deudas/:id/pagar', async (req, res) => {
+app.post('/api/deudas/:id/pagar', async (req, res) => {
     try {
         const { id } = req.params;
         const { pagado } = req.body;
 
-        // Validación: el body debe incluir pagado
+        // Validación
         if (typeof pagado !== 'boolean') {
             return res.status(400).json({
                 success: false,
@@ -771,7 +771,7 @@ app.put('/api/deudas/:id/pagar', async (req, res) => {
             });
         }
 
-        // Verificar que la deuda existe
+        // Referencia a la deuda
         const deudaRef = ref(db, `deudas/${id}`);
         const snapshot = await get(deudaRef);
 
@@ -782,7 +782,7 @@ app.put('/api/deudas/:id/pagar', async (req, res) => {
             });
         }
 
-        // Actualizar estado de pago
+        // Actualización del estado de pago
         const actualizacion = {
             pagado,
             fechaPago: pagado ? new Date().toISOString() : null,
@@ -804,7 +804,6 @@ app.put('/api/deudas/:id/pagar', async (req, res) => {
         });
     }
 });
-
 
 /**
  * DELETE /api/deudas/:id

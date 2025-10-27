@@ -1170,17 +1170,14 @@ function toggleProfileMenu() {
 }
 
 function irADeudas() {
-    document.getElementById('deudas-page').style.display = 'block';
-    document.body.style.overflow = 'hidden';
-    document.getElementById('profile-dropdown').classList.remove('show');
-    cargarDeudas();
-    cargarResumenDeudas();
+    document.getElementById('deudas-page').style.display = 'block'; // muestra el modal
+    document.body.style.overflow = 'hidden'; // bloquea scroll del body
+    document.getElementById('profile-dropdown').classList.remove('show'); // cierra dropdown
+    cargarDeudas(); // carga contenido
+    cargarResumenDeudas(); // carga resumen
 }
 
-function cerrarDeudas() {
-    document.getElementById('deudas-page').style.display = 'none';
-    document.body.style.overflow = 'auto';
-}
+
 
 function irAGastos() {
     const gastosPage = document.getElementById('gastos-page');
@@ -1824,7 +1821,7 @@ async function resetearPagos() {
 async function marcarPagado(id) {
     try {
         const res = await fetch(`/api/deudas/${id}/pagar`, {
-            method: 'PUT',  // PUT para actualizar
+            method: 'POST',  // ✅ Cambiado a POST
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ pagado: true }) // enviamos el body
         });
@@ -1846,7 +1843,7 @@ async function marcarPagado(id) {
                     customClass: { container: 'swal-on-top' }
                 });
             }
-            return; // Salimos para no intentar leer JSON
+            return;
         }
 
         const data = await res.json();
@@ -2098,27 +2095,28 @@ async function exportarDeudas() {
     }
 }
 
-// Función para abrir el modal de deudas
 function openDeudas() {
     const modal = document.getElementById('deudas-page');
     modal.classList.add('active');
-    document.body.style.overflow = 'hidden';
-    cargarDeudas();
+    document.body.style.overflow = 'hidden'; // bloquea scroll del body
+    modal.style.opacity = 0; // inicio de animación
+    requestAnimationFrame(() => {
+        modal.style.transition = 'opacity 0.3s ease';
+        modal.style.opacity = 1;
+    });
+    cargarDeudas(); // tu función para llenar contenido
 }
 
-// Función para cerrar el modal de deudas
-function closeDeudas() {
+// Cerrar modal con fade-out
+function cerrarDeudas() {
     const modal = document.getElementById('deudas-page');
     modal.classList.remove('active');
     document.body.style.overflow = '';
 }
-
-document.getElementById('deudas-page').addEventListener('click', function(e) {
-    if (e.target.id === 'deudas-page') { // solo si clic fuera del contenido
-        closeDeudas();
-    }
+// Cerrar modal si se clickea fuera del contenido
+document.getElementById('deudas-page').addEventListener('click', e => {
+    if (e.target.id === 'deudas-page') cerrarDeudas();
 });
-
 
 // ============================================
 // FUNCIONES DE GASTOS
