@@ -270,6 +270,14 @@ tbody tr:nth-child(even) {
         height: 300px;
     }
 }
+/* 🔹 Sección semanal */
+.semana-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 25px;
+}
+
 .tabla-semanal table {
     width: 100%;
     border-collapse: collapse;
@@ -283,3 +291,9 @@ tbody tr:nth-child(even) {
     background: #34495e;
     color: white;
 }
+
+.tabla-semanal td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #e1e5f7;
+}
+
