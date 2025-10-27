@@ -257,6 +257,7 @@ function handleHourClick(dateStr, hour, minute = 0) {
     
     const date = new Date(dateStr);
     const aptsInSlot = getAppointmentsForSlot(date, hour, minute);
+    console.log('📊 Citas encontradas:', aptsInSlot);
     const isAvailable = aptsInSlot.length === 0;
     
     // ========================================
@@ -267,7 +268,17 @@ function handleHourClick(dateStr, hour, minute = 0) {
         
         // Si hay UNA sola cita: Mostrar detalles directamente
         if (aptsInSlot.length === 1) {
-            showAppointmentDetails(aptsInSlot[0].id);
+            const aptId = aptsInSlot[0].id;
+            console.log('📋 Intentando mostrar detalles de cita ID:', aptId);
+            console.log('📋 Datos completos de la cita:', aptsInSlot[0]);
+            
+            // Verificar si la función existe
+            if (typeof showAppointmentDetails === 'function') {
+                showAppointmentDetails(aptId);
+            } else {
+                console.error('❌ La función showAppointmentDetails no existe');
+                alert('Error: La función para mostrar detalles no está disponible');
+            }
             return;
         }
         
@@ -675,9 +686,14 @@ function selectDate(date) {
 
 
 function showAppointmentDetails(appointmentId) {
+    console.log('🔍 showAppointmentDetails llamado con ID:', appointmentId);
+    console.log('📚 Total de citas en el sistema:', appointments.length);
+    console.log('📋 IDs disponibles:', appointments.map(a => a.id));
+    
     const apt = appointments.find(a => a.id === appointmentId || a.id === String(appointmentId));
     
     if (!apt) {
+        console.error('❌ Cita no encontrada con ID:', appointmentId);
         Swal.fire({
             icon: 'error',
             title: 'Error',
@@ -686,6 +702,8 @@ function showAppointmentDetails(appointmentId) {
         });
         return;
     }
+    
+    console.log('✅ Cita encontrada:', apt);
 
     const estados = ['Reservada', 'Confirmada', 'En Proceso', 'Finalizada', 'Cancelada'];
     const estadosOptions = estados.map(estado => 
