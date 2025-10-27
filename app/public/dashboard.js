@@ -1170,12 +1170,14 @@ function toggleProfileMenu() {
 }
 
 function irADeudas() {
-    document.getElementById('deudas-page').style.display = 'block'; // muestra el modal
-    document.body.style.overflow = 'hidden'; // bloquea scroll del body
-    document.getElementById('profile-dropdown').classList.remove('show'); // cierra dropdown
-    cargarDeudas(); // carga contenido
-    cargarResumenDeudas(); // carga resumen
+    const modal = document.getElementById('deudas-page');
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    document.getElementById('profile-dropdown').classList.remove('show');
+    cargarDeudas();
+    cargarResumenDeudas();
 }
+
 
 
 
@@ -2095,17 +2097,7 @@ async function exportarDeudas() {
     }
 }
 
-function openDeudas() {
-    const modal = document.getElementById('deudas-page');
-    modal.classList.add('active');
-    document.body.style.overflow = 'hidden'; // bloquea scroll del body
-    modal.style.opacity = 0; // inicio de animación
-    requestAnimationFrame(() => {
-        modal.style.transition = 'opacity 0.3s ease';
-        modal.style.opacity = 1;
-    });
-    cargarDeudas(); // tu función para llenar contenido
-}
+
 
 // Cerrar modal con fade-out
 function cerrarDeudas() {
@@ -2113,7 +2105,8 @@ function cerrarDeudas() {
     modal.classList.remove('active');
     document.body.style.overflow = '';
 }
-// Cerrar modal si se clickea fuera del contenido
+
+// Cerrar al hacer click fuera del contenido
 document.getElementById('deudas-page').addEventListener('click', e => {
     if (e.target.id === 'deudas-page') cerrarDeudas();
 });
