@@ -236,11 +236,111 @@ function getMonday(date) {
     return new Date(d.setDate(diff));
 }
 
+function handleHourClick(dateStr, hour, minute = 0) {
+    console.log('🖱️ Click en hora:', { dateStr, hour, minute });
+    
+    const date = new Date(dateStr);
+    const aptsInSlot = getAppointmentsForSlot(date, hour, minute);
+    const isAvailable = aptsInSlot.length === 0;
+    
+    // ========================================
+    // CASO 1: HORARIO OCUPADO (ROJO) 🔴
+    // ========================================
+    if (!isAvailable) {
+        console.log('🔴 Horario ocupado con', aptsInSlot.length, 'cita(s)');
+        
+        // Si hay UNA sola cita: Mostrar detalles directamente
+        if (aptsInSlot.length === 1) {
+            showAppointmentDetails(aptsInSlot[0].id);
+            return;
+        }
+        
+        // Si hay MÚLTIPLES citas: Mostrar lista para elegir
+        const citasHtml = aptsInSlot.map((apt) => `
+            <div style="background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 8px; cursor: pointer; border: 2px solid #e1e5f7; transition: all 0.2s;" 
+                 onmouseover="this.style.borderColor='#667eea'; this.style.background='#f0f4ff';" 
+                 onmouseout="this.style.borderColor='#e1e5f7'; this.style.background='#f8f9fa';"
+                 onclick="event.stopPropagation(); showAppointmentDetails('${apt.id}'); Swal.close();">
+                <div style="font-size: 1.1rem; margin-bottom: 8px;">
+                    <strong>👤 ${apt.client}</strong>
+                </div>
+                <div style="margin-bottom: 5px;">
+                    ✂️ ${apt.service} (${apt.duracion}min)
+                </div>
+                <div style="margin-bottom: 5px; color: #666;">
+                    🕐 ${apt.date.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})} - ${apt.endTime.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}
+                </div>
+                <div style="font-size: 0.85rem; padding: 5px 10px; background: ${getStatusColor(apt.status)}; border-radius: 4px; display: inline-block; color: white;">
+                    📊 ${apt.status}
+                </div>
+            </div>
+        `).join('');
+        
+        Swal.fire({
+            title: `📋 Citas en este horario (${aptsInSlot.length})`,
+            html: `
+                <div style="text-align: left; max-height: 400px; overflow-y: auto;">
+                    ${citasHtml}
+                </div>
+                <div style="margin-top: 15px; padding: 10px; background: #f8f9ff; border-radius: 6px; font-size: 0.9rem; color: #666;">
+                    💡 Haz clic en una cita para ver todos sus detalles
+                </div>
+            `,
+            width: '600px',
+            showConfirmButton: false,
+            showCloseButton: true
+        });
+        return;
+    }
+    
+    // ========================================
+    // CASO 2: HORARIO DISPONIBLE (VERDE) 🟢
+    // ========================================
+    console.log('🟢 Horario disponible');
+    
+    const hourStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+    const dateFormatted = date.toLocaleDateString('es-ES', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+    });
+    
+    Swal.fire({
+        title: `📅 ${dateFormatted}`,
+        html: `
+            <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+                <div style="font-size: 3rem; margin-bottom: 15px;">✅</div>
+                <p style="margin-bottom: 15px; font-size: 1.2rem; color: #155724;">
+                    <strong>Horario Disponible</strong>
+                </p>
+                <p style="margin-bottom: 20px; font-size: 1.4rem; color: #155724; font-weight: 600;">
+                    🕐 ${hourStr}
+                </p>
+                <button onclick="showNewAppointmentForm('${dateStr}', '${hourStr}'); Swal.close();" 
+                        class="btn btn-success"
+                        style="padding: 12px 30px; font-size: 1.1rem; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.15); transition: all 0.3s;"
+                        onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 15px rgba(0,0,0,0.2)';"
+                        onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 10px rgba(0,0,0,0.15)';">
+                    ➕ Agregar Nueva Cita
+                </button>
+            </div>
+        `,
+        width: '600px',
+        showConfirmButton: false,
+        showCloseButton: true
+    });
+}
+
+// ============================================
+// FUNCIÓN AUXILIAR: Obtener citas en un slot específico
+// ============================================
 function getAppointmentsForSlot(date, hour, minute = 0) {
     const slotStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, minute, 0);
     const slotEnd = new Date(slotStart.getTime() + BUSINESS_HOURS.interval * 60000);
     
     return appointments.filter(apt => {
+        // Solo considerar citas activas (no canceladas)
         if (!['Reservada', 'Confirmada', 'En Proceso', 'Finalizada'].includes(apt.status)) {
             return false;
         }
@@ -248,9 +348,26 @@ function getAppointmentsForSlot(date, hour, minute = 0) {
         const aptStart = apt.date;
         const aptEnd = apt.endTime;
         
+        // Verificar si hay solapamiento entre el slot y la cita
         return !(aptEnd <= slotStart || aptStart >= slotEnd);
     });
 }
+
+// ============================================
+// FUNCIÓN AUXILIAR: Obtener color según estado
+// ============================================
+function getStatusColor(status) {
+    const colors = {
+        'Reservada': '#17a2b8',
+        'Confirmada': '#28a745',
+        'En Proceso': '#ffc107',
+        'Finalizada': '#6c757d',
+        'Cancelada': '#dc3545',
+        'No Asistió': '#dc3545'
+    };
+    return colors[status] || '#6c757d';
+}
+
 
 function getHoursOccupiedInDay(date) {
     let minutosOcupados = 0;
@@ -382,18 +499,6 @@ function nextWeek() {
     currentWeekStart.setDate(currentWeekStart.getDate() + 7);
     renderWeek();
 }
-
-function getStatusColor(status) {
-    const colors = {
-        'Reservada': '#17a2b8',
-        'Confirmada': '#28a745',
-        'En Proceso': '#ffc107',
-        'Finalizada': '#6c757d',
-        'Cancelada': '#dc3545'
-    };
-    return colors[status] || '#6c757d';
-}
-
 
 // ============================================
 // FUNCIONES DE CALENDARIO
@@ -548,81 +653,10 @@ function selectDate(date) {
     });
 }
 
-function handleHourClick(dateStr, hour, minute = 0) {
-    const date = new Date(dateStr);
-    const aptsInSlot = getAppointmentsForSlot(date, hour, minute);
-    const isAvailable = aptsInSlot.length === 0;
-    
-    if (!isAvailable) {
-        if (aptsInSlot.length === 1) {
-            showAppointmentDetails(aptsInSlot[0].id);
-        } else {
-            const citasHtml = aptsInSlot.map((apt, index) => `
-                <div style="background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 8px; cursor: pointer; border: 2px solid #e1e5f7; transition: all 0.2s;" 
-                     onmouseover="this.style.borderColor='#667eea'; this.style.background='#f0f4ff';" 
-                     onmouseout="this.style.borderColor='#e1e5f7'; this.style.background='#f8f9fa';"
-                     onclick="event.stopPropagation(); showAppointmentDetails('${apt.id}'); Swal.close();">
-                    <div style="font-size: 1.1rem; margin-bottom: 8px;">
-                        <strong>👤 ${apt.client}</strong>
-                    </div>
-                    <div style="margin-bottom: 5px;">
-                        ✂️ ${apt.service} (${apt.duracion}min)
-                    </div>
-                    <div style="margin-bottom: 5px; color: #666;">
-                        🕐 ${apt.date.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})} - ${apt.endTime.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}
-                    </div>
-                    <div style="font-size: 0.85rem; padding: 5px 10px; background: ${getStatusColor(apt.status)}; border-radius: 4px; display: inline-block; color: white;">
-                        📊 ${apt.status}
-                    </div>
-                </div>
-            `).join('');
-            
-            Swal.fire({
-                title: `📋 Citas en este horario (${aptsInSlot.length})`,
-                html: `
-                    <div style="text-align: left; max-height: 400px; overflow-y: auto;">
-                        ${citasHtml}
-                    </div>
-                    <div style="margin-top: 15px; padding: 10px; background: #f8f9ff; border-radius: 6px; font-size: 0.9rem; color: #666;">
-                        💡 Haz clic en una cita para ver todos sus detalles
-                    </div>
-                `,
-                width: '600px',
-                showConfirmButton: false,
-                showCloseButton: true
-            });
-        }
-        return;
-    }
-    
-    const hourStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-    const dateFormatted = date.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-    
-    Swal.fire({
-        title: `📅 ${dateFormatted}`,
-        html: `
-            <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
-                <div style="font-size: 3rem; margin-bottom: 15px;">✅</div>
-                <p style="margin-bottom: 15px; font-size: 1.2rem; color: #155724;">
-                    <strong>Horario Disponible</strong>
-                </p>
-                <p style="margin-bottom: 20px; font-size: 1.4rem; color: #155724; font-weight: 600;">
-                    🕐 ${hourStr}
-                </p>
-                <button onclick="showNewAppointmentForm('${dateStr}', '${hourStr}'); Swal.close();" 
-                        class="btn btn-success"
-                        style="padding: 12px 30px; font-size: 1.1rem; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.15); transition: all 0.3s;"
-                        onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 15px rgba(0,0,0,0.2)';"
-                        onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 10px rgba(0,0,0,0.15)';">
-                    ➕ Agregar Nueva Cita
-                </button>
-            </div>
-        `,
-        width: '600px',
-        showConfirmButton: false,
-        showCloseButton: true
-    });
-}
+
+
+
+
 
 function showAppointmentDetails(appointmentId) {
     const apt = appointments.find(a => a.id === appointmentId || a.id === String(appointmentId));
