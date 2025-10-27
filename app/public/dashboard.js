@@ -1886,10 +1886,17 @@ async function editarDeuda(id) {
         const deuda = deudas.find(d => d.id === id);
         if (!deuda) return;
 
-        const tipos = ['Arrendamiento','Luz','Agua','Internet','Teléfono','Gas','Tarjeta de Crédito 1','Tarjeta de Crédito 2','Netflix','Spotify','Gimnasio','Seguro','Otro'];
-        const opcionesTipo = tipos.map(t => `<option value="${t}" ${deuda.tipo === t ? 'selected' : ''}>${t}</option>`).join('');
+        const tipos = [
+            'Arrendamiento','Luz','Agua','Internet','Teléfono','Gas',
+            'Tarjeta de Crédito 1','Tarjeta de Crédito 2',
+            'Netflix','Spotify','Gimnasio','Seguro','Otro'
+        ];
 
-        Swal.fire({
+        const opcionesTipo = tipos.map(t => 
+            `<option value="${t}" ${deuda.tipo === t ? 'selected' : ''}>${t}</option>`
+        ).join('');
+
+        const { value: formValues } = await Swal.fire({
             title: '✏️ Editar Pago',
             html: `
                 <div class="text-start" style="max-width: 500px; margin: 0 auto;">
@@ -1899,9 +1906,7 @@ async function editarDeuda(id) {
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-bold">Tipo de Pago *</label>
-                        <select id="tipo-deuda" class="form-control">
-                            ${opcionesTipo}
-                        </select>
+                        <select id="tipo-deuda" class="form-control">${opcionesTipo}</select>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-bold">Día de Pago (1-31) *</label>
@@ -1915,6 +1920,10 @@ async function editarDeuda(id) {
                         <label class="form-label fw-bold">Notas (opcional)</label>
                         <textarea id="notas-deuda" class="form-control" rows="2">${deuda.notas || ''}</textarea>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Pagado</label>
+                        <input type="checkbox" id="pagado-deuda" ${deuda.pagado ? 'checked' : ''}>
+                    </div>
                 </div>
             `,
             confirmButtonText: '💾 Guardar Cambios',
@@ -1925,51 +1934,66 @@ async function editarDeuda(id) {
             preConfirm: () => {
                 const nombre = document.getElementById('nombre-deuda').value.trim();
                 const tipo = document.getElementById('tipo-deuda').value;
-                const diaPago = parseInt(document.getElementById('dia-pago').value);
-                const monto = parseFloat(document.getElementById('monto-deuda').value || 0);
+                const diaPagoVal = document.getElementById('dia-pago').value;
+                const montoVal = document.getElementById('monto-deuda').value;
                 const notas = document.getElementById('notas-deuda').value.trim();
-                
-                if (!nombre || !tipo || !diaPago || !monto) {
+                const pagado = document.getElementById('pagado-deuda').checked;
+
+                if (!nombre || !tipo || !diaPagoVal || !montoVal) {
                     Swal.showValidationMessage('Por favor completa todos los campos obligatorios');
                     return false;
                 }
+
+                const diaPago = parseInt(diaPagoVal);
+                const monto = parseFloat(montoVal);
+
                 if (diaPago < 1 || diaPago > 31) {
                     Swal.showValidationMessage('El día debe estar entre 1 y 31');
                     return false;
                 }
-                return { nombre, tipo, diaPago, monto, notas };
-            }
-        }).then(async (r) => {
-            if (r.isConfirmed) {
-                const res = await fetch(`/api/deudas/${id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(r.value)
-                });
-                const data = await res.json();
-                if (data.success) {
-                    Swal.fire({
-                        icon: 'success',
-                        title: '✅ Actualizado',
-                        text: 'Pago modificado exitosamente',
-                        timer: 2000,
-                        customClass: { container: 'swal-on-top' }
-                    });
-                    cargarDeudas();
-                } else {
-                    Swal.fire({
-                        icon: 'error',
-                        title: '❌ Error',
-                        text: data.error || 'No se pudo actualizar',
-                        customClass: { container: 'swal-on-top' }
-                    });
-                }
+
+                return { nombre, tipo, diaPago, monto, notas, pagado };
             }
         });
+
+        if (formValues) {
+            // Enviar solo campos definidos al PUT
+            const datosActualizar = {};
+            for (const key in formValues) {
+                if (formValues[key] !== undefined) datosActualizar[key] = formValues[key];
+            }
+
+            const res = await fetch(`/api/deudas/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(datosActualizar)
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                Swal.fire({
+                    icon: 'success',
+                    title: '✅ Actualizado',
+                    text: 'Pago modificado exitosamente',
+                    timer: 2000,
+                    customClass: { container: 'swal-on-top' }
+                });
+                cargarDeudas();
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: '❌ Error',
+                    text: data.error || 'No se pudo actualizar',
+                    customClass: { container: 'swal-on-top' }
+                });
+            }
+        }
+
     } catch (error) {
         console.error('Error editando deuda:', error);
     }
 }
+
 
 // Eliminar deuda
 async function eliminarDeuda(id) {
