@@ -5,6 +5,8 @@ let todosLosGastos = [];
 let todasLasDeudas = [];
 let clientesGlobal = {};
 let anioActual = new Date().getFullYear();
+let semanasMapGlobal = {};
+let semanaLabelsGlobal = [];
 
 async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
     try {
@@ -161,20 +163,20 @@ async function cargarGanancias(anioFiltro = new Date().getFullYear()) {
         });
 
         const semanaLabels = Object.keys(semanasMap).sort((a,b)=> a-b);
-        const gananciaSemanal = semanaLabels.map(s => semanasMap[s].ganancia);
-        const gastoSemanal = semanaLabels.map(s => semanasMap[s].gasto);
-        const deudaSemanal = semanaLabels.map(s => semanasMap[s].deuda);
+        
+        // Guardar globalmente
+        semanasMapGlobal = semanasMap;
+        semanaLabelsGlobal = semanaLabels;
 
-        actualizarGraficaSemanal(semanaLabels, gananciaSemanal, gastoSemanal, deudaSemanal);
+        // Mostrar todas las semanas inicialmente
+        actualizarGraficaSemanalCompleta(semanaLabels, semanasMap);
         document.getElementById('anioGraficaSem').textContent = anioFiltro;
 
         // Cargar selector de semanas
         cargarSelectorSemanas(semanasMap, semanaLabels);
 
-        // Mostrar primera semana por defecto
-        if (semanaLabels.length > 0) {
-            mostrarCitasSemana(semanaLabels[0], semanasMap);
-        }
+        // Mostrar todas las semanas por defecto
+        mostrarTodasLasSemanas(semanasMap, semanaLabels);
 
     } catch (error) {
         console.error('Error al cargar ganancias:', error);
@@ -227,9 +229,106 @@ function cargarSelectorSemanas(semanasMap, semanaLabels) {
     select.removeEventListener('change', handleSemanaChange);
     select.addEventListener('change', (e) => {
         if (e.target.value === '') {
-            mostrarTodasLasSemanas(semanasMap, semanaLabels);
+            // Mostrar todas las semanas
+            mostrarTodasLasSemanas(semanasMapGlobal, semanaLabelsGlobal);
+            actualizarGraficaSemanalCompleta(semanaLabelsGlobal, semanasMapGlobal);
         } else {
-            mostrarCitasSemana(e.target.value, semanasMap);
+            // Mostrar semana específica
+            const semanaSeleccionada = e.target.value;
+            mostrarCitasSemana(semanaSeleccionada, semanasMapGlobal);
+            actualizarGraficaSemanaEspecifica(semanaSeleccionada, semanasMapGlobal);
+        }
+    });
+}
+
+// Actualizar gráfica con todas las semanas
+function actualizarGraficaSemanalCompleta(semanaLabels, semanasMap) {
+    const gananciaSemanal = semanaLabels.map(s => semanasMap[s].ganancia);
+    const gastoSemanal = semanaLabels.map(s => semanasMap[s].gasto);
+    const deudaSemanal = semanaLabels.map(s => semanasMap[s].deuda);
+    
+    const ctx = document.getElementById('graficaGananciasSemanal').getContext('2d');
+    if (chartSemanalInstance) chartSemanalInstance.destroy();
+
+    chartSemanalInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: semanaLabels.map(s => `Semana ${s}`),
+            datasets: [
+                { label: 'Ganancia', data: gananciaSemanal, backgroundColor:'#28a745' },
+                { label: 'Gastos', data: gastoSemanal, backgroundColor:'#ffc107' },
+                { label: 'Deudas', data: deudaSemanal, backgroundColor:'#dc3545' }
+            ]
+        },
+        options: { 
+            responsive:true, 
+            maintainAspectRatio:false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Comparativa de todas las semanas del año',
+                    font: { size: 14 }
+                }
+            }
+        }
+    });
+}
+
+// Actualizar gráfica con una semana específica (por día)
+function actualizarGraficaSemanaEspecifica(semana, semanasMap) {
+    const datosSemana = semanasMap[semana];
+    
+    // Agrupar citas por día de la semana
+    const diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const gananciasPorDia = new Array(7).fill(0);
+    
+    datosSemana.citas.forEach(cita => {
+        const [dia, mes, anio] = cita.fecha.split('/').map(n => parseInt(n, 10));
+        const fecha = new Date(anio, mes - 1, dia);
+        const diaSemana = fecha.getDay(); // 0 = Domingo, 6 = Sábado
+        gananciasPorDia[diaSemana] += cita.precio;
+    });
+    
+    const ctx = document.getElementById('graficaGananciasSemanal').getContext('2d');
+    if (chartSemanalInstance) chartSemanalInstance.destroy();
+
+    chartSemanalInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: diasSemana,
+            datasets: [
+                { 
+                    label: 'Ganancia por día', 
+                    data: gananciasPorDia, 
+                    backgroundColor:'#28a745',
+                    borderColor: '#1e7e34',
+                    borderWidth: 1
+                }
+            ]
+        },
+        options: { 
+            responsive:true, 
+            maintainAspectRatio:false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: `Semana ${semana}: ${datosSemana.fechaInicio} - ${datosSemana.fechaFin}`,
+                    font: { size: 14 }
+                },
+                legend: {
+                    display: true
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return '$' + value.toFixed(2);
+                        }
+                    }
+                }
+            }
         }
     });
 }
@@ -311,24 +410,6 @@ function actualizarGraficaNeta(netaMes, anio) {
         data: {
             labels: ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],
             datasets: [{ label: `Ganancia Neta ${anio}`, data: netaMes, backgroundColor:'#28a745' }]
-        },
-        options: { responsive:true, maintainAspectRatio:false }
-    });
-}
-
-function actualizarGraficaSemanal(labels, ganancia, gasto, deuda) {
-    const ctx = document.getElementById('graficaGananciasSemanal').getContext('2d');
-    if (chartSemanalInstance) chartSemanalInstance.destroy();
-
-    chartSemanalInstance = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels.map(s => `Semana ${s}`),
-            datasets: [
-                { label: 'Ganancia', data: ganancia, backgroundColor:'#28a745' },
-                { label: 'Gastos', data: gasto, backgroundColor:'#ffc107' },
-                { label: 'Deudas', data: deuda, backgroundColor:'#dc3545' }
-            ]
         },
         options: { responsive:true, maintainAspectRatio:false }
     });
