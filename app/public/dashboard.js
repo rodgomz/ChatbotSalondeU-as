@@ -1464,68 +1464,101 @@ function cargarResumenDeudas() {
 // Ver historial de pagos
 async function verHistorial(id) {
     try {
-        const res = await fetch(`/api/deudas/historial/${id}`);
-        const data = await res.json();
+        console.log('🔹 Ver historial para deuda ID:', id);
+        console.log('🔹 Array de deudas actual:', deudas);
 
         const deuda = deudas.find(d => d.id === id);
-
-        if (data.success) {
-            const historialHTML = data.historial.length > 0
-                ? data.historial.map((h, index) => `
-                    <div class="historial-item" style="
-                        padding: 10px; 
-                        margin: 5px 0; 
-                        background: #f8f9fa; 
-                        border-left: 3px solid #667eea; 
-                        border-radius: 4px;
-                        transition: background 0.5s;
-                        ${index === 0 ? 'background: #d1e7dd; border-left-color: #28a745;' : ''}
-                    ">
-                        <strong>📅 ${new Date(h.fecha).toLocaleDateString('es-MX', { 
-                            year: 'numeric', 
-                            month: 'long', 
-                            day: 'numeric' 
-                        })}</strong><br>
-                        <span>💰 Monto: $${h.monto.toFixed(2)}</span><br>
-                        ${h.notas ? `<small style="color: #666;">📝 ${h.notas}</small>` : ''}
-                    </div>
-                `).join('')
-                : '<p style="text-align: center; color: #999; padding: 20px;">No hay historial de pagos</p>';
-
+        if (!deuda) {
+            console.warn('⚠️ No se encontró la deuda en el array de deudas');
             Swal.fire({
-                title: `📜 Historial: ${deuda.nombre}`,
-                html: `
-                    <div id="historial-container" style="text-align: left; max-height: 400px; overflow-y: auto;">
-                        ${historialHTML}
-                    </div>
-                `,
-                width: '600px',
-                showCloseButton: true,
-                customClass: { container: 'swal-on-top' },
-                didOpen: () => {
-                    // Scrollea automáticamente al último pago (el primero del historial ordenado)
-                    const container = document.getElementById('historial-container');
-                    const firstItem = container.querySelector('.historial-item');
-                    if (firstItem) {
-                        firstItem.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        // Efecto de parpadeo suave para resaltar
-                        firstItem.style.background = '#ffc107';
-                        setTimeout(() => {
-                            firstItem.style.background = '#d1e7dd';
-                        }, 800);
-                    }
-                }
+                icon: 'warning',
+                title: '❌ Deuda no encontrada',
+                text: `No se encontró la deuda con ID ${id}`,
+                customClass: { container: 'swal-on-top' }
             });
+            return;
         }
+
+        const res = await fetch(`/api/deudas/historial/${id}`);
+        console.log('🔹 Respuesta raw del fetch:', res);
+
+        if (!res.ok) {
+            console.error('❌ Error HTTP al obtener historial:', res.status, res.statusText);
+            Swal.fire({
+                icon: 'error',
+                title: '❌ Error HTTP',
+                text: `Código ${res.status}: ${res.statusText}`,
+                customClass: { container: 'swal-on-top' }
+            });
+            return;
+        }
+
+        const data = await res.json();
+        console.log('🔹 Data recibida del servidor:', data);
+
+        if (!data.success || !Array.isArray(data.historial)) {
+            console.warn('⚠️ La data no contiene historial válido', data);
+            Swal.fire({
+                icon: 'info',
+                title: 'ℹ️ Sin historial',
+                text: 'No hay historial de pagos para esta deuda.',
+                customClass: { container: 'swal-on-top' }
+            });
+            return;
+        }
+
+        const historialHTML = data.historial.length > 0
+            ? data.historial.map((h, index) => `
+                <div class="historial-item" style="
+                    padding: 10px; 
+                    margin: 5px 0; 
+                    background: #f8f9fa; 
+                    border-left: 3px solid #667eea; 
+                    border-radius: 4px;
+                    transition: background 0.5s;
+                    ${index === 0 ? 'background: #d1e7dd; border-left-color: #28a745;' : ''}
+                ">
+                    <strong>📅 ${new Date(h.fecha).toLocaleDateString('es-MX', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                    })}</strong><br>
+                    <span>💰 Monto: $${h.monto.toFixed(2)}</span><br>
+                    ${h.notas ? `<small style="color: #666;">📝 ${h.notas}</small>` : ''}
+                </div>
+            `).join('')
+            : '<p style="text-align: center; color: #999; padding: 20px;">No hay historial de pagos</p>';
+
+        Swal.fire({
+            title: `📜 Historial: ${deuda.nombre}`,
+            html: `<div id="historial-container" style="text-align: left; max-height: 400px; overflow-y: auto;">
+                        ${historialHTML}
+                   </div>`,
+            width: '600px',
+            showCloseButton: true,
+            customClass: { container: 'swal-on-top' },
+            didOpen: () => {
+                const container = document.getElementById('historial-container');
+                const firstItem = container.querySelector('.historial-item');
+                if (firstItem) {
+                    firstItem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    firstItem.style.background = '#ffc107';
+                    setTimeout(() => firstItem.style.background = '#d1e7dd', 800);
+                }
+            }
+        });
+
     } catch (error) {
+        console.error('❌ Error cargando historial:', error);
         Swal.fire({
             icon: 'error',
             title: '❌ Error',
-            text: 'No se pudo cargar el historial',
+            text: 'No se pudo cargar el historial. Revisa la consola para más detalles.',
             customClass: { container: 'swal-on-top' }
         });
     }
 }
+
 
 
 
