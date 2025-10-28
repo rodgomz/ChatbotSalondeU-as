@@ -2348,41 +2348,81 @@ function mostrarGastos(gastos) {
         `;
     }).join('');
 }
+
 function agregarGasto() {
     Swal.fire({
         title: '💰 Agregar Gasto',
         html: `
-            <div style="text-align: left;">
-                <label for="gasto-descripcion">Descripción:</label>
-                <input id="gasto-descripcion" class="swal2-input" placeholder="Ej: Comida, Gasolina, etc.">
+            <div style="text-align: left; padding: 20px;">
+                <div style="margin-bottom: 20px;">
+                    <label for="gasto-descripcion" style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">
+                        📝 Descripción
+                    </label>
+                    <input id="gasto-descripcion" 
+                           class="swal2-input" 
+                           placeholder="Ej: Comida, Gasolina, etc."
+                           style="width: 100%; margin: 0; padding: 12px; border: 2px solid #e1e5f7; border-radius: 8px; font-size: 1rem;">
+                </div>
                 
-                <label for="gasto-monto">Monto:</label>
-                <input id="gasto-monto" type="number" step="0.01" class="swal2-input" placeholder="0.00">
+                <div style="margin-bottom: 20px;">
+                    <label for="gasto-monto" style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">
+                        💵 Monto
+                    </label>
+                    <input id="gasto-monto" 
+                           type="number" 
+                           step="0.01" 
+                           class="swal2-input" 
+                           placeholder="0.00"
+                           style="width: 100%; margin: 0; padding: 12px; border: 2px solid #e1e5f7; border-radius: 8px; font-size: 1rem;">
+                </div>
                 
-                <label for="gasto-categoria">Categoría:</label>
-                <select id="gasto-categoria" class="swal2-select">
-                    <option value="">Selecciona una categoría</option>
-                    <option value="Comida">🍔 Comida</option>
-                    <option value="Transporte">🚗 Transporte</option>
-                    <option value="Entretenimiento">🎬 Entretenimiento</option>
-                    <option value="Salud">💊 Salud</option>
-                    <option value="Educación">📚 Educación</option>
-                    <option value="Hogar">🏠 Hogar</option>
-                    <option value="Ropa">👕 Ropa</option>
-                    <option value="Servicios">🔧 Servicios</option>
-                    <option value="Otros">📦 Otros</option>
-                </select>
+                <div style="margin-bottom: 20px;">
+                    <label for="gasto-categoria" style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">
+                        🏷️ Categoría
+                    </label>
+                    <select id="gasto-categoria" 
+                            class="swal2-select"
+                            style="width: 100%; margin: 0; padding: 12px; border: 2px solid #e1e5f7; border-radius: 8px; font-size: 1rem; background: white;">
+                        <option value="">Selecciona una categoría</option>
+                        <option value="Comida">🍔 Comida</option>
+                        <option value="Transporte">🚗 Transporte</option>
+                        <option value="Entretenimiento">🎬 Entretenimiento</option>
+                        <option value="Salud">💊 Salud</option>
+                        <option value="Educación">📚 Educación</option>
+                        <option value="Hogar">🏠 Hogar</option>
+                        <option value="Ropa">👕 Ropa</option>
+                        <option value="Servicios">🔧 Servicios</option>
+                        <option value="Otros">📦 Otros</option>
+                    </select>
+                </div>
                 
-                <label for="gasto-fecha">Fecha:</label>
-                <input id="gasto-fecha" type="date" class="swal2-input" value="${new Date().toISOString().split('T')[0]}">
+                <div style="margin-bottom: 20px;">
+                    <label for="gasto-fecha" style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">
+                        📅 Fecha
+                    </label>
+                    <input id="gasto-fecha" 
+                           type="date" 
+                           class="swal2-input" 
+                           value="${new Date().toISOString().split('T')[0]}"
+                           style="width: 100%; margin: 0; padding: 12px; border: 2px solid #e1e5f7; border-radius: 8px; font-size: 1rem;">
+                </div>
                 
-                <label for="gasto-notas">Notas (opcional):</label>
-                <textarea id="gasto-notas" class="swal2-textarea" placeholder="Notas adicionales"></textarea>
+                <div style="margin-bottom: 0;">
+                    <label for="gasto-notas" style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">
+                        📋 Notas <span style="font-weight: normal; color: #999;">(opcional)</span>
+                    </label>
+                    <textarea id="gasto-notas" 
+                              class="swal2-textarea" 
+                              placeholder="Notas adicionales"
+                              style="width: 100%; margin: 0; padding: 12px; border: 2px solid #e1e5f7; border-radius: 8px; font-size: 1rem; min-height: 80px; resize: vertical;"></textarea>
+                </div>
             </div>
         `,
         confirmButtonText: '💾 Guardar Gasto',
         showCancelButton: true,
-        cancelButtonText: 'Cancelar',
+        cancelButtonText: '❌ Cancelar',
+        confirmButtonColor: '#28a745',
+        cancelButtonColor: '#6c757d',
         width: '600px',
         customClass: {
             container: 'swal-on-top'
@@ -2394,13 +2434,18 @@ function agregarGasto() {
             const fecha = document.getElementById('gasto-fecha').value;
             const notas = document.getElementById('gasto-notas').value.trim();
 
-            if (!descripcion || !categoria || !monto) {
-                Swal.showValidationMessage('Por favor completa todos los campos obligatorios');
+            if (!descripcion) {
+                Swal.showValidationMessage('❗ Por favor ingresa una descripción');
                 return false;
             }
 
-            if (monto <= 0) {
-                Swal.showValidationMessage('El monto debe ser mayor a 0');
+            if (!categoria) {
+                Swal.showValidationMessage('❗ Por favor selecciona una categoría');
+                return false;
+            }
+
+            if (!monto || monto <= 0) {
+                Swal.showValidationMessage('❗ El monto debe ser mayor a 0');
                 return false;
             }
 
@@ -2420,6 +2465,7 @@ function agregarGasto() {
                     title: '✅ ¡Guardado!',
                     text: 'Gasto agregado exitosamente',
                     timer: 2000,
+                    showConfirmButton: false,
                     customClass: { container: 'swal-on-top' }
                 });
                 cargarGastos();
@@ -2427,7 +2473,8 @@ function agregarGasto() {
                 Swal.fire({
                     icon: 'error',
                     title: '❌ Error',
-                    text: data.error || 'No se pudo guardar',
+                    text: data.error || 'No se pudo guardar el gasto',
+                    confirmButtonColor: '#dc3545',
                     customClass: { container: 'swal-on-top' }
                 });
             }
