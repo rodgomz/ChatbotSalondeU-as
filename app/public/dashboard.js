@@ -2909,7 +2909,7 @@ function agregarEstilosCSS() {
         
         .stat-label {
             font-size: 0.85rem;
-            color: rgba(255, 255, 255, 0.9);
+            color: rgba(43, 41, 41, 0.9);
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
