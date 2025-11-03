@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -26,7 +27,7 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             padding: 1.5rem 2rem;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             position: sticky;
             top: 0;
             z-index: 100;
@@ -75,7 +76,7 @@
             right: 0;
             background: white;
             border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
             min-width: 220px;
             display: none;
             overflow: hidden;
@@ -88,8 +89,15 @@
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .profile-dropdown-header {
@@ -151,14 +159,14 @@
             background: white;
             padding: 1.5rem;
             border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
             transition: transform 0.2s, box-shadow 0.2s;
             cursor: pointer;
         }
 
         .stat-card:hover {
             transform: translateY(-4px);
-            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
         }
 
         .stat-icon {
@@ -183,7 +191,7 @@
             background: white;
             border-radius: 12px;
             padding: 1.5rem;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
             margin-bottom: 2rem;
         }
 
@@ -379,7 +387,7 @@
             background: white;
             border-radius: 12px;
             padding: 1.5rem;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
         }
 
         .quick-actions h3 {
@@ -426,7 +434,7 @@
             background: white;
             border-radius: 12px;
             padding: 1.5rem;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
             margin-bottom: 2rem;
         }
 
@@ -521,7 +529,7 @@
             background: white;
             border-radius: 12px;
             padding: 1.5rem;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
             margin-bottom: 2rem;
         }
 
@@ -571,12 +579,11 @@
         /* Hidden elements needed by JavaScript */
         #qr-container,
         #deudas-page,
-        #gastos-page,
-        #notification-container {
+        #gastos-page {
             display: none;
         }
 
-      /* NOTIFICACIONES */
+        /* NOTIFICACIONES */
         .notification-badge {
             position: absolute;
             top: -5px;
@@ -606,13 +613,16 @@
             }
         }
 
-        .notification-container {
+        #notification-container {
             position: fixed;
             top: 20px;
             right: 20px;
             z-index: 9999;
             max-width: 400px;
+            pointer-events: none;
+            /* Para que no bloquee clics */
         }
+
 
         .notification-item {
             background: white;
@@ -627,6 +637,9 @@
             opacity: 1;
             transition: opacity 0.3s ease, transform 0.3s ease;
         }
+        #notification-container .notification-item {
+    pointer-events: auto; /* Pero las notificaciones sí sean clickeables */
+}
 
         .notification-item.urgent {
             border-left-color: #dc3545;
@@ -666,6 +679,27 @@
             color: #666;
             font-size: 0.85rem;
         }
+
+        @keyframes slideIn {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.notification-item {
+    pointer-events: auto !important;
+    cursor: pointer;
+}
+
+.notification-item:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    transform: translateX(-5px);
+}
 
         /* NAVEGACIÓN */
         .nav-tabs {
@@ -1231,49 +1265,52 @@
         }
     </style>
 </head>
+
 <body>
     <!-- Header -->
-<header class="header">
-    <div class="header-content">
-        <div id="info-negocio-header" style="display: flex; align-items: center; gap: 10px;">
-            <img id="logo-negocio-header" src="" alt="Logo" style="max-height: 50px; display: none; border-radius: 8px;">
-            <span id="nombre-negocio-header" style="font-weight: bold; font-size: 1.5rem;">🤖 Dashboard Bot WhatsApp</span>
-        </div>
-        
-        <div class="profile-menu">
-            <div class="profile-icon" id="profile-icon" onclick="toggleProfileMenu()">👤</div>
-            
-            <div class="profile-dropdown" id="profile-dropdown">
-                <div class="profile-dropdown-header">
-                    <h5>Mi Perfil</h5>
-                    <p>Administrador</p>
-                </div>
-                <div class="profile-dropdown-menu">
-                    <button class="profile-dropdown-item" onclick="irAGastos()">
-                        <span>💰</span>
-                        <span>Gastos</span>
-                    </button>
-                    <button class="profile-dropdown-item" onclick="irADeudas()">
-                        <span>💳</span>
-                        <span>Deudas</span>
-                    </button>
-                    <button class="profile-dropdown-item" onclick="verNotificaciones()">
-                        <span>🔔</span>
-                        <span>Notificaciones</span>
-                    </button>
-                    <button class="profile-dropdown-item" onclick="configuracion()">
-                        <span>⚙️</span>
-                        <span>Configuración</span>
-                    </button>
-                    <button class="profile-dropdown-item" onclick="cerrarSesion()">
-                        <span>🚪</span>
-                        <span>Cerrar Sesión</span>
-                    </button>
+    <header class="header">
+        <div class="header-content">
+            <div id="info-negocio-header" style="display: flex; align-items: center; gap: 10px;">
+                <img id="logo-negocio-header" src="" alt="Logo"
+                    style="max-height: 50px; display: none; border-radius: 8px;">
+                <span id="nombre-negocio-header" style="font-weight: bold; font-size: 1.5rem;">🤖 Dashboard Bot
+                    WhatsApp</span>
+            </div>
+
+            <div class="profile-menu">
+                <div class="profile-icon" id="profile-icon" onclick="toggleProfileMenu()">👤</div>
+
+                <div class="profile-dropdown" id="profile-dropdown">
+                    <div class="profile-dropdown-header">
+                        <h5>Mi Perfil</h5>
+                        <p>Administrador</p>
+                    </div>
+                    <div class="profile-dropdown-menu">
+                        <button class="profile-dropdown-item" onclick="irAGastos()">
+                            <span>💰</span>
+                            <span>Gastos</span>
+                        </button>
+                        <button class="profile-dropdown-item" onclick="irADeudas()">
+                            <span>💳</span>
+                            <span>Deudas</span>
+                        </button>
+                        <button class="profile-dropdown-item" onclick="verNotificaciones()">
+                            <span>🔔</span>
+                            <span>Notificaciones</span>
+                        </button>
+                        <button class="profile-dropdown-item" onclick="configuracion()">
+                            <span>⚙️</span>
+                            <span>Configuración</span>
+                        </button>
+                        <button class="profile-dropdown-item" onclick="cerrarSesion()">
+                            <span>🚪</span>
+                            <span>Cerrar Sesión</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
-</header>
+    </header>
 
 
     <!-- Main Content -->
@@ -1308,7 +1345,7 @@
         <!-- Weekly Schedule -->
         <div class="weekly-schedule">
             <h3 style="margin-bottom: 1.5rem;">📅 Disponibilidad Semanal</h3>
-            
+
             <div class="week-selector">
                 <button onclick="previousWeek()">⬅ Semana Anterior</button>
                 <div class="week-info">
@@ -1511,4 +1548,5 @@
 
     <script src="/dashboard.js"></script>
 </body>
+
 </html>

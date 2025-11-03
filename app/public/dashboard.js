@@ -1291,7 +1291,61 @@ function cerrarGastos() {
 
 function verNotificaciones() {
     document.getElementById('profile-dropdown').classList.remove('show');
-    cargarNotificaciones();
+    
+    Swal.fire({
+        title: '🔔 Centro de Notificaciones',
+        html: `
+            <div style="text-align: left;">
+                <p style="margin-bottom: 15px; color: #666;">Cargando notificaciones...</p>
+                <div id="lista-notificaciones-modal"></div>
+            </div>
+        `,
+        width: '600px',
+        showConfirmButton: false,
+        showCloseButton: true,
+        customClass: { container: 'swal-on-top' },
+        didOpen: async () => {
+            try {
+                const res = await fetch('/api/deudas/notificaciones');
+                const data = await res.json();
+                
+                const contenedor = document.getElementById('lista-notificaciones-modal');
+                
+                if (data.success && data.notificaciones && data.notificaciones.length > 0) {
+                    contenedor.innerHTML = data.notificaciones.map(notif => `
+                        <div style="background: ${notif.urgente ? '#fee' : '#f8f9ff'}; 
+                                    padding: 15px; 
+                                    margin-bottom: 10px; 
+                                    border-radius: 8px;
+                                    border-left: 4px solid ${notif.urgente ? '#dc3545' : '#667eea'};">
+                            <div style="display: flex; align-items: start; gap: 10px;">
+                                <span style="font-size: 1.5rem;">${notif.urgente ? '⚠️' : '🔔'}</span>
+                                <div style="flex: 1;">
+                                    <strong style="display: block; margin-bottom: 5px;">${notif.titulo}</strong>
+                                    <p style="margin: 0; color: #666; font-size: 0.9rem;">${notif.mensaje}</p>
+                                    ${notif.monto ? `<small style="display: block; margin-top: 5px; color: #999;">Monto: $${notif.monto.toFixed(2)}</small>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    contenedor.innerHTML = `
+                        <div style="text-align: center; padding: 40px; color: #999;">
+                            <div style="font-size: 3rem; margin-bottom: 10px;">🔕</div>
+                            <p>No hay notificaciones pendientes</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error cargando notificaciones:', error);
+                document.getElementById('lista-notificaciones-modal').innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: #dc3545;">
+                        <p>❌ Error al cargar notificaciones</p>
+                    </div>
+                `;
+            }
+        }
+    });
 }
 
 function configuracion() {
@@ -1319,16 +1373,20 @@ function cerrarSesion() {
 // Verificar notificaciones de pagos próximos
 async function verificarNotificaciones() {
     try {
+        console.log('🔔 Verificando notificaciones...');
         const res = await fetch('/api/deudas/notificaciones');
         const data = await res.json();
 
-        if (data.success && data.notificaciones.length > 0) {
-            // Filtrar las notificaciones con la fecha más próxima
-            const proximas = obtenerPagosMasProximos(data.notificaciones);
-            mostrarNotificaciones(proximas);
+        console.log('📊 Respuesta de notificaciones:', data);
+
+        if (data.success && data.notificaciones && data.notificaciones.length > 0) {
+            console.log('✅ Notificaciones encontradas:', data.notificaciones.length);
+            mostrarNotificaciones(data.notificaciones);
+        } else {
+            console.log('❌ No hay notificaciones para mostrar');
         }
     } catch (error) {
-        console.error('Error verificando notificaciones:', error);
+        console.error('❌ Error verificando notificaciones:', error);
     }
 }
 
@@ -1351,15 +1409,22 @@ function obtenerPagosMasProximos(notificaciones) {
 
 // Mostrar notificaciones en pantalla
 function mostrarNotificaciones(notificaciones) {
-    const contenedor = document.getElementById('notification-container');
-    if (!contenedor) return;
+    let contenedor = document.getElementById('notification-container');
+    
+    // Si no existe el contenedor, crearlo
+    if (!contenedor) {
+        contenedor = crearContenedorNotificaciones();
+    }
 
-    contenedor.innerHTML = '';
+    // Hacer visible el contenedor
+    contenedor.style.display = 'block';
 
     notificaciones.forEach((notif, index) => {
         setTimeout(() => {
             const notifElement = document.createElement('div');
             notifElement.className = `notification-item ${notif.urgente ? 'urgent' : ''}`;
+            notifElement.style.animation = 'slideIn 0.5s ease forwards';
+            
             notifElement.innerHTML = `
                 <div class="notification-icon">${notif.urgente ? '⚠️' : '🔔'}</div>
                 <div class="notification-content">
@@ -1372,11 +1437,33 @@ function mostrarNotificaciones(notificaciones) {
             // Remover notificación al hacer click
             notifElement.addEventListener('click', () => {
                 notifElement.classList.add('removing');
-                setTimeout(() => notifElement.remove(), 300);
+                setTimeout(() => {
+                    notifElement.remove();
+                    // Si no hay más notificaciones, ocultar el contenedor
+                    if (contenedor.children.length === 0) {
+                        contenedor.style.display = 'none';
+                    }
+                }, 300);
             });
 
             contenedor.appendChild(notifElement);
-        }, index * 300); // animación escalonada
+            
+            // Auto-remover después de 5 segundos
+            setTimeout(() => {
+                if (notifElement.parentElement) {
+                    notifElement.classList.add('removing');
+                    setTimeout(() => {
+                        if (notifElement.parentElement) {
+                            notifElement.remove();
+                            // Si no hay más notificaciones, ocultar el contenedor
+                            if (contenedor.children.length === 0) {
+                                contenedor.style.display = 'none';
+                            }
+                        }
+                    }, 300);
+                }
+            }, 5000);
+        }, index * 300);
     });
 }
 
@@ -1399,6 +1486,23 @@ async function cargarNotificaciones() {
         console.error('Error cargando notificaciones:', error);
     }
 }
+
+function crearContenedorNotificaciones() {
+    const contenedor = document.createElement('div');
+    contenedor.id = 'notification-container';
+    contenedor.className = 'notification-container';
+    contenedor.style.cssText = `
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        z-index: 9999;
+        max-width: 400px;
+        pointer-events: none;
+    `;
+    document.body.appendChild(contenedor);
+    return contenedor;
+}
+
 // ============================================
 // FUNCIONES DE DEUDAS
 // ============================================
