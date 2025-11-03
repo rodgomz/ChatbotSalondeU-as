@@ -1354,12 +1354,17 @@ function mostrarNotificaciones(notificaciones) {
     const contenedor = document.getElementById('notification-container');
     if (!contenedor) return;
 
+    // Limpiar notificaciones anteriores
     contenedor.innerHTML = '';
+
+    // Mostrar contenedor solo si hay notificaciones
+    contenedor.style.display = notificaciones.length > 0 ? 'flex' : 'none';
 
     notificaciones.forEach((notif, index) => {
         setTimeout(() => {
             const notifElement = document.createElement('div');
             notifElement.className = `notification-item ${notif.urgente ? 'urgent' : ''}`;
+
             notifElement.innerHTML = `
                 <div class="notification-icon">${notif.urgente ? '⚠️' : '🔔'}</div>
                 <div class="notification-content">
@@ -1369,16 +1374,26 @@ function mostrarNotificaciones(notificaciones) {
                 </div>
             `;
 
+            // Animación de entrada
+            notifElement.style.animation = 'slideIn 0.3s ease forwards';
+
             // Remover notificación al hacer click
             notifElement.addEventListener('click', () => {
                 notifElement.classList.add('removing');
                 setTimeout(() => notifElement.remove(), 300);
             });
 
+            // Auto-remover después de 5 segundos
+            setTimeout(() => {
+                notifElement.classList.add('removing');
+                setTimeout(() => notifElement.remove(), 300);
+            }, 5000);
+
             contenedor.appendChild(notifElement);
-        }, index * 300); // animación escalonada
+        }, index * 300); // animación escalonada entre notificaciones
     });
 }
+
 
 // ============================================
 // FUNCIONES DE DEUDAS
