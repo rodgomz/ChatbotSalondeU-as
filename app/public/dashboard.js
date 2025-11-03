@@ -421,7 +421,17 @@ function getHoursAvailableInDay(date) {
 }
 
 async function renderWeek() {
-    // Cargar configuración de horas desde Firebase
+    // Cargar configuración de horas y días laborales desde Firebase
+    let diasLaborales = {
+        0: false, // Domingo
+        1: true,  // Lunes
+        2: true,  // Martes
+        3: true,  // Miércoles
+        4: true,  // Jueves
+        5: true,  // Viernes
+        6: true   // Sábado
+    };
+
     try {
         const response = await fetch('/api/configuracion');
         if (!response.ok) throw new Error('Error al cargar configuración');
@@ -431,10 +441,22 @@ async function renderWeek() {
             BUSINESS_HOURS.start = parseInt(config.horarioInicio ?? 8);
             BUSINESS_HOURS.end = parseInt(config.horarioFin ?? 22);
             BUSINESS_HOURS.interval = parseInt(config.intervalo ?? 30);
+
+            // Convertir días laborales de config a mapa por número de día
+            if (config.diasLaborales) {
+                diasLaborales = {
+                    0: config.diasLaborales.domingo || false,
+                    1: config.diasLaborales.lunes !== false,
+                    2: config.diasLaborales.martes !== false,
+                    3: config.diasLaborales.miercoles !== false,
+                    4: config.diasLaborales.jueves !== false,
+                    5: config.diasLaborales.viernes !== false,
+                    6: config.diasLaborales.sabado !== false
+                };
+            }
         }
     } catch (error) {
         console.error('Error cargando horas desde Firebase:', error);
-        // Si falla, mantener valores por defecto
     }
 
     const weekEnd = new Date(currentWeekStart);
@@ -453,9 +475,11 @@ async function renderWeek() {
     for (let i = 0; i < 7; i++) {
         const date = new Date(currentWeekStart);
         date.setDate(date.getDate() + i);
+        
+        const dayOfWeek = date.getDay();
+        const esLaborable = diasLaborales[dayOfWeek];
 
-        // Asumimos que createDayCard usa BUSINESS_HOURS para generar los slots
-        const dayCard = createDayCard(date);
+        const dayCard = createDayCard(date, esLaborable);
         const { available, booked, appointments: dayAppointments } = dayCard.stats;
 
         totalAvailable += available;
@@ -474,6 +498,98 @@ async function renderWeek() {
     document.getElementById('stat-appointments').textContent = totalAppointments;
 }
 
+function createDayCard(date, esLaborable = true) {
+    const dayOfWeek = DAYS[date.getDay()];
+    const dateStr = date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+    const isToday = date.toDateString() === new Date().toDateString();
+
+    // Si no es día laborable, mostrar como CERRADO
+    if (!esLaborable) {
+        const dayCardHtml = `
+            <div class="day-card" style="opacity: 0.6;">
+                <div class="day-header" style="background: linear-gradient(135deg, #6c757d 0%, #495057 100%);">
+                    <h3>${dayOfWeek} ${isToday ? '(Hoy)' : ''}</h3>
+                    <p>${dateStr}</p>
+                </div>
+                <div class="day-status" style="background: #f8d7da; color: #721c24;">
+                    🚫 CERRADO
+                </div>
+                <div class="hours-container" style="padding: 2rem; text-align: center; color: #999;">
+                    <p>No hay horarios disponibles</p>
+                    <p style="font-size: 0.85rem; margin-top: 10px;">Día no laborable</p>
+                </div>
+            </div>
+        `;
+
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = dayCardHtml;
+
+        return {
+            element: tempDiv.firstElementChild,
+            stats: {
+                available: 0,
+                booked: 0,
+                appointments: 0
+            }
+        };
+    }
+
+    // Si es día laborable, generar horarios normalmente
+    const HOURS_PER_DAY = BUSINESS_HOURS.end - BUSINESS_HOURS.start;
+    const hoursOccupied = getHoursOccupiedInDay(date);
+    const hoursAvailable = Math.max(0, HOURS_PER_DAY - hoursOccupied);
+
+    const hoursHtml = [];
+
+    for (let hour = BUSINESS_HOURS.start; hour < BUSINESS_HOURS.end; hour++) {
+        for (let minute = 0; minute < 60; minute += BUSINESS_HOURS.interval) {
+            const aptsInSlot = getAppointmentsForSlot(date, hour, minute);
+            const isAvailable = aptsInSlot.length === 0;
+
+            let slotClass = 'hour-slot';
+            slotClass += isAvailable ? ' available' : ' fully-booked';
+
+            const hourStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+            const capacity = `${aptsInSlot.length}/1`;
+
+            hoursHtml.push(`
+                <div class="${slotClass}" onclick="handleHourClick('${date.toISOString().split('T')[0]}', ${hour}, ${minute})">
+                    <div class="hour-time">${hourStr}</div>
+                    <div class="hour-availability">
+                        <span class="availability-text">${capacity}</span>
+                    </div>
+                </div>
+            `);
+        }
+    }
+
+    const dayCardHtml = `
+        <div class="day-card">
+            <div class="day-header" style="${isToday ? 'background: linear-gradient(135deg, #28a745 0%, #20c997 100%);' : ''}">
+                <h3>${dayOfWeek} ${isToday ? '(Hoy)' : ''}</h3>
+                <p>${dateStr}</p>
+            </div>
+            <div class="day-status status-open">
+                ${BUSINESS_HOURS.start.toString().padStart(2, '0')}:00 - ${BUSINESS_HOURS.end.toString().padStart(2, '0')}:00 | ${hoursAvailable}h disponibles
+            </div>
+            <div class="hours-container">${hoursHtml.join('')}</div>
+        </div>
+    `;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = dayCardHtml;
+
+    return {
+        element: tempDiv.firstElementChild,
+        stats: {
+            available: hoursAvailable,
+            booked: hoursOccupied,
+            appointments: Object.values(appointments).filter(apt =>
+                apt.date.toDateString() === date.toDateString()
+            ).length
+        }
+    };
+}
 
 function createDayCard(date) {
     const dayOfWeek = DAYS[date.getDay()];
@@ -3248,12 +3364,6 @@ async function actualizarHeaderDesdeFirebase() {
         console.error('Error actualizando header desde Firebase:', error);
     }
 }
-
-// Llamar a la función al cargar la página
-document.addEventListener('DOMContentLoaded', actualizarHeaderDesdeFirebase);
-
-
-
 function configuracion() {
     document.getElementById('profile-dropdown').classList.remove('show');
     
@@ -3261,6 +3371,47 @@ function configuracion() {
         title: '⚙️ Configuración del Sistema',
         html: `
             <div style="text-align: left;">
+                <!-- Información del Negocio CON LOGO -->
+                <div style="background: #e7f3ff; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+                    <h4 style="margin-bottom: 15px; color: #004085;">🏪 Información del Negocio</h4>
+                    
+                    <!-- Logo -->
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Logo del Negocio:</label>
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <img id="preview-logo" src="" alt="Logo" 
+                                 style="max-height: 80px; max-width: 150px; display: none; border-radius: 8px; border: 2px solid #ddd;">
+                            <div style="flex: 1;">
+                                <input type="file" id="config-logo" accept="image/*" 
+                                       style="display: block; width: 100%; padding: 8px; border: 2px solid #ddd; border-radius: 8px; cursor: pointer;">
+                                <small style="color: #666; display: block; margin-top: 5px;">
+                                    Formatos: JPG, PNG, GIF (máx. 2MB)
+                                </small>
+                            </div>
+                        </div>
+                        <input type="hidden" id="config-logo-url" value="">
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Nombre del Negocio:</label>
+                        <input type="text" id="config-nombre-negocio" class="swal2-input" 
+                               placeholder="Salón de Uñas" 
+                               style="width: 100%; margin: 0;">
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Teléfono:</label>
+                        <input type="tel" id="config-telefono" class="swal2-input" 
+                               placeholder="+52 123 456 7890" 
+                               style="width: 100%; margin: 0;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Dirección:</label>
+                        <textarea id="config-direccion" class="swal2-textarea" 
+                                  placeholder="Calle, Número, Colonia, Ciudad" 
+                                  style="width: 100%; margin: 0; min-height: 80px;"></textarea>
+                    </div>
+                </div>
+
                 <!-- Horario de Negocio -->
                 <div style="background: #f8f9ff; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
                     <h4 style="margin-bottom: 15px; color: #667eea;">🕐 Horario de Negocio</h4>
@@ -3327,32 +3478,12 @@ function configuracion() {
                     </div>
                 </div>
 
-                <!-- Información del Negocio -->
-                <div style="background: #e7f3ff; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-                    <h4 style="margin-bottom: 15px; color: #004085;">🏪 Información del Negocio</h4>
-                    <div style="margin-bottom: 15px;">
-                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Nombre del Negocio:</label>
-                        <input type="text" id="config-nombre-negocio" class="swal2-input" 
-                               placeholder="Salón de Uñas" 
-                               style="width: 100%; margin: 0;">
-                    </div>
-                    <div style="margin-bottom: 15px;">
-                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Teléfono:</label>
-                        <input type="tel" id="config-telefono" class="swal2-input" 
-                               placeholder="+52 123 456 7890" 
-                               style="width: 100%; margin: 0;">
-                    </div>
-                    <div>
-                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Dirección:</label>
-                        <textarea id="config-direccion" class="swal2-textarea" 
-                                  placeholder="Calle, Número, Colonia, Ciudad" 
-                                  style="width: 100%; margin: 0; min-height: 80px;"></textarea>
-                    </div>
-                </div>
-
                 <!-- Días Laborales -->
                 <div style="background: #f8d7da; padding: 20px; border-radius: 12px;">
                     <h4 style="margin-bottom: 15px; color: #721c24;">📅 Días Laborales</h4>
+                    <p style="margin-bottom: 15px; color: #666; font-size: 0.9rem;">
+                        ⚠️ Los días NO seleccionados aparecerán como "CERRADO" en el calendario
+                    </p>
                     <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
                         <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
                             <input type="checkbox" id="config-dia-lunes" checked style="width: 20px; height: 20px;">
@@ -3402,9 +3533,42 @@ function configuracion() {
         didOpen: () => {
             // Cargar configuración guardada
             cargarConfiguracion();
+            
+            // Event listener para preview del logo
+            const logoInput = document.getElementById('config-logo');
+            const preview = document.getElementById('preview-logo');
+            
+            logoInput.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    // Validar tamaño (2MB máximo)
+                    if (file.size > 2 * 1024 * 1024) {
+                        Swal.showValidationMessage('El archivo es muy grande. Máximo 2MB');
+                        logoInput.value = '';
+                        return;
+                    }
+                    
+                    // Validar tipo
+                    if (!file.type.startsWith('image/')) {
+                        Swal.showValidationMessage('Solo se permiten imágenes');
+                        logoInput.value = '';
+                        return;
+                    }
+                    
+                    // Preview
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        preview.src = event.target.result;
+                        preview.style.display = 'block';
+                        document.getElementById('config-logo-url').value = event.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
         },
         preConfirm: () => {
             return {
+                logo: document.getElementById('config-logo-url').value,
                 horarioInicio: document.getElementById('config-hora-inicio').value,
                 horarioFin: document.getElementById('config-hora-fin').value,
                 intervalo: document.getElementById('config-intervalo').value,
@@ -3435,6 +3599,7 @@ function configuracion() {
     });
 }
 
+
 // Función auxiliar para generar opciones de horas
 function generarOpcionesHoras(horaSeleccionada) {
     let options = '';
@@ -3454,6 +3619,16 @@ async function cargarConfiguracion() {
         const config = await response.json();
 
         if (!config) return;
+
+        // Cargar logo si existe
+        if (config.logo) {
+            const preview = document.getElementById('preview-logo');
+            if (preview) {
+                preview.src = config.logo;
+                preview.style.display = 'block';
+                document.getElementById('config-logo-url').value = config.logo;
+            }
+        }
 
         // Cargar valores en el modal
         document.getElementById('config-hora-inicio').value = config.horarioInicio || 8;
@@ -3540,8 +3715,6 @@ async function guardarConfiguracion(config) {
         });
     }
 }
-
-
 
 // Restaurar configuración predeterminada
 async function restaurarConfiguracionPredeterminada() {
