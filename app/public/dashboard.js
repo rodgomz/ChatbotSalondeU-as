@@ -1321,9 +1321,25 @@ async function verificarNotificaciones() {
     try {
         const res = await fetch('/api/deudas/notificaciones');
         const data = await res.json();
-        
+
         if (data.success && data.notificaciones.length > 0) {
-            mostrarNotificaciones(data.notificaciones);
+            // Ordenar por fecha de pago
+            const notificacionesOrdenadas = data.notificaciones.sort((a, b) => {
+                const fechaA = new Date(a.fechaPago);
+                const fechaB = new Date(b.fechaPago);
+                return fechaA - fechaB;
+            });
+
+            // Obtener la fecha más próxima
+            const fechaProxima = new Date(notificacionesOrdenadas[0].fechaPago).toDateString();
+
+            // Filtrar todas las notificaciones que tengan esa fecha
+            const notificacionesProximas = notificacionesOrdenadas.filter(n => 
+                new Date(n.fechaPago).toDateString() === fechaProxima
+            );
+
+            // Mostrar solo las notificaciones más próximas
+            mostrarNotificaciones(notificacionesProximas);
         }
     } catch (error) {
         console.error('Error verificando notificaciones:', error);
@@ -1354,13 +1370,7 @@ function mostrarNotificaciones(notificaciones) {
             });
 
             contenedor.appendChild(notifElement);
-            
-            // Auto-remover después de 5 segundos
-            setTimeout(() => {
-                notifElement.classList.add('removing');
-                setTimeout(() => notifElement.remove(), 300);
-            }, 5000);
-        }, index * 500);
+        }, index * 300); // animación escalonada
     });
 }
 
@@ -1371,6 +1381,7 @@ function crearContenedorNotificaciones() {
     document.body.appendChild(contenedor);
     return contenedor;
 }
+
 
 
 // ============================================
