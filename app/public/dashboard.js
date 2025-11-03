@@ -1323,33 +1323,39 @@ async function verificarNotificaciones() {
         const data = await res.json();
 
         if (data.success && data.notificaciones.length > 0) {
-            // Ordenar por fecha de pago
-            const notificacionesOrdenadas = data.notificaciones.sort((a, b) => {
-                const fechaA = new Date(a.fechaPago);
-                const fechaB = new Date(b.fechaPago);
-                return fechaA - fechaB;
-            });
-
-            // Obtener la fecha más próxima
-            const fechaProxima = new Date(notificacionesOrdenadas[0].fechaPago).toDateString();
-
-            // Filtrar todas las notificaciones que tengan esa fecha
-            const notificacionesProximas = notificacionesOrdenadas.filter(n => 
-                new Date(n.fechaPago).toDateString() === fechaProxima
-            );
-
-            // Mostrar solo las notificaciones más próximas
-            mostrarNotificaciones(notificacionesProximas);
+            // Filtrar las notificaciones con la fecha más próxima
+            const proximas = obtenerPagosMasProximos(data.notificaciones);
+            mostrarNotificaciones(proximas);
         }
     } catch (error) {
         console.error('Error verificando notificaciones:', error);
     }
 }
 
+// Obtener las notificaciones con la fecha más próxima
+function obtenerPagosMasProximos(notificaciones) {
+    // Convertir fechas a Date para comparar
+    const hoy = new Date();
+    const futuras = notificaciones
+        .map(n => ({ ...n, fechaPago: new Date(n.fecha) }))
+        .filter(n => n.fechaPago >= hoy);
+
+    if (futuras.length === 0) return [];
+
+    // Encontrar la fecha mínima
+    const minFecha = futuras.reduce((min, n) => n.fechaPago < min ? n.fechaPago : min, futuras[0].fechaPago);
+
+    // Devolver todas las notificaciones con esa fecha
+    return futuras.filter(n => n.fechaPago.getTime() === minFecha.getTime());
+}
+
 // Mostrar notificaciones en pantalla
 function mostrarNotificaciones(notificaciones) {
-    const contenedor = document.getElementById('notification-container') || crearContenedorNotificaciones();
-    
+    const contenedor = document.getElementById('notification-container');
+    if (!contenedor) return;
+
+    contenedor.innerHTML = '';
+
     notificaciones.forEach((notif, index) => {
         setTimeout(() => {
             const notifElement = document.createElement('div');
@@ -1374,13 +1380,6 @@ function mostrarNotificaciones(notificaciones) {
     });
 }
 
-function crearContenedorNotificaciones() {
-    const contenedor = document.createElement('div');
-    contenedor.id = 'notification-container';
-    contenedor.className = 'notification-container';
-    document.body.appendChild(contenedor);
-    return contenedor;
-}
 
 
 
