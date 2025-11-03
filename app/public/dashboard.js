@@ -1380,9 +1380,6 @@ function mostrarNotificaciones(notificaciones) {
     });
 }
 
-
-
-
 // ============================================
 // FUNCIONES DE DEUDAS
 // ============================================
