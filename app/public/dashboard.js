@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateAppointmentList();
     inicializarDeudas();
     verificarNotificaciones();
-    
+    actualizarHeaderDesdeFirebase();
     // Configurar intervalos
     setInterval(loadBotStatus, 10000);
     setInterval(loadAppointments, 120000);
@@ -420,7 +420,23 @@ function getHoursAvailableInDay(date) {
     return Math.max(0, HOURS_PER_DAY - occupied);
 }
 
-function renderWeek() {
+async function renderWeek() {
+    // Cargar configuración de horas desde Firebase
+    try {
+        const response = await fetch('/api/configuracion');
+        if (!response.ok) throw new Error('Error al cargar configuración');
+        const config = await response.json();
+
+        if (config) {
+            BUSINESS_HOURS.start = parseInt(config.horarioInicio ?? 8);
+            BUSINESS_HOURS.end = parseInt(config.horarioFin ?? 22);
+            BUSINESS_HOURS.interval = parseInt(config.intervalo ?? 30);
+        }
+    } catch (error) {
+        console.error('Error cargando horas desde Firebase:', error);
+        // Si falla, mantener valores por defecto
+    }
+
     const weekEnd = new Date(currentWeekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
 
@@ -438,6 +454,7 @@ function renderWeek() {
         const date = new Date(currentWeekStart);
         date.setDate(date.getDate() + i);
 
+        // Asumimos que createDayCard usa BUSINESS_HOURS para generar los slots
         const dayCard = createDayCard(date);
         const { available, booked, appointments: dayAppointments } = dayCard.stats;
 
@@ -456,6 +473,7 @@ function renderWeek() {
     document.getElementById('stat-occupancy').textContent = occupancy + '%';
     document.getElementById('stat-appointments').textContent = totalAppointments;
 }
+
 
 function createDayCard(date) {
     const dayOfWeek = DAYS[date.getDay()];
@@ -476,7 +494,7 @@ function createDayCard(date) {
             slotClass += isAvailable ? ' available' : ' fully-booked';
 
             const hourStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-            const capacity = `${aptsInSlot.length}/1`;
+            const capacity = `${aptsInSlot.length}/1`; // Puedes ajustar si maxCitas cambia
 
             hoursHtml.push(`
                 <div class="${slotClass}" onclick="handleHourClick('${date.toISOString().split('T')[0]}', ${hour}, ${minute})">
@@ -497,7 +515,9 @@ function createDayCard(date) {
                 <h3>${dayOfWeek} ${isToday ? '(Hoy)' : ''}</h3>
                 <p>${dateStr}</p>
             </div>
-            <div class="day-status status-open">08:00 - 22:00 | ${hoursAvailable}h disponibles</div>
+            <div class="day-status status-open">
+                ${BUSINESS_HOURS.start.toString().padStart(2, '0')}:00 - ${BUSINESS_HOURS.end.toString().padStart(2, '0')}:00 | ${hoursAvailable}h disponibles
+            </div>
             <div class="hours-container">${hoursHtml.join('')}</div>
         </div>
     `;
@@ -510,12 +530,13 @@ function createDayCard(date) {
         stats: {
             available: hoursAvailable,
             booked: hoursOccupied,
-            appointments: Object.values(appointments).filter(apt => 
+            appointments: Object.values(appointments).filter(apt =>
                 apt.date.toDateString() === date.toDateString()
             ).length
         }
     };
 }
+
 
 function previousWeek() {
     currentWeekStart.setDate(currentWeekStart.getDate() - 7);
@@ -3060,6 +3081,406 @@ function agregarEstilosCSS() {
             }
         `;
         document.head.appendChild(select2Style);
+    }
+}
+
+// ============================================
+// CONFIGURACIONES
+// ============================================
+// Agregar esta función en tu dashboard.js (reemplaza la función configuracion() existente)
+
+// Función para actualizar el nombre y logo en el header
+async function actualizarHeaderDesdeFirebase() {
+    try {
+        const response = await fetch('/api/configuracion');
+        if (!response.ok) throw new Error('No se pudo cargar la configuración');
+
+        const config = await response.json();
+        console.log('Configuración desde Firebase:', config);
+
+        const nombreEl = document.getElementById('nombre-negocio-header');
+        const logoEl = document.getElementById('logo-negocio-header');
+        if (!nombreEl || !logoEl) return;
+
+        // Detecta el nombre del negocio
+        const nombreNegocio = config.nombreNegocio || config.nombre || '🤖 Dashboard Bot WhatsApp';
+        nombreEl.textContent = nombreNegocio;
+
+        // Logo si existe
+        if (config.logo) {
+            logoEl.src = config.logo;
+            logoEl.style.display = 'block';
+        } else {
+            logoEl.style.display = 'none';
+        }
+
+    } catch (error) {
+        console.error('Error actualizando header desde Firebase:', error);
+    }
+}
+
+// Llamar a la función al cargar la página
+document.addEventListener('DOMContentLoaded', actualizarHeaderDesdeFirebase);
+
+
+
+function configuracion() {
+    document.getElementById('profile-dropdown').classList.remove('show');
+    
+    Swal.fire({
+        title: '⚙️ Configuración del Sistema',
+        html: `
+            <div style="text-align: left;">
+                <!-- Horario de Negocio -->
+                <div style="background: #f8f9ff; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+                    <h4 style="margin-bottom: 15px; color: #667eea;">🕐 Horario de Negocio</h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <label style="display: block; margin-bottom: 5px; font-weight: 600;">Hora de Inicio:</label>
+                            <select id="config-hora-inicio" class="swal2-input" style="width: 100%; margin: 0;">
+                                ${generarOpcionesHoras(8)}
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 5px; font-weight: 600;">Hora de Cierre:</label>
+                            <select id="config-hora-fin" class="swal2-input" style="width: 100%; margin: 0;">
+                                ${generarOpcionesHoras(22)}
+                            </select>
+                        </div>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Intervalo de Citas (minutos):</label>
+                        <select id="config-intervalo" class="swal2-input" style="width: 100%; margin: 0;">
+                            <option value="15">15 minutos</option>
+                            <option value="30" selected>30 minutos</option>
+                            <option value="60">60 minutos</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Límites de Citas -->
+                <div style="background: #fff3cd; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+                    <h4 style="margin-bottom: 15px; color: #856404;">📊 Límites de Citas</h4>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Máximo de citas simultáneas:</label>
+                        <input type="number" id="config-max-citas" class="swal2-input" 
+                               value="1" min="1" max="10" 
+                               style="width: 100%; margin: 0;">
+                        <small style="color: #666; display: block; margin-top: 5px;">
+                            Número máximo de citas que se pueden agendar en el mismo horario
+                        </small>
+                    </div>
+                </div>
+
+                <!-- Notificaciones -->
+                <div style="background: #d4edda; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+                    <h4 style="margin-bottom: 15px; color: #155724;">🔔 Notificaciones</h4>
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="config-notif-recordatorios" checked style="width: 20px; height: 20px;">
+                            <span>Enviar recordatorios de citas</span>
+                        </label>
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="config-notif-pagos" checked style="width: 20px; height: 20px;">
+                            <span>Notificaciones de pagos próximos</span>
+                        </label>
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; margin-top: 15px; font-weight: 600;">
+                            Días de anticipación para recordatorios:
+                        </label>
+                        <input type="number" id="config-dias-anticipacion" class="swal2-input" 
+                               value="1" min="0" max="7" 
+                               style="width: 100%; margin: 0;">
+                    </div>
+                </div>
+
+                <!-- Información del Negocio -->
+                <div style="background: #e7f3ff; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+                    <h4 style="margin-bottom: 15px; color: #004085;">🏪 Información del Negocio</h4>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Nombre del Negocio:</label>
+                        <input type="text" id="config-nombre-negocio" class="swal2-input" 
+                               placeholder="Salón de Uñas" 
+                               style="width: 100%; margin: 0;">
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Teléfono:</label>
+                        <input type="tel" id="config-telefono" class="swal2-input" 
+                               placeholder="+52 123 456 7890" 
+                               style="width: 100%; margin: 0;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Dirección:</label>
+                        <textarea id="config-direccion" class="swal2-textarea" 
+                                  placeholder="Calle, Número, Colonia, Ciudad" 
+                                  style="width: 100%; margin: 0; min-height: 80px;"></textarea>
+                    </div>
+                </div>
+
+                <!-- Días Laborales -->
+                <div style="background: #f8d7da; padding: 20px; border-radius: 12px;">
+                    <h4 style="margin-bottom: 15px; color: #721c24;">📅 Días Laborales</h4>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="config-dia-lunes" checked style="width: 20px; height: 20px;">
+                            <span>Lunes</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="config-dia-martes" checked style="width: 20px; height: 20px;">
+                            <span>Martes</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="config-dia-miercoles" checked style="width: 20px; height: 20px;">
+                            <span>Miércoles</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="config-dia-jueves" checked style="width: 20px; height: 20px;">
+                            <span>Jueves</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="config-dia-viernes" checked style="width: 20px; height: 20px;">
+                            <span>Viernes</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="config-dia-sabado" checked style="width: 20px; height: 20px;">
+                            <span>Sábado</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="config-dia-domingo" style="width: 20px; height: 20px;">
+                            <span>Domingo</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        `,
+        width: '800px',
+        showCancelButton: true,
+        showDenyButton: true,
+        confirmButtonText: '💾 Guardar Configuración',
+        denyButtonText: '🔄 Restaurar Predeterminados',
+        cancelButtonText: '❌ Cancelar',
+        confirmButtonColor: '#28a745',
+        denyButtonColor: '#ffc107',
+        cancelButtonColor: '#6c757d',
+        customClass: {
+            container: 'swal-on-top',
+            popup: 'config-popup'
+        },
+        didOpen: () => {
+            // Cargar configuración guardada
+            cargarConfiguracion();
+        },
+        preConfirm: () => {
+            return {
+                horarioInicio: document.getElementById('config-hora-inicio').value,
+                horarioFin: document.getElementById('config-hora-fin').value,
+                intervalo: document.getElementById('config-intervalo').value,
+                maxCitas: document.getElementById('config-max-citas').value,
+                notifRecordatorios: document.getElementById('config-notif-recordatorios').checked,
+                notifPagos: document.getElementById('config-notif-pagos').checked,
+                diasAnticipacion: document.getElementById('config-dias-anticipacion').value,
+                nombreNegocio: document.getElementById('config-nombre-negocio').value,
+                telefono: document.getElementById('config-telefono').value,
+                direccion: document.getElementById('config-direccion').value,
+                diasLaborales: {
+                    lunes: document.getElementById('config-dia-lunes').checked,
+                    martes: document.getElementById('config-dia-martes').checked,
+                    miercoles: document.getElementById('config-dia-miercoles').checked,
+                    jueves: document.getElementById('config-dia-jueves').checked,
+                    viernes: document.getElementById('config-dia-viernes').checked,
+                    sabado: document.getElementById('config-dia-sabado').checked,
+                    domingo: document.getElementById('config-dia-domingo').checked
+                }
+            };
+        }
+    }).then(async (result) => {
+        if (result.isConfirmed) {
+            await guardarConfiguracion(result.value);
+        } else if (result.isDenied) {
+            await restaurarConfiguracionPredeterminada();
+        }
+    });
+}
+
+// Función auxiliar para generar opciones de horas
+function generarOpcionesHoras(horaSeleccionada) {
+    let options = '';
+    for (let i = 0; i <= 23; i++) {
+        const hora = i.toString().padStart(2, '0') + ':00';
+        const selected = i === horaSeleccionada ? 'selected' : '';
+        options += `<option value="${i}" ${selected}>${hora}</option>`;
+    }
+    return options;
+}
+
+// Cargar configuración guardada del localStorage
+async function cargarConfiguracion() {
+    try {
+        const response = await fetch('/api/configuracion');
+        if (!response.ok) throw new Error('Error al cargar configuración');
+        const config = await response.json();
+
+        if (!config) return;
+
+        // Cargar valores en el modal
+        document.getElementById('config-hora-inicio').value = config.horarioInicio || 8;
+        document.getElementById('config-hora-fin').value = config.horarioFin || 22;
+        document.getElementById('config-intervalo').value = config.intervalo || 30;
+        document.getElementById('config-max-citas').value = config.maxCitas || 1;
+        document.getElementById('config-notif-recordatorios').checked = config.notifRecordatorios !== false;
+        document.getElementById('config-notif-pagos').checked = config.notifPagos !== false;
+        document.getElementById('config-dias-anticipacion').value = config.diasAnticipacion || 1;
+        document.getElementById('config-nombre-negocio').value = config.nombreNegocio || '';
+        document.getElementById('config-telefono').value = config.telefono || '';
+        document.getElementById('config-direccion').value = config.direccion || '';
+
+        // Días laborales
+        if (config.diasLaborales) {
+            document.getElementById('config-dia-lunes').checked = config.diasLaborales.lunes !== false;
+            document.getElementById('config-dia-martes').checked = config.diasLaborales.martes !== false;
+            document.getElementById('config-dia-miercoles').checked = config.diasLaborales.miercoles !== false;
+            document.getElementById('config-dia-jueves').checked = config.diasLaborales.jueves !== false;
+            document.getElementById('config-dia-viernes').checked = config.diasLaborales.viernes !== false;
+            document.getElementById('config-dia-sabado').checked = config.diasLaborales.sabado !== false;
+            document.getElementById('config-dia-domingo').checked = config.diasLaborales.domingo || false;
+        }
+
+    } catch (error) {
+        console.error('Error cargando configuración desde Firebase:', error);
+    }
+}
+
+
+
+// Guardar configuración en localStorage y aplicar cambios
+async function guardarConfiguracion(config) {
+    try {
+        // Validaciones (como antes)
+        if (parseInt(config.horarioInicio) >= parseInt(config.horarioFin)) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'La hora de inicio debe ser menor que la hora de cierre',
+                customClass: { container: 'swal-on-top' }
+            });
+            return;
+        }
+
+        const algunDiaSeleccionado = Object.values(config.diasLaborales).some(dia => dia === true);
+        if (!algunDiaSeleccionado) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'Debes seleccionar al menos un día laboral',
+                customClass: { container: 'swal-on-top' }
+            });
+            return;
+        }
+
+        // Enviar configuración al server
+        const response = await fetch('/api/configuracion', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            Swal.fire({
+                icon: 'success',
+                title: '✅ Configuración Guardada',
+                text: 'Se guardó correctamente en Firebase vía server.js',
+                customClass: { container: 'swal-on-top' }
+            }).then(() => renderWeek());
+        } else {
+            throw new Error(data.error || 'Error desconocido');
+        }
+
+    } catch (error) {
+        console.error('Error guardando configuración en Firebase:', error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'No se pudo guardar la configuración: ' + error.message,
+            customClass: { container: 'swal-on-top' }
+        });
+    }
+}
+
+
+
+// Restaurar configuración predeterminada
+async function restaurarConfiguracionPredeterminada() {
+    const result = await Swal.fire({
+        title: '🔄 Restaurar Configuración',
+        text: '¿Estás seguro de restaurar la configuración predeterminada? Se perderán todos los cambios.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, restaurar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#ffc107',
+        customClass: { container: 'swal-on-top' }
+    });
+
+    if (result.isConfirmed) {
+        const configPredeterminada = {
+            horarioInicio: 8,
+            horarioFin: 22,
+            intervalo: 30,
+            maxCitas: 1,
+            notifRecordatorios: true,
+            notifPagos: true,
+            diasAnticipacion: 1,
+            nombreNegocio: '',
+            telefono: '',
+            direccion: '',
+            diasLaborales: { lunes:true, martes:true, miercoles:true, jueves:true, viernes:true, sabado:true, domingo:false }
+        };
+
+        await set(ref(db, 'configuracionSistema'), configPredeterminada);
+
+        BUSINESS_HOURS.start = 8;
+        BUSINESS_HOURS.end = 22;
+        BUSINESS_HOURS.interval = 30;
+
+        Swal.fire({ icon: 'success', title: '✅ Restaurado', text: 'Configuración predeterminada restaurada exitosamente', timer: 2000, customClass: { container: 'swal-on-top' } })
+            .then(() => { renderWeek(); configuracion(); });
+    }
+}
+
+
+// Función para obtener la configuración actual
+function obtenerConfiguracion() {
+    try {
+        const config = JSON.parse(localStorage.getItem('configuracionSistema') || '{}');
+        return {
+            horarioInicio: config.horarioInicio || 8,
+            horarioFin: config.horarioFin || 22,
+            intervalo: config.intervalo || 30,
+            maxCitas: config.maxCitas || 1,
+            notifRecordatorios: config.notifRecordatorios !== false,
+            notifPagos: config.notifPagos !== false,
+            diasAnticipacion: config.diasAnticipacion || 1,
+            nombreNegocio: config.nombreNegocio || '',
+            telefono: config.telefono || '',
+            direccion: config.direccion || '',
+            diasLaborales: config.diasLaborales || {
+                lunes: true,
+                martes: true,
+                miercoles: true,
+                jueves: true,
+                viernes: true,
+                sabado: true,
+                domingo: false
+            }
+        };
+    } catch (error) {
+        console.error('Error obteniendo configuración:', error);
+        return null;
     }
 }
 

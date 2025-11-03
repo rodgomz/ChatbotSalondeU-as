@@ -61,61 +61,71 @@
             <!-- Tabla de Citas Mensuales -->
             <section class="tabla-section">
                 <h2>🧾 Detalle de Citas Finalizadas</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Fecha</th>
-                            <th>Hora</th>
-                            <th>Servicio</th>
-                            <th>Precio</th>
-                            <th>Manicurista</th>
-                            <th>Cliente</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tablaGanancias">
-                        <tr>
-                            <td colspan="6" class="no-data">Cargando...</td>
-                        </tr>
-                    </tbody>
-                </table>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Hora</th>
+                                <th>Servicio</th>
+                                <th>Precio</th>
+                                <th>Manicurista</th>
+                                <th>Cliente</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaGanancias">
+                            <tr>
+                                <td colspan="6" class="no-data">Cargando...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </section>
 
             <!-- Gráfica Mensual -->
             <section class="grafica-section">
                 <h2>📊 Ganancias por Mes (<span id="anioGrafica">2025</span>)</h2>
-                <div class="chart-container">
-                    <canvas id="graficaGananciasMes"></canvas>
+
+                <div class="chart-wrapper">
+                    <div class="chart-container">
+                        <canvas id="graficaGananciasMes"></canvas>
+                    </div>
                 </div>
             </section>
 
             <!-- NUEVA SECCIÓN: Ganancias Semanales -->
             <section class="grafica-section">
                 <h2>📊 Ganancias Semanales (<span id="anioGraficaSem">2025</span>)</h2>
-                <div class="chart-container">
-                    <canvas id="graficaGananciasSemanal"></canvas>
+                <div class="chart-wrapper">
+                    <div class="chart-container">
+                        <canvas id="graficaGananciasSemanal"></canvas>
+                    </div>
                 </div>
             </section>
 
             <section class="tabla-section">
                 <h2>🧾 Detalle de Citas Semanales</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Semana</th>
-                            <th>Fecha</th>
-                            <th>Hora</th>
-                            <th>Servicio</th>
-                            <th>Precio</th>
-                            <th>Manicurista</th>
-                            <th>Cliente</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tablaGananciasSemanal">
-                        <tr>
-                            <td colspan="7" class="no-data">Cargando...</td>
-                        </tr>
-                    </tbody>
-                </table>
+
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Semana</th>
+                                <th>Fecha</th>
+                                <th>Hora</th>
+                                <th>Servicio</th>
+                                <th>Precio</th>
+                                <th>Manicurista</th>
+                                <th>Cliente</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaGananciasSemanal">
+                            <tr>
+                                <td colspan="7" class="no-data">Cargando...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </section>
 
 

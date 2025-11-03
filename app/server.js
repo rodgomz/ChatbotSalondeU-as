@@ -1589,6 +1589,41 @@ app.get('/api/deudas/:id', async (req, res) => {
 });
 
 // ==========================
+// Endpoint para Guardar las configuraciones
+// ==========================
+// Guardar configuración del negocio
+app.post('/api/configuracion', async (req, res) => {
+    try {
+        const config = req.body; // { nombreNegocio, logo, horarioInicio, horarioFin, ... }
+
+        if (!config || !config.nombreNegocio) {
+            return res.status(400).json({ error: 'Datos inválidos' });
+        }
+
+        // Guardar en Firebase Realtime Database
+        await set(ref(db, 'configuracionNegocio'), config);
+
+        console.log('✅ Configuración guardada en Firebase:', config);
+        res.json({ success: true, message: 'Configuración guardada correctamente' });
+
+    } catch (error) {
+        console.error('❌ Error guardando configuración:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// GET -> cargar configuración
+app.get('/api/configuracion', async (req, res) => {
+    try {
+        const snapshot = await get(ref(db, 'configuracionNegocio'));
+        res.json(snapshot.val() || {});
+    } catch (error) {
+        console.error('Error cargando configuración:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ==========================
 // Endpoint para reiniciar sesión
 // ==========================
 app.get('/reiniciar', async (req, res) => {
