@@ -1402,10 +1402,6 @@ function verNotificaciones() {
     });
 }
 
-function configuracion() {
-    Swal.fire('⚙️ Configuración', 'Función en desarrollo', 'info');
-}
-
 function cerrarSesion() {
     Swal.fire({
         title: '🚪 Cerrar Sesión',
@@ -3601,7 +3597,7 @@ async function cargarConfiguracion() {
 // Guardar configuración en localStorage y aplicar cambios
 async function guardarConfiguracion(config) {
     try {
-        // Validaciones (como antes)
+        // Validaciones
         if (parseInt(config.horarioInicio) >= parseInt(config.horarioFin)) {
             Swal.fire({
                 icon: 'error',
@@ -3623,33 +3619,84 @@ async function guardarConfiguracion(config) {
             return;
         }
 
+        // Mostrar loading
+        Swal.fire({
+            title: 'Guardando...',
+            html: 'Por favor espera',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
         // Enviar configuración al server
         const response = await fetch('/api/configuracion', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
             body: JSON.stringify(config)
         });
 
+        // Verificar si la respuesta es JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            throw new Error('El servidor no devolvió JSON. Verifica la ruta /api/configuracion en server.js');
+        }
+
         const data = await response.json();
 
-        if (response.ok) {
+        if (response.ok && data.success) {
+            // Aplicar configuración localmente
+            BUSINESS_HOURS.start = parseInt(config.horarioInicio);
+            BUSINESS_HOURS.end = parseInt(config.horarioFin);
+            BUSINESS_HOURS.interval = parseInt(config.intervalo);
+
             Swal.fire({
                 icon: 'success',
                 title: '✅ Configuración Guardada',
-                text: 'Se guardó correctamente en Firebase vía server.js',
+                html: `
+                    <div style="text-align: left; padding: 15px;">
+                        <p><strong>✓</strong> Horario: ${config.horarioInicio}:00 - ${config.horarioFin}:00</p>
+                        <p><strong>✓</strong> Intervalo: ${config.intervalo} minutos</p>
+                        <p><strong>✓</strong> Máximo citas: ${config.maxCitas}</p>
+                        ${config.nombreNegocio ? `<p><strong>✓</strong> Negocio: ${config.nombreNegocio}</p>` : ''}
+                        <p style="margin-top: 15px; color: #666; font-size: 0.9rem;">
+                            Los cambios se aplicarán inmediatamente
+                        </p>
+                    </div>
+                `,
+                confirmButtonText: 'Aceptar',
                 customClass: { container: 'swal-on-top' }
-            }).then(() => renderWeek());
+            }).then(() => {
+                // Recargar el header y la semana
+                actualizarHeaderDesdeFirebase();
+                renderWeek();
+            });
         } else {
-            throw new Error(data.error || 'Error desconocido');
+            throw new Error(data.error || 'Error desconocido al guardar');
         }
 
     } catch (error) {
-        console.error('Error guardando configuración en Firebase:', error);
+        console.error('Error guardando configuración:', error);
         Swal.fire({
             icon: 'error',
-            title: 'Error',
-            text: 'No se pudo guardar la configuración: ' + error.message,
-            customClass: { container: 'swal-on-top' }
+            title: '❌ Error',
+            html: `
+                <div style="text-align: left;">
+                    <p><strong>No se pudo guardar la configuración</strong></p>
+                    <p style="color: #666; font-size: 0.9rem; margin-top: 10px;">
+                        ${error.message}
+                    </p>
+                    <details style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+                        <summary style="cursor: pointer; font-weight: 600;">Ver detalles técnicos</summary>
+                        <pre style="margin-top: 10px; font-size: 0.8rem; overflow-x: auto;">${error.stack || error.toString()}</pre>
+                    </details>
+                </div>
+            `,
+            customClass: { container: 'swal-on-top' },
+            width: '600px'
         });
     }
 }
@@ -3668,28 +3715,51 @@ async function restaurarConfiguracionPredeterminada() {
     });
 
     if (result.isConfirmed) {
-        const configPredeterminada = {
-            horarioInicio: 8,
-            horarioFin: 22,
-            intervalo: 30,
-            maxCitas: 1,
-            notifRecordatorios: true,
-            notifPagos: true,
-            diasAnticipacion: 1,
-            nombreNegocio: '',
-            telefono: '',
-            direccion: '',
-            diasLaborales: { lunes:true, martes:true, miercoles:true, jueves:true, viernes:true, sabado:true, domingo:false }
-        };
+        try {
+            // Mostrar loading
+            Swal.fire({
+                title: 'Restaurando...',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
 
-        await set(ref(db, 'configuracionSistema'), configPredeterminada);
+            const response = await fetch('/api/configuracion', {
+                method: 'DELETE'
+            });
 
-        BUSINESS_HOURS.start = 8;
-        BUSINESS_HOURS.end = 22;
-        BUSINESS_HOURS.interval = 30;
+            const data = await response.json();
 
-        Swal.fire({ icon: 'success', title: '✅ Restaurado', text: 'Configuración predeterminada restaurada exitosamente', timer: 2000, customClass: { container: 'swal-on-top' } })
-            .then(() => { renderWeek(); configuracion(); });
+            if (response.ok && data.success) {
+                // Aplicar valores predeterminados localmente
+                BUSINESS_HOURS.start = 8;
+                BUSINESS_HOURS.end = 22;
+                BUSINESS_HOURS.interval = 30;
+
+                Swal.fire({ 
+                    icon: 'success', 
+                    title: '✅ Restaurado', 
+                    text: 'Configuración predeterminada restaurada exitosamente', 
+                    timer: 2000,
+                    customClass: { container: 'swal-on-top' }
+                }).then(() => { 
+                    actualizarHeaderDesdeFirebase();
+                    renderWeek(); 
+                    configuracion(); 
+                });
+            } else {
+                throw new Error(data.error || 'Error al restaurar');
+            }
+        } catch (error) {
+            console.error('Error restaurando configuración:', error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'No se pudo restaurar la configuración: ' + error.message,
+                customClass: { container: 'swal-on-top' }
+            });
+        }
     }
 }
 

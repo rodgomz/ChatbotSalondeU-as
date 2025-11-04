@@ -1594,32 +1594,138 @@ app.get('/api/deudas/:id', async (req, res) => {
 // Guardar configuración del negocio
 app.post('/api/configuracion', async (req, res) => {
     try {
-        const config = req.body; // { nombreNegocio, logo, horarioInicio, horarioFin, ... }
+        const config = req.body;
 
-        if (!config || !config.nombreNegocio) {
-            return res.status(400).json({ error: 'Datos inválidos' });
+        // Validaciones básicas
+        if (!config) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Datos inválidos' 
+            });
+        }
+
+        // Validar horarios
+        if (config.horarioInicio !== undefined && config.horarioFin !== undefined) {
+            if (parseInt(config.horarioInicio) >= parseInt(config.horarioFin)) {
+                return res.status(400).json({ 
+                    success: false, 
+                    error: 'La hora de inicio debe ser menor que la hora de cierre' 
+                });
+            }
+        }
+
+        // Validar días laborales
+        if (config.diasLaborales) {
+            const algunDiaSeleccionado = Object.values(config.diasLaborales).some(dia => dia === true);
+            if (!algunDiaSeleccionado) {
+                return res.status(400).json({ 
+                    success: false, 
+                    error: 'Debes seleccionar al menos un día laboral' 
+                });
+            }
         }
 
         // Guardar en Firebase Realtime Database
-        await set(ref(db, 'configuracionNegocio'), config);
+        await set(ref(db, 'configuracionSistema'), config);
 
         console.log('✅ Configuración guardada en Firebase:', config);
-        res.json({ success: true, message: 'Configuración guardada correctamente' });
+        res.json({ 
+            success: true, 
+            message: 'Configuración guardada correctamente',
+            config: config
+        });
 
     } catch (error) {
         console.error('❌ Error guardando configuración:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
     }
 });
 
 // GET -> cargar configuración
 app.get('/api/configuracion', async (req, res) => {
     try {
-        const snapshot = await get(ref(db, 'configuracionNegocio'));
-        res.json(snapshot.val() || {});
+        const snapshot = await get(ref(db, 'configuracionSistema'));
+        
+        if (snapshot.exists()) {
+            res.json(snapshot.val());
+        } else {
+            // Devolver configuración por defecto si no existe
+            const configDefault = {
+                horarioInicio: 8,
+                horarioFin: 22,
+                intervalo: 30,
+                maxCitas: 1,
+                notifRecordatorios: true,
+                notifPagos: true,
+                diasAnticipacion: 1,
+                nombreNegocio: '',
+                telefono: '',
+                direccion: '',
+                logo: '',
+                diasLaborales: {
+                    lunes: true,
+                    martes: true,
+                    miercoles: true,
+                    jueves: true,
+                    viernes: true,
+                    sabado: true,
+                    domingo: false
+                }
+            };
+            res.json(configDefault);
+        }
     } catch (error) {
-        console.error('Error cargando configuración:', error);
-        res.status(500).json({ error: error.message });
+        console.error('❌ Error cargando configuración:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+// DELETE -> Restaurar configuración por defecto
+app.delete('/api/configuracion', async (req, res) => {
+    try {
+        const configDefault = {
+            horarioInicio: 8,
+            horarioFin: 22,
+            intervalo: 30,
+            maxCitas: 1,
+            notifRecordatorios: true,
+            notifPagos: true,
+            diasAnticipacion: 1,
+            nombreNegocio: '',
+            telefono: '',
+            direccion: '',
+            logo: '',
+            diasLaborales: {
+                lunes: true,
+                martes: true,
+                miercoles: true,
+                jueves: true,
+                viernes: true,
+                sabado: true,
+                domingo: false
+            }
+        };
+
+        await set(ref(db, 'configuracionSistema'), configDefault);
+
+        console.log('✅ Configuración restaurada a valores predeterminados');
+        res.json({ 
+            success: true, 
+            message: 'Configuración restaurada exitosamente',
+            config: configDefault
+        });
+    } catch (error) {
+        console.error('❌ Error restaurando configuración:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
     }
 });
 
