@@ -591,68 +591,6 @@ function createDayCard(date, esLaborable = true) {
     };
 }
 
-function createDayCard(date) {
-    const dayOfWeek = DAYS[date.getDay()];
-    const dateStr = date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
-
-    const HOURS_PER_DAY = BUSINESS_HOURS.end - BUSINESS_HOURS.start;
-    const hoursOccupied = getHoursOccupiedInDay(date);
-    const hoursAvailable = Math.max(0, HOURS_PER_DAY - hoursOccupied);
-
-    const hoursHtml = [];
-
-    for (let hour = BUSINESS_HOURS.start; hour < BUSINESS_HOURS.end; hour++) {
-        for (let minute = 0; minute < 60; minute += BUSINESS_HOURS.interval) {
-            const aptsInSlot = getAppointmentsForSlot(date, hour, minute);
-            const isAvailable = aptsInSlot.length === 0;
-
-            let slotClass = 'hour-slot';
-            slotClass += isAvailable ? ' available' : ' fully-booked';
-
-            const hourStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-            const capacity = `${aptsInSlot.length}/1`; // Puedes ajustar si maxCitas cambia
-
-            hoursHtml.push(`
-                <div class="${slotClass}" onclick="handleHourClick('${date.toISOString().split('T')[0]}', ${hour}, ${minute})">
-                    <div class="hour-time">${hourStr}</div>
-                    <div class="hour-availability">
-                        <span class="availability-text">${capacity}</span>
-                    </div>
-                </div>
-            `);
-        }
-    }
-
-    const isToday = date.toDateString() === new Date().toDateString();
-
-    const dayCardHtml = `
-        <div class="day-card">
-            <div class="day-header" style="${isToday ? 'background: linear-gradient(135deg, #28a745 0%, #20c997 100%);' : ''}">
-                <h3>${dayOfWeek} ${isToday ? '(Hoy)' : ''}</h3>
-                <p>${dateStr}</p>
-            </div>
-            <div class="day-status status-open">
-                ${BUSINESS_HOURS.start.toString().padStart(2, '0')}:00 - ${BUSINESS_HOURS.end.toString().padStart(2, '0')}:00 | ${hoursAvailable}h disponibles
-            </div>
-            <div class="hours-container">${hoursHtml.join('')}</div>
-        </div>
-    `;
-
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = dayCardHtml;
-
-    return {
-        element: tempDiv.firstElementChild,
-        stats: {
-            available: hoursAvailable,
-            booked: hoursOccupied,
-            appointments: Object.values(appointments).filter(apt =>
-                apt.date.toDateString() === date.toDateString()
-            ).length
-        }
-    };
-}
-
 
 function previousWeek() {
     currentWeekStart.setDate(currentWeekStart.getDate() - 7);
