@@ -1626,7 +1626,7 @@ app.post('/api/configuracion', async (req, res) => {
         }
 
         // Guardar en Firebase Realtime Database
-        await set(ref(db, 'configuracionSistema'), config);
+        await set(ref(db, 'configuracionNegocio'), config);
 
         console.log('✅ Configuración guardada en Firebase:', config);
         res.json({ 
@@ -1647,7 +1647,7 @@ app.post('/api/configuracion', async (req, res) => {
 // GET -> cargar configuración
 app.get('/api/configuracion', async (req, res) => {
     try {
-        const snapshot = await get(ref(db, 'configuracionSistema'));
+        const snapshot = await get(ref(db, 'configuracionNegocio'));
         
         if (snapshot.exists()) {
             res.json(snapshot.val());
@@ -1712,7 +1712,7 @@ app.delete('/api/configuracion', async (req, res) => {
             }
         };
 
-        await set(ref(db, 'configuracionSistema'), configDefault);
+        await set(ref(db, 'configuracionNegocio'), configDefault);
 
         console.log('✅ Configuración restaurada a valores predeterminados');
         res.json({ 
