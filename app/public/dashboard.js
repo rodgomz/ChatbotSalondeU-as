@@ -260,6 +260,7 @@ function handleHourClick(dateStr, hour, minute = 0) {
     const date = new Date(dateStr);
     const aptsInSlot = getAppointmentsForSlot(date, hour, minute);
     console.log('📊 Citas encontradas:', aptsInSlot);
+    
     const isAvailable = aptsInSlot.length === 0;
 
     // ========================================
@@ -271,16 +272,9 @@ function handleHourClick(dateStr, hour, minute = 0) {
         // Si hay UNA sola cita: Mostrar detalles directamente
         if (aptsInSlot.length === 1) {
             const aptId = aptsInSlot[0].id;
-            console.log('📋 Intentando mostrar detalles de cita ID:', aptId);
-            console.log('📋 Datos completos de la cita:', aptsInSlot[0]);
-
-            // Verificar si la función existe
-            if (typeof showAppointmentDetails === 'function') {
-                showAppointmentDetails(aptId);
-            } else {
-                console.error('❌ La función showAppointmentDetails no existe');
-                alert('Error: La función para mostrar detalles no está disponible');
-            }
+            console.log('📋 Mostrando detalles de cita ID:', aptId);
+            console.log('📋 Datos de la cita:', aptsInSlot[0]);
+            showAppointmentDetails(aptId);
             return;
         }
 
@@ -298,6 +292,9 @@ function handleHourClick(dateStr, hour, minute = 0) {
                 </div>
                 <div style="margin-bottom: 5px; color: #666;">
                     🕐 ${apt.date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} - ${apt.endTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+                <div style="margin-bottom: 5px;">
+                    📞 ${apt.telefono || 'No disponible'}
                 </div>
                 <div style="font-size: 0.85rem; padding: 5px 10px; background: ${getStatusColor(apt.status)}; border-radius: 4px; display: inline-block; color: white;">
                     📊 ${apt.status}
@@ -317,7 +314,10 @@ function handleHourClick(dateStr, hour, minute = 0) {
             `,
             width: '600px',
             showConfirmButton: false,
-            showCloseButton: true
+            showCloseButton: true,
+            customClass: {
+                container: 'swal-on-top'
+            }
         });
         return;
     }
@@ -357,7 +357,10 @@ function handleHourClick(dateStr, hour, minute = 0) {
         `,
         width: '600px',
         showConfirmButton: false,
-        showCloseButton: true
+        showCloseButton: true,
+        customClass: {
+            container: 'swal-on-top'
+        }
     });
 }
 
@@ -541,53 +544,71 @@ function createDayCard(date, esLaborable = true) {
     const hoursOccupied = getHoursOccupiedInDay(date);
     const hoursAvailable = Math.max(0, HOURS_PER_DAY - hoursOccupied);
 
-    const hoursHtml = [];
+    const dayCardElement = document.createElement('div');
+    dayCardElement.className = 'day-card';
 
+    // Crear header
+    const header = document.createElement('div');
+    header.className = 'day-header';
+    if (isToday) {
+        header.style.background = 'linear-gradient(135deg, #28a745 0%, #20c997 100%)';
+    }
+    header.innerHTML = `
+        <h3>${dayOfWeek} ${isToday ? '(Hoy)' : ''}</h3>
+        <p>${dateStr}</p>
+    `;
+
+    // Crear status
+    const status = document.createElement('div');
+    status.className = 'day-status status-open';
+    status.innerHTML = `${BUSINESS_HOURS.start.toString().padStart(2, '0')}:00 - ${BUSINESS_HOURS.end.toString().padStart(2, '0')}:00 | ${hoursAvailable}h disponibles`;
+
+    // Crear contenedor de horas
+    const hoursContainer = document.createElement('div');
+    hoursContainer.className = 'hours-container';
+
+    // Generar slots de horas
     for (let hour = BUSINESS_HOURS.start; hour < BUSINESS_HOURS.end; hour++) {
         for (let minute = 0; minute < 60; minute += BUSINESS_HOURS.interval) {
             const aptsInSlot = getAppointmentsForSlot(date, hour, minute);
             const isAvailable = aptsInSlot.length === 0;
 
-            let slotClass = 'hour-slot';
-            slotClass += isAvailable ? ' available' : ' fully-booked';
+            const slotDiv = document.createElement('div');
+            slotDiv.className = `hour-slot ${isAvailable ? 'available' : 'fully-booked'}`;
+            
+            // Agregar event listener en lugar de onclick inline
+            slotDiv.addEventListener('click', () => {
+                console.log('🖱️ Click en slot:', { date, hour, minute, aptsInSlot });
+                handleHourClick(date.toISOString().split('T')[0], hour, minute);
+            });
 
             const hourStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
             const capacity = `${aptsInSlot.length}/1`;
 
-            hoursHtml.push(`
-                <div class="${slotClass}" onclick="handleHourClick('${date.toISOString().split('T')[0]}', ${hour}, ${minute})">
-                    <div class="hour-time">${hourStr}</div>
-                    <div class="hour-availability">
-                        <span class="availability-text">${capacity}</span>
-                    </div>
+            slotDiv.innerHTML = `
+                <div class="hour-time">${hourStr}</div>
+                <div class="hour-availability">
+                    <span class="availability-text">${capacity}</span>
                 </div>
-            `);
+            `;
+
+            hoursContainer.appendChild(slotDiv);
         }
     }
 
-    const dayCardHtml = `
-        <div class="day-card">
-            <div class="day-header" style="${isToday ? 'background: linear-gradient(135deg, #28a745 0%, #20c997 100%);' : ''}">
-                <h3>${dayOfWeek} ${isToday ? '(Hoy)' : ''}</h3>
-                <p>${dateStr}</p>
-            </div>
-            <div class="day-status status-open">
-                ${BUSINESS_HOURS.start.toString().padStart(2, '0')}:00 - ${BUSINESS_HOURS.end.toString().padStart(2, '0')}:00 | ${hoursAvailable}h disponibles
-            </div>
-            <div class="hours-container">${hoursHtml.join('')}</div>
-        </div>
-    `;
-
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = dayCardHtml;
+    // Ensamblar la tarjeta
+    dayCardElement.appendChild(header);
+    dayCardElement.appendChild(status);
+    dayCardElement.appendChild(hoursContainer);
 
     return {
-        element: tempDiv.firstElementChild,
+        element: dayCardElement,
         stats: {
             available: hoursAvailable,
             booked: hoursOccupied,
-            appointments: Object.values(appointments).filter(apt =>
-                apt.date.toDateString() === date.toDateString()
+            appointments: appointments.filter(apt =>
+                apt.date.toDateString() === date.toDateString() &&
+                ['Reservada', 'Confirmada', 'En Proceso', 'Finalizada'].includes(apt.status)
             ).length
         }
     };
