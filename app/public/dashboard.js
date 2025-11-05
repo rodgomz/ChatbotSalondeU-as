@@ -238,7 +238,15 @@ function getMonday(date) {
 async function handleHourClick(dateStr, hour, minute = 0) {
     console.log('🖱️ Click en hora:', { dateStr, hour, minute });
 
-    const date = new Date(dateStr);
+    // Crear fecha sin problemas de zona horaria
+    const [year, month, day] = dateStr.split('-').map(num => parseInt(num, 10));
+    const date = new Date(year, month - 1, day); // Usar constructor local en lugar de string
+    
+    console.log('📅 Fecha corregida:', {
+        original: dateStr,
+        dateObj: date,
+        formatted: date.toLocaleDateString('es-ES')
+    });
     
     // Esperar a que se obtengan las citas desde Firebase
     const aptsInSlot = await getAppointmentsForSlot(date, hour, minute);
