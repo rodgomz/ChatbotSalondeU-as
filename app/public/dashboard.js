@@ -367,22 +367,38 @@ function handleHourClick(dateStr, hour, minute = 0) {
 // ============================================
 // FUNCIÓN AUXILIAR: Obtener citas en un slot específico
 // ============================================
-function getAppointmentsForSlot(date, hour, minute = 0) {
-    const slotStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, minute, 0);
-    const slotEnd = new Date(slotStart.getTime() + BUSINESS_HOURS.interval * 60000);
+async function getAppointmentsForSlot(date, hour, minute = 0) {
+    try {
+        const slotStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, minute, 0);
+        const slotEnd = new Date(slotStart.getTime() + BUSINESS_HOURS.interval * 60000);
 
-    return appointments.filter(apt => {
-        // Solo considerar citas activas (no canceladas)
-        if (!['Reservada', 'Confirmada', 'En Proceso', 'Finalizada'].includes(apt.status)) {
-            return false;
+        // Obtener todas las citas desde Firebase
+        const response = await fetch('/api/citas');
+        if (!response.ok) {
+            console.error('Error al obtener citas:', response.statusText);
+            return [];
         }
 
-        const aptStart = apt.date;
-        const aptEnd = apt.endTime;
+        const citasFromApi = await response.json();
 
-        // Verificar si hay solapamiento entre el slot y la cita
-        return !(aptEnd <= slotStart || aptStart >= slotEnd);
-    });
+        // Filtrar citas que coincidan con el slot
+        return citasFromApi.filter(apt => {
+            // Solo considerar citas activas (no canceladas)
+            if (!['Reservada', 'Confirmada', 'En Proceso', 'Finalizada'].includes(apt.status)) {
+                return false;
+            }
+
+            // Parsear la fecha de la cita
+            const aptStart = parseDate(apt.fecha, apt.hora);
+            const aptEnd = new Date(aptStart.getTime() + apt.duracion * 60000);
+
+            // Verificar si hay solapamiento entre el slot y la cita
+            return !(aptEnd <= slotStart || aptStart >= slotEnd);
+        });
+    } catch (error) {
+        console.error('Error en getAppointmentsForSlot:', error);
+        return [];
+    }
 }
 
 // ============================================
