@@ -593,27 +593,58 @@ function createDayCard(date, esLaborable = true) {
     };
 }
 
+function parseFechaDMY(fechaStr) {
+    if (!fechaStr) return null;
+    const [dia, mes, año] = fechaStr.split('/').map(n => parseInt(n, 10));
+    if (!dia || !mes || !año) return null;
+    return new Date(año, mes - 1, dia);
+}
+
 // Función para cargar datos semanales
 async function loadWeeklyEarnings() {
     try {
         const weekStart = new Date(currentWeekStart);
+        weekStart.setHours(0, 0, 0, 0);
         const weekEnd = new Date(currentWeekStart);
         weekEnd.setDate(weekEnd.getDate() + 6);
+        weekEnd.setHours(23, 59, 59, 999);
 
         // Obtener ganancias (citas completadas)
-        const gananciaResponse = await fetch(`/api/ganancias?start=${weekStart.toISOString()}&end=${weekEnd.toISOString()}`);
-        const ganancias = await gananciaResponse.json();
-        const totalGanancias = ganancias.reduce((sum, g) => sum + (g.monto || 0), 0);
+        const gananciaResponse = await fetch('/api/ganancias');
+        const gananciaData = await gananciaResponse.json();
+        
+        // Filtrar ganancias de la semana actual
+        const totalGanancias = gananciaData.citasGanancia
+            .filter(cita => {
+                const fechaCita = parseFechaDMY(cita.fecha);
+                return fechaCita && fechaCita >= weekStart && fechaCita <= weekEnd;
+            })
+            .reduce((sum, cita) => sum + (cita.precio || 0), 0);
 
         // Obtener gastos
-        const gastosResponse = await fetch(`/api/gastos?start=${weekStart.toISOString()}&end=${weekEnd.toISOString()}`);
-        const gastos = await gastosResponse.json();
-        const totalGastos = gastos.reduce((sum, g) => sum + (g.monto || 0), 0);
+        const gastosResponse = await fetch('/api/gastos');
+        const gastosData = await gastosResponse.json();
+        
+        // Filtrar gastos de la semana actual
+        const totalGastos = (gastosData.gastos || [])
+            .filter(gasto => {
+                const fechaGasto = new Date(gasto.fecha);
+                return fechaGasto >= weekStart && fechaGasto <= weekEnd;
+            })
+            .reduce((sum, gasto) => sum + (gasto.monto || 0), 0);
 
         // Obtener deudas
-        const deudasResponse = await fetch(`/api/deudas?start=${weekStart.toISOString()}&end=${weekEnd.toISOString()}`);
-        const deudas = await deudasResponse.json();
-        const totalDeudas = deudas.reduce((sum, d) => sum + (d.monto || 0), 0);
+        const deudasResponse = await fetch('/api/deudas');
+        const deudasData = await deudasResponse.json();
+        
+        // Filtrar deudas pagadas en la semana actual
+        const totalDeudas = (deudasData.deudas || [])
+            .filter(deuda => {
+                if (!deuda.pagado || !deuda.fechaPago) return false;
+                const fechaPago = new Date(deuda.fechaPago);
+                return fechaPago >= weekStart && fechaPago <= weekEnd;
+            })
+            .reduce((sum, deuda) => sum + (deuda.monto || 0), 0);
 
         // Calcular neto
         const neto = totalGanancias - totalGastos - totalDeudas;
@@ -660,19 +691,35 @@ async function createDailyEarningCard(date) {
 
     try {
         // Obtener ganancias del día
-        const gananciaResponse = await fetch(`/api/ganancias?start=${dayStart.toISOString()}&end=${dayEnd.toISOString()}`);
+        const gananciaResponse = await fetch('/api/ganancias');
         const gananciaData = await gananciaResponse.json();
-        ganancia = gananciaData.reduce((sum, g) => sum + (g.monto || 0), 0);
+        ganancia = gananciaData.citasGanancia
+            .filter(cita => {
+                const fechaCita = parseFechaDMY(cita.fecha);
+                return fechaCita && fechaCita >= dayStart && fechaCita <= dayEnd;
+            })
+            .reduce((sum, cita) => sum + (cita.precio || 0), 0);
 
         // Obtener gastos del día
-        const gastosResponse = await fetch(`/api/gastos?start=${dayStart.toISOString()}&end=${dayEnd.toISOString()}`);
+        const gastosResponse = await fetch('/api/gastos');
         const gastosData = await gastosResponse.json();
-        gastos = gastosData.reduce((sum, g) => sum + (g.monto || 0), 0);
+        gastos = (gastosData.gastos || [])
+            .filter(gasto => {
+                const fechaGasto = new Date(gasto.fecha);
+                return fechaGasto >= dayStart && fechaGasto <= dayEnd;
+            })
+            .reduce((sum, gasto) => sum + (gasto.monto || 0), 0);
 
         // Obtener deudas del día
-        const deudasResponse = await fetch(`/api/deudas?start=${dayStart.toISOString()}&end=${dayEnd.toISOString()}`);
+        const deudasResponse = await fetch('/api/deudas');
         const deudasData = await deudasResponse.json();
-        deudas = deudasData.reduce((sum, d) => sum + (d.monto || 0), 0);
+        deudas = (deudasData.deudas || [])
+            .filter(deuda => {
+                if (!deuda.pagado || !deuda.fechaPago) return false;
+                const fechaPago = new Date(deuda.fechaPago);
+                return fechaPago >= dayStart && fechaPago <= dayEnd;
+            })
+            .reduce((sum, deuda) => sum + (deuda.monto || 0), 0);
     } catch (error) {
         console.error('Error cargando datos del día:', error);
     }
