@@ -32,10 +32,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadClientes();
     await loadServicios();
     await loadAppointments();
-    
+
     // Renderizar interfaz
     renderWeek();
     updateCalendarDisplay();
+    loadWeeklyEarnings();
+    loadDailyEarnings();
     updateAppointmentList();
     inicializarDeudas();
     verificarNotificaciones();
@@ -44,7 +46,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setInterval(loadBotStatus, 10000);
     setInterval(loadAppointments, 120000);
     setInterval(verificarNotificaciones, 3600000);
-    
+
     // Event listeners globales
     document.addEventListener('click', (e) => {
         const profileMenu = document.getElementById('profile-dropdown');
@@ -53,9 +55,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             profileMenu.classList.remove('show');
         }
     });
-    
+
     // Event listeners para gastos
-    document.addEventListener('keydown', function(e) {
+    document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
             const gastosPage = document.getElementById('gastos-page');
             if (gastosPage && gastosPage.classList.contains('active')) {
@@ -63,14 +65,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
     });
-    
-    document.addEventListener('click', function(e) {
+
+    document.addEventListener('click', function (e) {
         const gastosPage = document.getElementById('gastos-page');
         if (e.target === gastosPage) {
             cerrarGastos();
         }
     });
-    
+
     // Agregar estilos CSS
     agregarEstilosCSS();
 });
@@ -85,17 +87,17 @@ async function loadBotStatus() {
     try {
         const response = await fetch('/api/bot-status');
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        
+
         const data = await response.json();
-        
+
         const statusElement = document.getElementById('bot-status');
         statusElement.textContent = data.isConnected ? '✅ Conectado' : '❌ Desconectado';
         statusElement.className = `status ${data.isConnected ? 'text-success' : 'text-danger'}`;
-        
+
         document.getElementById('chats-activos').textContent = data.chatsActivos || 0;
         document.getElementById('mensajes-enviados').textContent = data.mensajesEnviados || 0;
         document.getElementById('mensajes-recibidos').textContent = data.mensajesRecibidos || 0;
-        
+
         const qrContainer = document.getElementById('qr-container');
         if (data.qrCode) {
             qrContainer.innerHTML = `<img src="${data.qrCode}" class="qr-img">`;
@@ -115,13 +117,13 @@ async function loadAppointments() {
     try {
         const response = await fetch('/api/citas');
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        
+
         const data = await response.json();
-        
+
         appointments = data.map(apt => {
             const fecha = parseDate(apt.fecha, apt.hora);
             const duracion = apt.duracion || 60;
-            
+
             return {
                 ...apt,
                 date: fecha,
@@ -164,7 +166,7 @@ async function loadServicios() {
 function parseDate(fechaStr, horaStr) {
     try {
         let fecha;
-        
+
         if (fechaStr.includes('T')) {
             // Caso ISO completo de Firebase
             fecha = new Date(fechaStr);
@@ -201,7 +203,7 @@ function calcularDiasRestantes(diaPago) {
     const hoy = new Date();
     const mesActual = hoy.getMonth();
     const anioActual = hoy.getFullYear();
-    
+
     let fechaPago = new Date(anioActual, mesActual, diaPago);
     if (fechaPago < hoy) {
         fechaPago = new Date(anioActual, mesActual + 1, diaPago);
@@ -254,24 +256,24 @@ function getMonday(date) {
 
 function handleHourClick(dateStr, hour, minute = 0) {
     console.log('🖱️ Click en hora:', { dateStr, hour, minute });
-    
+
     const date = new Date(dateStr);
     const aptsInSlot = getAppointmentsForSlot(date, hour, minute);
     console.log('📊 Citas encontradas:', aptsInSlot);
     const isAvailable = aptsInSlot.length === 0;
-    
+
     // ========================================
     // CASO 1: HORARIO OCUPADO (ROJO) 🔴
     // ========================================
     if (!isAvailable) {
         console.log('🔴 Horario ocupado con', aptsInSlot.length, 'cita(s)');
-        
+
         // Si hay UNA sola cita: Mostrar detalles directamente
         if (aptsInSlot.length === 1) {
             const aptId = aptsInSlot[0].id;
             console.log('📋 Intentando mostrar detalles de cita ID:', aptId);
             console.log('📋 Datos completos de la cita:', aptsInSlot[0]);
-            
+
             // Verificar si la función existe
             if (typeof showAppointmentDetails === 'function') {
                 showAppointmentDetails(aptId);
@@ -281,7 +283,7 @@ function handleHourClick(dateStr, hour, minute = 0) {
             }
             return;
         }
-        
+
         // Si hay MÚLTIPLES citas: Mostrar lista para elegir
         const citasHtml = aptsInSlot.map((apt) => `
             <div style="background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 8px; cursor: pointer; border: 2px solid #e1e5f7; transition: all 0.2s;" 
@@ -295,14 +297,14 @@ function handleHourClick(dateStr, hour, minute = 0) {
                     ✂️ ${apt.service} (${apt.duracion}min)
                 </div>
                 <div style="margin-bottom: 5px; color: #666;">
-                    🕐 ${apt.date.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})} - ${apt.endTime.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}
+                    🕐 ${apt.date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} - ${apt.endTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                 </div>
                 <div style="font-size: 0.85rem; padding: 5px 10px; background: ${getStatusColor(apt.status)}; border-radius: 4px; display: inline-block; color: white;">
                     📊 ${apt.status}
                 </div>
             </div>
         `).join('');
-        
+
         Swal.fire({
             title: `📋 Citas en este horario (${aptsInSlot.length})`,
             html: `
@@ -319,20 +321,20 @@ function handleHourClick(dateStr, hour, minute = 0) {
         });
         return;
     }
-    
+
     // ========================================
     // CASO 2: HORARIO DISPONIBLE (VERDE) 🟢
     // ========================================
     console.log('🟢 Horario disponible');
-    
+
     const hourStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-    const dateFormatted = date.toLocaleDateString('es-ES', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
+    const dateFormatted = date.toLocaleDateString('es-ES', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
     });
-    
+
     Swal.fire({
         title: `📅 ${dateFormatted}`,
         html: `
@@ -365,16 +367,16 @@ function handleHourClick(dateStr, hour, minute = 0) {
 function getAppointmentsForSlot(date, hour, minute = 0) {
     const slotStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, minute, 0);
     const slotEnd = new Date(slotStart.getTime() + BUSINESS_HOURS.interval * 60000);
-    
+
     return appointments.filter(apt => {
         // Solo considerar citas activas (no canceladas)
         if (!['Reservada', 'Confirmada', 'En Proceso', 'Finalizada'].includes(apt.status)) {
             return false;
         }
-        
+
         const aptStart = apt.date;
         const aptEnd = apt.endTime;
-        
+
         // Verificar si hay solapamiento entre el slot y la cita
         return !(aptEnd <= slotStart || aptStart >= slotEnd);
     });
@@ -398,19 +400,19 @@ function getStatusColor(status) {
 
 function getHoursOccupiedInDay(date) {
     let minutosOcupados = 0;
-    
+
     const citasDelDia = appointments.filter(apt => {
         const aptDate = new Date(apt.date);
         return aptDate.getFullYear() === date.getFullYear() &&
-               aptDate.getMonth() === date.getMonth() &&
-               aptDate.getDate() === date.getDate() &&
-               ['Reservada', 'Confirmada', 'En Proceso', 'Finalizada'].includes(apt.status);
+            aptDate.getMonth() === date.getMonth() &&
+            aptDate.getDate() === date.getDate() &&
+            ['Reservada', 'Confirmada', 'En Proceso', 'Finalizada'].includes(apt.status);
     });
-    
+
     citasDelDia.forEach(apt => {
         minutosOcupados += apt.duracion;
     });
-    
+
     return Math.ceil(minutosOcupados / 60);
 }
 
@@ -463,7 +465,7 @@ async function renderWeek() {
     weekEnd.setDate(weekEnd.getDate() + 6);
 
     document.getElementById('week-range').textContent =
-        `${currentWeekStart.toLocaleDateString('es-ES', {day: 'numeric', month: 'short'})} - ${weekEnd.toLocaleDateString('es-ES', {day: 'numeric', month: 'short', year: 'numeric'})}`;
+        `${currentWeekStart.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} - ${weekEnd.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}`;
 
     const grid = document.getElementById('availability-grid');
     grid.innerHTML = '';
@@ -475,7 +477,7 @@ async function renderWeek() {
     for (let i = 0; i < 7; i++) {
         const date = new Date(currentWeekStart);
         date.setDate(date.getDate() + i);
-        
+
         const dayOfWeek = date.getDay();
         const esLaborable = diasLaborales[dayOfWeek];
 
@@ -591,15 +593,137 @@ function createDayCard(date, esLaborable = true) {
     };
 }
 
+// Función para cargar datos semanales
+async function loadWeeklyEarnings() {
+    try {
+        const weekStart = new Date(currentWeekStart);
+        const weekEnd = new Date(currentWeekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+
+        // Obtener ganancias (citas completadas)
+        const gananciaResponse = await fetch(`/api/ganancias?start=${weekStart.toISOString()}&end=${weekEnd.toISOString()}`);
+        const ganancias = await gananciaResponse.json();
+        const totalGanancias = ganancias.reduce((sum, g) => sum + (g.monto || 0), 0);
+
+        // Obtener gastos
+        const gastosResponse = await fetch(`/api/gastos?start=${weekStart.toISOString()}&end=${weekEnd.toISOString()}`);
+        const gastos = await gastosResponse.json();
+        const totalGastos = gastos.reduce((sum, g) => sum + (g.monto || 0), 0);
+
+        // Obtener deudas
+        const deudasResponse = await fetch(`/api/deudas?start=${weekStart.toISOString()}&end=${weekEnd.toISOString()}`);
+        const deudas = await deudasResponse.json();
+        const totalDeudas = deudas.reduce((sum, d) => sum + (d.monto || 0), 0);
+
+        // Calcular neto
+        const neto = totalGanancias - totalGastos - totalDeudas;
+
+        // Actualizar tarjetas semanales
+        document.getElementById('ganancia-semanal').textContent = `$${totalGanancias.toFixed(2)}`;
+        document.getElementById('gastos-semanal').textContent = `$${totalGastos.toFixed(2)}`;
+        document.getElementById('deudas-semanal').textContent = `$${totalDeudas.toFixed(2)}`;
+        
+        const netoElement = document.getElementById('neto-semanal');
+        netoElement.textContent = `$${neto.toFixed(2)}`;
+        netoElement.style.color = neto >= 0 ? '#28a745' : '#dc3545';
+
+    } catch (error) {
+        console.error('Error cargando datos semanales:', error);
+    }
+}
+
+// Función para cargar datos diarios
+async function loadDailyEarnings() {
+    const grid = document.getElementById('daily-earnings-grid');
+    grid.innerHTML = '';
+
+    for (let i = 0; i < 7; i++) {
+        const date = new Date(currentWeekStart);
+        date.setDate(date.getDate() + i);
+        
+        const dayCard = await createDailyEarningCard(date);
+        grid.appendChild(dayCard);
+    }
+}
+
+async function createDailyEarningCard(date) {
+    const dayOfWeek = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][date.getDay()];
+    const dateStr = date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+    const isToday = date.toDateString() === new Date().toDateString();
+
+    const dayStart = new Date(date);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(date);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    let ganancia = 0, gastos = 0, deudas = 0;
+
+    try {
+        // Obtener ganancias del día
+        const gananciaResponse = await fetch(`/api/ganancias?start=${dayStart.toISOString()}&end=${dayEnd.toISOString()}`);
+        const gananciaData = await gananciaResponse.json();
+        ganancia = gananciaData.reduce((sum, g) => sum + (g.monto || 0), 0);
+
+        // Obtener gastos del día
+        const gastosResponse = await fetch(`/api/gastos?start=${dayStart.toISOString()}&end=${dayEnd.toISOString()}`);
+        const gastosData = await gastosResponse.json();
+        gastos = gastosData.reduce((sum, g) => sum + (g.monto || 0), 0);
+
+        // Obtener deudas del día
+        const deudasResponse = await fetch(`/api/deudas?start=${dayStart.toISOString()}&end=${dayEnd.toISOString()}`);
+        const deudasData = await deudasResponse.json();
+        deudas = deudasData.reduce((sum, d) => sum + (d.monto || 0), 0);
+    } catch (error) {
+        console.error('Error cargando datos del día:', error);
+    }
+
+    const neto = ganancia - gastos - deudas;
+
+    const card = document.createElement('div');
+    card.className = `daily-card ${isToday ? 'today' : ''}`;
+    card.innerHTML = `
+        <div class="daily-card-header">
+            <div>
+                <div class="daily-card-date">${dayOfWeek}</div>
+                <div class="daily-card-day">${dateStr}</div>
+            </div>
+            ${isToday ? '<span style="color: #28a745; font-weight: bold;">HOY</span>' : ''}
+        </div>
+        <div class="daily-card-stats">
+            <div class="daily-stat positive">
+                <div class="daily-stat-label">📈 Ganancia</div>
+                <div class="daily-stat-value">$${ganancia.toFixed(2)}</div>
+            </div>
+            <div class="daily-stat negative">
+                <div class="daily-stat-label">💸 Gastos</div>
+                <div class="daily-stat-value">$${gastos.toFixed(2)}</div>
+            </div>
+            <div class="daily-stat negative">
+                <div class="daily-stat-label">💳 Deudas</div>
+                <div class="daily-stat-value">$${deudas.toFixed(2)}</div>
+            </div>
+            <div class="daily-stat neto">
+                <div class="daily-stat-label">💵 Neto</div>
+                <div class="daily-stat-value" style="color: ${neto >= 0 ? '#28a745' : '#dc3545'}">$${neto.toFixed(2)}</div>
+            </div>
+        </div>
+    `;
+
+    return card;
+}
 
 function previousWeek() {
     currentWeekStart.setDate(currentWeekStart.getDate() - 7);
     renderWeek();
+    loadWeeklyEarnings();
+    loadDailyEarnings();
 }
 
 function nextWeek() {
     currentWeekStart.setDate(currentWeekStart.getDate() + 7);
     renderWeek();
+    loadWeeklyEarnings();
+    loadDailyEarnings();
 }
 
 // ============================================
@@ -608,14 +732,14 @@ function nextWeek() {
 function updateCalendarDisplay() {
     const monthYear = document.getElementById('calendar-month-year');
     const calendarGrid = document.getElementById('calendar-grid');
-    
+
     const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-                  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-    
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
     monthYear.textContent = `${months[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
-    
+
     calendarGrid.innerHTML = '';
-    
+
     const dayHeaders = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     dayHeaders.forEach(day => {
         const dayElement = document.createElement('div');
@@ -623,30 +747,30 @@ function updateCalendarDisplay() {
         dayElement.textContent = day;
         calendarGrid.appendChild(dayElement);
     });
-    
+
     const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
     const startDate = new Date(firstDay);
     startDate.setDate(startDate.getDate() - firstDay.getDay());
-    
+
     for (let i = 0; i < 42; i++) {
         const date = new Date(startDate);
         date.setDate(startDate.getDate() + i);
-        
+
         const dayElement = document.createElement('div');
         dayElement.className = 'calendar-day';
         dayElement.textContent = date.getDate();
         dayElement.onclick = () => selectDate(date);
-        
+
         if (date.getMonth() !== currentDate.getMonth()) {
             dayElement.classList.add('other-month');
         }
-        
+
         const today = new Date();
         if (date.toDateString() === today.toDateString()) {
             dayElement.classList.add('today');
         }
-        
-        const hasAppointments = appointments.some(apt => 
+
+        const hasAppointments = appointments.some(apt =>
             apt.date.toDateString() === date.toDateString()
         );
         if (hasAppointments) {
@@ -655,32 +779,32 @@ function updateCalendarDisplay() {
             dot.className = 'appointment-dot';
             dayElement.appendChild(dot);
         }
-        
+
         calendarGrid.appendChild(dayElement);
     }
 }
 
 function updateAppointmentList() {
     const appointmentList = document.getElementById('appointment-list');
-    
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const nextTwoWeeks = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
-    
+
     const upcomingAppointments = appointments
         .filter(apt => {
             const aptDate = new Date(apt.date);
             aptDate.setHours(0, 0, 0, 0);
-            return aptDate >= today && aptDate <= nextTwoWeeks && 
-                   ['Reservada', 'Confirmada', 'En Proceso'].includes(apt.status);
+            return aptDate >= today && aptDate <= nextTwoWeeks &&
+                ['Reservada', 'Confirmada', 'En Proceso'].includes(apt.status);
         })
         .sort((a, b) => a.date - b.date);
-    
+
     if (upcomingAppointments.length === 0) {
         appointmentList.innerHTML = '<p class="text-muted text-center">No hay servicios próximos</p>';
         return;
     }
-    
+
     appointmentList.innerHTML = upcomingAppointments
         .map(apt => {
             const timeStr = apt.date.toLocaleTimeString('es-ES', {
@@ -692,7 +816,7 @@ function updateAppointmentList() {
                 day: 'numeric',
                 month: 'short'
             });
-            
+
             return `
                 <div class="appointment-item" onclick="showAppointmentDetails('${apt.id}')">
                     <div class="appointment-time">${timeStr} - ${dateStr}</div>
@@ -711,19 +835,19 @@ function changeMonth(direction) {
 
 function selectDate(date) {
     selectedDate = date;
-    const dayAppointments = appointments.filter(apt => 
+    const dayAppointments = appointments.filter(apt =>
         apt.date.toDateString() === date.toDateString()
     );
-    
+
     let existingAppointmentsHtml = '';
     if (dayAppointments.length > 0) {
-        existingAppointmentsHtml = '<h6>Citas existentes:</h6>' + 
-        dayAppointments
-            .sort((a, b) => a.date - b.date)
-            .map(apt => `
+        existingAppointmentsHtml = '<h6>Citas existentes:</h6>' +
+            dayAppointments
+                .sort((a, b) => a.date - b.date)
+                .map(apt => `
                 <div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <strong style="color: #007bff;">${apt.date.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})} - ${apt.endTime.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}</strong>
+                        <strong style="color: #007bff;">${apt.date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} - ${apt.endTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</strong>
                         <span style="font-size: 0.8em; color: #666;">⏱️ ${apt.duracion}min</span>
                     </div>
                     <div style="margin: 5px 0;"><strong>👤 ${apt.client}</strong></div>
@@ -734,11 +858,11 @@ function selectDate(date) {
                     <div style="margin: 5px 0; padding: 4px 8px; border-radius: 12px; display: inline-block;">${apt.status}</div>
                 </div>
             `)
-            .join('') + '<hr>';
+                .join('') + '<hr>';
     }
-    
+
     const dateStr = date.toLocaleDateString('es-ES');
-    
+
     Swal.fire({
         title: `📅 ${dateStr}`,
         html: `
@@ -764,9 +888,9 @@ function showAppointmentDetails(appointmentId) {
     console.log('🔍 showAppointmentDetails llamado con ID:', appointmentId);
     console.log('📚 Total de citas en el sistema:', appointments.length);
     console.log('📋 IDs disponibles:', appointments.map(a => a.id));
-    
+
     const apt = appointments.find(a => a.id === appointmentId || a.id === String(appointmentId));
-    
+
     if (!apt) {
         console.error('❌ Cita no encontrada con ID:', appointmentId);
         Swal.fire({
@@ -777,11 +901,11 @@ function showAppointmentDetails(appointmentId) {
         });
         return;
     }
-    
+
     console.log('✅ Cita encontrada:', apt);
 
     const estados = ['Reservada', 'Confirmada', 'En Proceso', 'Finalizada', 'Cancelada'];
-    const estadosOptions = estados.map(estado => 
+    const estadosOptions = estados.map(estado =>
         `<option value="${estado}" ${apt.status === estado ? 'selected' : ''}>${estado}</option>`
     ).join('');
 
@@ -789,7 +913,7 @@ function showAppointmentDetails(appointmentId) {
         <div style="text-align: left; padding: 10px;">
             <div style="background: #f8f9ff; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
                 <p style="margin: 8px 0;"><strong>📅 Fecha:</strong> ${apt.date.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                <p style="margin: 8px 0;"><strong>🕐 Hora:</strong> ${apt.date.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})} - ${apt.endTime.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}</p>
+                <p style="margin: 8px 0;"><strong>🕐 Hora:</strong> ${apt.date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} - ${apt.endTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</p>
             </div>
             
             <div style="background: white; padding: 15px; border: 1px solid #e1e5f7; border-radius: 8px; margin-bottom: 15px;">
@@ -945,9 +1069,8 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
     let fecha = parseDateWithoutTimezone(dateStr);
     console.log('📅 Fecha procesada:', fecha);
 
-    const fechaFormateada = `${fecha.getDate().toString().padStart(2, '0')}/${
-        (fecha.getMonth() + 1).toString().padStart(2, '0')
-    }/${fecha.getFullYear()}`;
+    const fechaFormateada = `${fecha.getDate().toString().padStart(2, '0')}/${(fecha.getMonth() + 1).toString().padStart(2, '0')
+        }/${fecha.getFullYear()}`;
 
     const clientesOptions = clientes
         .map(cliente => `<option value="${cliente.id}">${cliente.nombre} (${cliente.telefono})</option>`)
@@ -967,7 +1090,7 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
     }
 
     $('.select2-container').remove();
-    
+
     setTimeout(() => {
         $(document).off('click.closeModal');
         $(document).off('mousedown.closeModal');
@@ -975,8 +1098,8 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
 
     setTimeout(() => {
         Swal.fire({
-        title: `➕ Nueva Cita - ${fecha.toLocaleDateString('es-ES')}`,
-        html: `
+            title: `➕ Nueva Cita - ${fecha.toLocaleDateString('es-ES')}`,
+            html: `
             <div class="new-appointment-form" style="text-align: left;">
                 <div class="form-group" style="margin-bottom: 15px;">
                     <label for="cliente" style="display: block; margin-bottom: 5px; font-weight: bold;">Cliente:</label>
@@ -1019,122 +1142,122 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
                 </div>
             </div>
         `,
-        width: '550px',
-        showCancelButton: true,
-        confirmButtonText: '💾 Crear Cita',
-        cancelButtonText: '❌ Cancelar',
-        confirmButtonColor: '#28a745',
-        cancelButtonColor: '#6c757d',
-        allowOutsideClick: false,
-        allowEscapeKey: true,
-        focusConfirm: false,
-        didOpen: () => {
-            console.log('✅ Modal abierto - inicializando Select2...');
-            
-            const popup = Swal.getPopup();
-            
-            if (popup) {
-                popup.style.pointerEvents = 'auto';
-            }
-            
-            setTimeout(() => {
-                try {
-                    // Cliente
-                    if ($('#cliente').length && !$('#cliente').hasClass('select2-hidden-accessible')) {
-                        $('#cliente').select2({
-                            dropdownParent: popup ? $(popup) : $('.swal2-popup'),
-                            placeholder: 'Buscar cliente...',
-                            allowClear: true,
-                            width: '100%',
-                            language: {
-                                noResults: function() { return "No se encontraron resultados"; },
-                                searching: function() { return "Buscando..."; }
-                            }
-                        });
-                        console.log('✅ Select2 de #cliente inicializado');
-                    }
+            width: '550px',
+            showCancelButton: true,
+            confirmButtonText: '💾 Crear Cita',
+            cancelButtonText: '❌ Cancelar',
+            confirmButtonColor: '#28a745',
+            cancelButtonColor: '#6c757d',
+            allowOutsideClick: false,
+            allowEscapeKey: true,
+            focusConfirm: false,
+            didOpen: () => {
+                console.log('✅ Modal abierto - inicializando Select2...');
 
-                    // Servicio
-                    if ($('#servicio').length && !$('#servicio').hasClass('select2-hidden-accessible')) {
-                        $('#servicio').select2({
-                            dropdownParent: popup ? $(popup) : $('.swal2-popup'),
-                            placeholder: 'Buscar servicio...',
-                            allowClear: true,
-                            width: '100%',
-                            language: {
-                                noResults: function() { return "No se encontraron resultados"; },
-                                searching: function() { return "Buscando..."; }
-                            }
-                        });
-                        console.log('✅ Select2 de #servicio inicializado');
-                    }
+                const popup = Swal.getPopup();
 
-                    // Hora
-                    if ($('#hora').length && !$('#hora').hasClass('select2-hidden-accessible')) {
-                        $('#hora').select2({
-                            dropdownParent: popup ? $(popup) : $('.swal2-popup'),
-                            placeholder: 'Seleccionar hora...',
-                            allowClear: true,
-                            width: '100%',
-                            language: {
-                                noResults: function() { return "No se encontraron resultados"; },
-                                searching: function() { return "Buscando..."; }
-                            }
-                        });
-                        console.log('✅ Select2 de #hora inicializado');
-                    }
-                } catch (e) {
-                    console.error('❌ Error al inicializar Select2:', e);
+                if (popup) {
+                    popup.style.pointerEvents = 'auto';
                 }
-            }, 300);
-        },
-        preConfirm: () => {
-            console.log('📝 Validando formulario...');
-            
-            const clienteId = document.getElementById('cliente').value;
-            const servicioId = document.getElementById('servicio').value;
-            const hora = document.getElementById('hora').value;
-            const manicurista = document.getElementById('manicurista').value;
-            const notas = document.getElementById('notas').value;
 
-            console.log('Valores del formulario:', { clienteId, servicioId, hora, manicurista, notas });
+                setTimeout(() => {
+                    try {
+                        // Cliente
+                        if ($('#cliente').length && !$('#cliente').hasClass('select2-hidden-accessible')) {
+                            $('#cliente').select2({
+                                dropdownParent: popup ? $(popup) : $('.swal2-popup'),
+                                placeholder: 'Buscar cliente...',
+                                allowClear: true,
+                                width: '100%',
+                                language: {
+                                    noResults: function () { return "No se encontraron resultados"; },
+                                    searching: function () { return "Buscando..."; }
+                                }
+                            });
+                            console.log('✅ Select2 de #cliente inicializado');
+                        }
 
-            if (!clienteId || !servicioId || !hora) {
-                Swal.showValidationMessage('Por favor completa todos los campos obligatorios');
-                return false;
-            }
+                        // Servicio
+                        if ($('#servicio').length && !$('#servicio').hasClass('select2-hidden-accessible')) {
+                            $('#servicio').select2({
+                                dropdownParent: popup ? $(popup) : $('.swal2-popup'),
+                                placeholder: 'Buscar servicio...',
+                                allowClear: true,
+                                width: '100%',
+                                language: {
+                                    noResults: function () { return "No se encontraron resultados"; },
+                                    searching: function () { return "Buscando..."; }
+                                }
+                            });
+                            console.log('✅ Select2 de #servicio inicializado');
+                        }
 
-            return {
-                clienteId,
-                servicioId,
-                fecha: fechaFormateada,
-                hora,
-                manicuristaId: manicurista || 'Sin asignar',
-                notas
-            };
-        },
-        willClose: () => {
-            console.log('🔒 Cerrando modal - destruyendo Select2...');
-            try {
-                ['#cliente', '#servicio', '#hora'].forEach(selector => {
-                    const element = $(selector);
-                    if (element.length && element.hasClass('select2-hidden-accessible')) {
-                        element.select2('destroy');
-                        console.log(`✅ Select2 de ${selector} destruido`);
+                        // Hora
+                        if ($('#hora').length && !$('#hora').hasClass('select2-hidden-accessible')) {
+                            $('#hora').select2({
+                                dropdownParent: popup ? $(popup) : $('.swal2-popup'),
+                                placeholder: 'Seleccionar hora...',
+                                allowClear: true,
+                                width: '100%',
+                                language: {
+                                    noResults: function () { return "No se encontraron resultados"; },
+                                    searching: function () { return "Buscando..."; }
+                                }
+                            });
+                            console.log('✅ Select2 de #hora inicializado');
+                        }
+                    } catch (e) {
+                        console.error('❌ Error al inicializar Select2:', e);
                     }
-                });
-            } catch (e) {
-                console.warn('⚠️ Error al destruir Select2:', e);
+                }, 300);
+            },
+            preConfirm: () => {
+                console.log('📝 Validando formulario...');
+
+                const clienteId = document.getElementById('cliente').value;
+                const servicioId = document.getElementById('servicio').value;
+                const hora = document.getElementById('hora').value;
+                const manicurista = document.getElementById('manicurista').value;
+                const notas = document.getElementById('notas').value;
+
+                console.log('Valores del formulario:', { clienteId, servicioId, hora, manicurista, notas });
+
+                if (!clienteId || !servicioId || !hora) {
+                    Swal.showValidationMessage('Por favor completa todos los campos obligatorios');
+                    return false;
+                }
+
+                return {
+                    clienteId,
+                    servicioId,
+                    fecha: fechaFormateada,
+                    hora,
+                    manicuristaId: manicurista || 'Sin asignar',
+                    notas
+                };
+            },
+            willClose: () => {
+                console.log('🔒 Cerrando modal - destruyendo Select2...');
+                try {
+                    ['#cliente', '#servicio', '#hora'].forEach(selector => {
+                        const element = $(selector);
+                        if (element.length && element.hasClass('select2-hidden-accessible')) {
+                            element.select2('destroy');
+                            console.log(`✅ Select2 de ${selector} destruido`);
+                        }
+                    });
+                } catch (e) {
+                    console.warn('⚠️ Error al destruir Select2:', e);
+                }
             }
-        }
-    }).then(async (result) => {
-        console.log('📊 Resultado del modal:', result);
-        if (result.isConfirmed) {
-            console.log('✅ Confirmado - creando cita...');
-            await createNewAppointment(result.value);
-        } else {
-            console.log('❌ Cancelado');
-        }
+        }).then(async (result) => {
+            console.log('📊 Resultado del modal:', result);
+            if (result.isConfirmed) {
+                console.log('✅ Confirmado - creando cita...');
+                await createNewAppointment(result.value);
+            } else {
+                console.log('❌ Cancelado');
+            }
         }).catch(error => {
             console.error('❌ Error en SweetAlert:', error);
         });
@@ -1152,9 +1275,9 @@ async function createNewAppointment(appointmentData) {
             },
             body: JSON.stringify(appointmentData)
         });
-        
+
         const result = await response.json();
-        
+
         if (result.success) {
             Swal.fire({
                 icon: 'success',
@@ -1163,7 +1286,7 @@ async function createNewAppointment(appointmentData) {
                 timer: 2000,
                 showConfirmButton: false
             });
-            
+
             await loadAppointments();
         } else {
             throw new Error(result.error || 'Error desconocido');
@@ -1216,7 +1339,7 @@ function agregarClienteRapido() {
                 const result = await response.json();
                 if (result.success) {
                     await loadClientes();
-                    
+
                     const nuevoClienteOption = new Option(
                         `${nombre} (${telefono})`,
                         result.id || result.clienteId,
@@ -1224,7 +1347,7 @@ function agregarClienteRapido() {
                         true
                     );
                     $('#cliente').append(nuevoClienteOption).trigger('change');
-                    
+
                     Swal.fire('Éxito', 'Cliente agregado correctamente', 'success');
                     return { nombre, telefono };
                 } else {
@@ -1281,7 +1404,7 @@ function agregarServicioRapido() {
                 const result = await response.json();
                 if (result.success) {
                     await loadServicios();
-                    
+
                     const nuevoServicioOption = new Option(
                         `${nombre} - ${precio} (${duracion}min)`,
                         result.id || result.servicioId,
@@ -1289,7 +1412,7 @@ function agregarServicioRapido() {
                         true
                     );
                     $('#servicio').append(nuevoServicioOption).trigger('change');
-                    
+
                     Swal.fire('Éxito', 'Servicio agregado correctamente', 'success');
                     return { nombre, precio, duracion };
                 } else {
@@ -1345,7 +1468,7 @@ function cerrarGastos() {
 
 function verNotificaciones() {
     document.getElementById('profile-dropdown').classList.remove('show');
-    
+
     Swal.fire({
         title: '🔔 Centro de Notificaciones',
         html: `
@@ -1362,9 +1485,9 @@ function verNotificaciones() {
             try {
                 const res = await fetch('/api/deudas/notificaciones');
                 const data = await res.json();
-                
+
                 const contenedor = document.getElementById('lista-notificaciones-modal');
-                
+
                 if (data.success && data.notificaciones && data.notificaciones.length > 0) {
                     contenedor.innerHTML = data.notificaciones.map(notif => `
                         <div style="background: ${notif.urgente ? '#fee' : '#f8f9ff'}; 
@@ -1460,7 +1583,7 @@ function obtenerPagosMasProximos(notificaciones) {
 // Mostrar notificaciones en pantalla
 function mostrarNotificaciones(notificaciones) {
     let contenedor = document.getElementById('notification-container');
-    
+
     // Si no existe el contenedor, crearlo
     if (!contenedor) {
         contenedor = crearContenedorNotificaciones();
@@ -1474,7 +1597,7 @@ function mostrarNotificaciones(notificaciones) {
             const notifElement = document.createElement('div');
             notifElement.className = `notification-item ${notif.urgente ? 'urgent' : ''}`;
             notifElement.style.animation = 'slideIn 0.5s ease forwards';
-            
+
             notifElement.innerHTML = `
                 <div class="notification-icon">${notif.urgente ? '⚠️' : '🔔'}</div>
                 <div class="notification-content">
@@ -1497,7 +1620,7 @@ function mostrarNotificaciones(notificaciones) {
             });
 
             contenedor.appendChild(notifElement);
-            
+
             // Auto-remover después de 5 segundos
             setTimeout(() => {
                 if (notifElement.parentElement) {
@@ -1576,7 +1699,7 @@ async function inicializarDeudas() {
 async function cargarDeudas() {
     const contenedor = document.getElementById('deudas-grid');
     if (!contenedor) return;
-    
+
     contenedor.innerHTML = `
         <div class="deudas-loading">
             <div class="deudas-icon">💳</div>
@@ -1629,10 +1752,10 @@ function renderizarDeudas() {
         const hoy = new Date();
         const fechaPago = new Date(hoy.getFullYear(), hoy.getMonth(), deuda.diaPago);
         const diasRestantes = Math.ceil((fechaPago - hoy) / (1000 * 60 * 60 * 24));
-        
+
         let claseEstado = '';
         let textoEstado = '';
-        
+
         if (deuda.pagado) {
             claseEstado = 'pagado';
             textoEstado = '✅ Pagado';
@@ -1690,7 +1813,7 @@ function cargarResumenDeudas() {
     const totalPendientes = totalDeudas - totalPagadas;
     const montoTotal = deudas.reduce((sum, d) => sum + d.monto, 0);
     const montoPendiente = deudas.filter(d => !d.pagado).reduce((sum, d) => sum + d.monto, 0);
-    
+
     const hoy = new Date();
     const proximasVencer = deudas.filter(d => {
         if (d.pagado) return false;
@@ -1760,11 +1883,11 @@ async function verHistorial(id) {
                         transition: background 0.5s;
                         ${index === 0 ? 'background: #d1e7dd; border-left-color: #28a745;' : ''}
                     ">
-                        <strong>📅 ${new Date(h.fecha).toLocaleDateString('es-MX', { 
-                            year: 'numeric', 
-                            month: 'long', 
-                            day: 'numeric' 
-                        })}</strong><br>
+                        <strong>📅 ${new Date(h.fecha).toLocaleDateString('es-MX', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                })}</strong><br>
                         <span>💰 Monto: $${h.deuda?.monto?.toFixed(2) ?? '0.00'}</span><br>
                         <span>📝 Mensaje: ${h.mensaje || '-'}</span><br>
                         ${h.deuda?.notas ? `<small style="color: #666;">📝 ${h.deuda.notas}</small>` : ''}
@@ -1816,7 +1939,7 @@ async function verHistorial(id) {
 
 // Agregar una sola deuda
 async function agregarDeuda() {
-    const tipos = ['Arrendamiento','Luz','Agua','Internet','Teléfono','Gas','Tarjeta de Crédito 1','Tarjeta de Crédito 2','Netflix','Spotify','Gimnasio','Seguro','Otro'];
+    const tipos = ['Arrendamiento', 'Luz', 'Agua', 'Internet', 'Teléfono', 'Gas', 'Tarjeta de Crédito 1', 'Tarjeta de Crédito 2', 'Netflix', 'Spotify', 'Gimnasio', 'Seguro', 'Otro'];
     const opcionesTipo = tipos.map(t => `<option value="${t}">${t}</option>`).join('');
 
     Swal.fire({
@@ -1861,7 +1984,7 @@ async function agregarDeuda() {
             const diaPago = parseInt(document.getElementById('dia-pago').value);
             const monto = parseFloat(document.getElementById('monto-deuda').value || 0);
             const notas = document.getElementById('notas-deuda').value.trim();
-            
+
             if (!nombre || !tipo || !diaPago || !monto) {
                 Swal.showValidationMessage('Por favor completa todos los campos obligatorios');
                 return false;
@@ -1933,23 +2056,23 @@ async function agregarDeudasLote() {
                 Swal.showValidationMessage('Ingresa al menos un pago');
                 return false;
             }
-            
+
             const lineas = texto.split('\n').filter(l => l.trim());
             const pagos = [];
-            
+
             for (let i = 0; i < lineas.length; i++) {
                 const partes = lineas[i].split(',').map(p => p.trim());
                 if (partes.length < 4) {
                     Swal.showValidationMessage(`Error en línea ${i + 1}: formato incorrecto`);
                     return false;
                 }
-                
+
                 const diaPago = parseInt(partes[2]);
                 if (diaPago < 1 || diaPago > 31) {
                     Swal.showValidationMessage(`Error en línea ${i + 1}: día debe estar entre 1 y 31`);
                     return false;
                 }
-                
+
                 pagos.push({
                     nombre: partes[0],
                     tipo: partes[1],
@@ -1958,7 +2081,7 @@ async function agregarDeudasLote() {
                     notas: partes[4] || ''
                 });
             }
-            
+
             return pagos;
         }
     }).then(async (result) => {
@@ -1969,7 +2092,7 @@ async function agregarDeudasLote() {
                 body: JSON.stringify({ deudas: result.value })
             });
             const data = await res.json();
-            
+
             if (data.success) {
                 Swal.fire({
                     icon: 'success',
@@ -1995,7 +2118,7 @@ async function agregarDeudasLote() {
 async function verDeudasPorTipo() {
     try {
         const tiposUnicos = [...new Set(deudas.map(d => d.tipo))];
-        
+
         if (tiposUnicos.length === 0) {
             Swal.fire({
                 icon: 'info',
@@ -2019,8 +2142,8 @@ async function verDeudasPorTipo() {
         const html = `
             <div style="text-align: left;">
                 ${Object.keys(deudasPorTipo).map(tipo => {
-                    const data = deudasPorTipo[tipo];
-                    return `
+            const data = deudasPorTipo[tipo];
+            return `
                         <div class="tipo-item-modal" onclick="filtrarPorTipo('${tipo}'); Swal.close();" 
                             style="display: flex; align-items: center; gap: 1rem; padding: 1rem; margin: 0.5rem 0; 
                             background: #f8f9fa; border-radius: 8px; cursor: pointer; transition: all 0.2s;"
@@ -2035,7 +2158,7 @@ async function verDeudasPorTipo() {
                             </div>
                         </div>
                     `;
-                }).join('')}
+        }).join('')}
             </div>
         `;
 
@@ -2061,12 +2184,12 @@ async function verDeudasPorTipo() {
 function filtrarPorTipo(tipo) {
     const deudasFiltradas = deudas.filter(d => d.tipo === tipo);
     const contenedor = document.getElementById('deudas-grid');
-    
+
     // Usar la función renderizarDeudas pero con datos filtrados
     const deudasBackup = [...deudas];
     deudas = deudasFiltradas;
     renderizarDeudas();
-    
+
     // Agregar botón para ver todos
     const btnVerTodos = document.createElement('div');
     btnVerTodos.style.gridColumn = '1 / -1';
@@ -2078,7 +2201,7 @@ function filtrarPorTipo(tipo) {
         </button>
     `;
     contenedor.appendChild(btnVerTodos);
-    
+
     Swal.close();
 }
 
@@ -2094,7 +2217,7 @@ async function resetearPagos() {
         confirmButtonColor: '#ffc107',
         customClass: { container: 'swal-on-top' }
     });
-    
+
     if (!result.isConfirmed) return;
 
     try {
@@ -2103,7 +2226,7 @@ async function resetearPagos() {
             headers: { 'Content-Type': 'application/json' }
         });
         const data = await res.json();
-        
+
         if (data.success) {
             Swal.fire({
                 icon: 'success',
@@ -2204,12 +2327,12 @@ async function editarDeuda(id) {
         if (!deuda) return;
 
         const tipos = [
-            'Arrendamiento','Luz','Agua','Internet','Teléfono','Gas',
-            'Tarjeta de Crédito 1','Tarjeta de Crédito 2',
-            'Netflix','Spotify','Gimnasio','Seguro','Otro'
+            'Arrendamiento', 'Luz', 'Agua', 'Internet', 'Teléfono', 'Gas',
+            'Tarjeta de Crédito 1', 'Tarjeta de Crédito 2',
+            'Netflix', 'Spotify', 'Gimnasio', 'Seguro', 'Otro'
         ];
 
-        const opcionesTipo = tipos.map(t => 
+        const opcionesTipo = tipos.map(t =>
             `<option value="${t}" ${deuda.tipo === t ? 'selected' : ''}>${t}</option>`
         ).join('');
 
@@ -2324,13 +2447,13 @@ async function eliminarDeuda(id) {
         confirmButtonColor: '#dc3545',
         customClass: { container: 'swal-on-top' }
     });
-    
+
     if (!result.isConfirmed) return;
 
     try {
         const res = await fetch(`/api/deudas/${id}`, { method: 'DELETE' });
         const data = await res.json();
-        
+
         if (data.success) {
             Swal.fire({
                 icon: 'success',
@@ -2356,13 +2479,13 @@ async function eliminarDeuda(id) {
 // Ver resumen
 async function verResumenDeudas() {
     cargarResumenDeudas();
-    
+
     const totalDeudas = deudas.length;
     const totalPagadas = deudas.filter(d => d.pagado).length;
     const totalPendientes = totalDeudas - totalPagadas;
     const montoTotal = deudas.reduce((sum, d) => sum + d.monto, 0);
     const montoPendiente = deudas.filter(d => !d.pagado).reduce((sum, d) => sum + d.monto, 0);
-    
+
     Swal.fire({
         title: '📊 Resumen de Pagos',
         html: `
@@ -2399,7 +2522,7 @@ async function exportarDeudas() {
 
         const csv = [
             ['Nombre', 'Tipo', 'Monto', 'Día de Pago', 'Estado', 'Notas'].join(','),
-            ...deudas.map(d => 
+            ...deudas.map(d =>
                 [
                     `"${d.nombre}"`,
                     `"${d.tipo}"`,
@@ -2510,7 +2633,7 @@ async function cargarResumenGastos() {
 
 function mostrarGastos(gastos) {
     const gastosGrid = document.getElementById('gastos-grid');
-    
+
     if (!gastos || gastos.length === 0) {
         gastosGrid.innerHTML = `
             <div class="gastos-loading">
@@ -2713,17 +2836,17 @@ function agregarGastosLote() {
                 Swal.showValidationMessage('Ingresa al menos un gasto');
                 return false;
             }
-            
+
             const lineas = texto.split('\n').filter(l => l.trim());
             const gastos = [];
-            
+
             for (let i = 0; i < lineas.length; i++) {
                 const partes = lineas[i].split(',').map(p => p.trim());
                 if (partes.length < 3) {
                     Swal.showValidationMessage(`Error en línea ${i + 1}: formato incorrecto`);
                     return false;
                 }
-                
+
                 gastos.push({
                     descripcion: partes[0],
                     monto: parseFloat(partes[1]),
@@ -2732,7 +2855,7 @@ function agregarGastosLote() {
                     notas: partes[4] || ''
                 });
             }
-            
+
             return gastos;
         }
     }).then(async (result) => {
@@ -2743,7 +2866,7 @@ function agregarGastosLote() {
                 body: JSON.stringify({ gastos: result.value })
             });
             const data = await res.json();
-            
+
             if (data.success) {
                 Swal.fire({
                     icon: 'success',
@@ -2867,12 +2990,12 @@ async function eliminarGasto(id) {
             container: 'swal-on-top'
         }
     });
-    
+
     if (!result.isConfirmed) return;
 
     const res = await fetch(`/api/gastos/${id}`, { method: 'DELETE' });
     const data = await res.json();
-    
+
     if (data.success) {
         Swal.fire({
             icon: 'success',
@@ -2899,7 +3022,7 @@ async function verGastosPorCategoria() {
 
         if (data.success) {
             const categorias = data.resumen.gastosPorCategoria;
-            
+
             if (Object.keys(categorias).length === 0) {
                 Swal.fire({
                     icon: 'info',
@@ -2913,9 +3036,9 @@ async function verGastosPorCategoria() {
             const html = `
                 <div style="text-align: left;">
                     ${Object.keys(categorias).map(cat => {
-                        const emoji = obtenerEmojiCategoria(cat);
-                        const porcentaje = ((categorias[cat].monto / data.resumen.totalMonto) * 100).toFixed(1);
-                        return `
+                const emoji = obtenerEmojiCategoria(cat);
+                const porcentaje = ((categorias[cat].monto / data.resumen.totalMonto) * 100).toFixed(1);
+                return `
                             <div class="categoria-item-modal" onclick="filtrarPorCategoria('${cat}'); Swal.close();" 
                                 style="display: flex; align-items: center; gap: 1rem; padding: 1rem; margin: 0.5rem 0; 
                                 background: #f8f9fa; border-radius: 8px; cursor: pointer; transition: all 0.2s;"
@@ -2933,7 +3056,7 @@ async function verGastosPorCategoria() {
                                 </div>
                             </div>
                         `;
-                    }).join('')}
+            }).join('')}
                 </div>
             `;
 
@@ -2964,7 +3087,7 @@ async function exportarGastos() {
         if (data.success && data.gastos.length > 0) {
             const csv = [
                 ['Descripción', 'Monto', 'Categoría', 'Fecha', 'Notas'].join(','),
-                ...data.gastos.map(g => 
+                ...data.gastos.map(g =>
                     [
                         `"${g.descripcion}"`,
                         g.monto,
@@ -3017,7 +3140,7 @@ async function filtrarPorCategoria(categoria) {
 
         if (data.success) {
             mostrarGastos(data.gastos);
-            
+
             const gastosGrid = document.getElementById('gastos-grid');
             const btnVerTodos = document.createElement('div');
             btnVerTodos.className = 'text-center mt-3';
@@ -3027,7 +3150,7 @@ async function filtrarPorCategoria(categoria) {
                 </button>
             `;
             gastosGrid.appendChild(btnVerTodos);
-            
+
             Swal.close();
         }
     } catch (error) {
@@ -3044,7 +3167,7 @@ async function filtrarPorCategoria(categoria) {
 // ============================================
 function agregarEstilosCSS() {
     if (document.getElementById('dashboard-styles')) return;
-    
+
     const style = document.createElement('style');
     style.id = 'dashboard-styles';
     style.textContent = `
@@ -3213,7 +3336,7 @@ function agregarEstilosCSS() {
         }
     `;
     document.head.appendChild(style);
-    
+
     // Estilos de Select2
     if (!document.getElementById('select2-custom-styles')) {
         const select2Style = document.createElement('style');
@@ -3300,7 +3423,7 @@ async function actualizarHeaderDesdeFirebase() {
 }
 function configuracion() {
     document.getElementById('profile-dropdown').classList.remove('show');
-    
+
     Swal.fire({
         title: '⚙️ Configuración del Sistema',
         html: `
@@ -3467,12 +3590,12 @@ function configuracion() {
         didOpen: () => {
             // Cargar configuración guardada
             cargarConfiguracion();
-            
+
             // Event listener para preview del logo
             const logoInput = document.getElementById('config-logo');
             const preview = document.getElementById('preview-logo');
-            
-            logoInput.addEventListener('change', function(e) {
+
+            logoInput.addEventListener('change', function (e) {
                 const file = e.target.files[0];
                 if (file) {
                     // Validar tamaño (2MB máximo)
@@ -3481,17 +3604,17 @@ function configuracion() {
                         logoInput.value = '';
                         return;
                     }
-                    
+
                     // Validar tipo
                     if (!file.type.startsWith('image/')) {
                         Swal.showValidationMessage('Solo se permiten imágenes');
                         logoInput.value = '';
                         return;
                     }
-                    
+
                     // Preview
                     const reader = new FileReader();
-                    reader.onload = function(event) {
+                    reader.onload = function (event) {
                         preview.src = event.target.result;
                         preview.style.display = 'block';
                         document.getElementById('config-logo-url').value = event.target.result;
@@ -3632,7 +3755,7 @@ async function guardarConfiguracion(config) {
         // Enviar configuración al server
         const response = await fetch('/api/configuracion', {
             method: 'POST',
-            headers: { 
+            headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             },
@@ -3737,16 +3860,16 @@ async function restaurarConfiguracionPredeterminada() {
                 BUSINESS_HOURS.end = 22;
                 BUSINESS_HOURS.interval = 30;
 
-                Swal.fire({ 
-                    icon: 'success', 
-                    title: '✅ Restaurado', 
-                    text: 'Configuración predeterminada restaurada exitosamente', 
+                Swal.fire({
+                    icon: 'success',
+                    title: '✅ Restaurado',
+                    text: 'Configuración predeterminada restaurada exitosamente',
                     timer: 2000,
                     customClass: { container: 'swal-on-top' }
-                }).then(() => { 
+                }).then(() => {
                     actualizarHeaderDesdeFirebase();
-                    renderWeek(); 
-                    configuracion(); 
+                    renderWeek();
+                    configuracion();
                 });
             } else {
                 throw new Error(data.error || 'Error al restaurar');
@@ -3798,12 +3921,12 @@ function obtenerConfiguracion() {
 // ============================================
 // FUNCIONES DEL BOT
 // ============================================
-function reconectarBot() { 
-    fetch('/reiniciar'); 
-    Swal.fire('Reconectando...', '', 'info'); 
+function reconectarBot() {
+    fetch('/reiniciar');
+    Swal.fire('Reconectando...', '', 'info');
 }
 
-function reiniciarServidor() { 
-    fetch('/reiniciar'); 
-    Swal.fire('Servidor reiniciado', '', 'success'); 
+function reiniciarServidor() {
+    fetch('/reiniciar');
+    Swal.fire('Servidor reiniciado', '', 'success');
 }
