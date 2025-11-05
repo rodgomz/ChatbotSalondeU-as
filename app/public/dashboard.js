@@ -163,11 +163,19 @@ async function loadServicios() {
     }
 }
 
-function parseDate(fechaStr, horaStr) {  
+function parseDate(fechaStr, horaStr) {
+    // fechaStr puede venir como "5/11/2025" o "05/11/2025" (D/M/YYYY o DD/MM/YYYY)
+    // horaStr viene como "08:00" o "8:00" (HH:MM o H:MM)
+    
     const [dia, mes, anio] = fechaStr.split('/').map(num => parseInt(num, 10));
     const [hora, minuto] = horaStr.split(':').map(num => parseInt(num, 10));
-    return new Date(anio, mes - 1, dia, hora, minuto, 0);
+    
+    // Los meses en JavaScript van de 0-11, por eso restamos 1
+    const dateObj = new Date(anio, mes - 1, dia, hora, minuto, 0, 0);
+    
+    return dateObj;
 }
+
 
 // ============================================
 // FUNCIONES AUXILIARES
@@ -248,7 +256,6 @@ async function handleHourClick(dateStr, hour, minute = 0) {
         if (aptsInSlot.length === 1) {
             const aptId = aptsInSlot[0].id;
             console.log('📋 Mostrando detalles de cita ID:', aptId);
-            console.log('📋 Datos de la cita:', aptsInSlot[0]);
             showAppointmentDetails(aptId);
             return;
         }
@@ -346,15 +353,18 @@ async function handleHourClick(dateStr, hour, minute = 0) {
 }
 
 
+
 // ============================================
 // FUNCIÓN AUXILIAR: Obtener citas en un slot específico
 // ============================================
 async function getAppointmentsForSlot(date, hour, minute = 0) {
     try {
-        const slotStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, minute, 0);
+        const slotStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, minute, 0, 0);
         const slotEnd = new Date(slotStart.getTime() + BUSINESS_HOURS.interval * 60000);
 
-        console.log('🔍 Buscando citas para slot:', {
+        console.log('🔍 Buscando citas para:', {
+            fecha: date.toLocaleDateString('es-ES'),
+            hora: `${hour}:${String(minute).padStart(2, '0')}`,
             slotStart: slotStart.toLocaleString('es-ES'),
             slotEnd: slotEnd.toLocaleString('es-ES')
         });
@@ -367,42 +377,51 @@ async function getAppointmentsForSlot(date, hour, minute = 0) {
         }
 
         const citasFromApi = await response.json();
-        console.log('📦 Total de citas recibidas:', citasFromApi.length);
+        console.log('📦 Total de citas:', citasFromApi.length);
 
-        // Filtrar citas que coincidan con el slot
-        const citasFiltradas = citasFromApi.filter(apt => {
+        // Filtrar solo las del mismo día primero
+        const citasDelDia = citasFromApi.filter(apt => {
+            const aptStart = parseDate(apt.fecha, apt.hora);
+            const mismoAnio = aptStart.getFullYear() === date.getFullYear();
+            const mismoMes = aptStart.getMonth() === date.getMonth();
+            const mismoDia = aptStart.getDate() === date.getDate();
+            
+            return mismoAnio && mismoMes && mismoDia;
+        });
+
+        console.log(`📅 Citas del día ${date.toLocaleDateString('es-ES')}:`, citasDelDia.length);
+
+        // Ahora filtrar por hora y solapamiento
+        const citasFiltradas = citasDelDia.filter(apt => {
             // Solo considerar citas activas (no canceladas)
             if (!['Reservada', 'Confirmada', 'En Proceso', 'Finalizada'].includes(apt.status)) {
                 return false;
             }
 
-            // Parsear la fecha de la cita (formato DD/MM/YYYY y HH:MM)
+            // Parsear la fecha de la cita
             const aptStart = parseDate(apt.fecha, apt.hora);
             const aptEnd = new Date(aptStart.getTime() + apt.duracion * 60000);
-
-            console.log('🔎 Evaluando cita:', {
-                client: apt.client,
-                fecha: apt.fecha,
-                hora: apt.hora,
-                aptStart: aptStart.toLocaleString('es-ES'),
-                aptEnd: aptEnd.toLocaleString('es-ES'),
-                duracion: apt.duracion + 'min'
-            });
 
             // Verificar si hay solapamiento entre el slot y la cita
             const hasOverlap = !(aptEnd <= slotStart || aptStart >= slotEnd);
             
             if (hasOverlap) {
-                console.log('✅ ¡Cita encontrada en este slot!');
+                console.log('✅ Cita encontrada:', {
+                    client: apt.client,
+                    hora: apt.hora,
+                    duracion: apt.duracion + 'min',
+                    inicio: aptStart.toLocaleTimeString('es-ES'),
+                    fin: aptEnd.toLocaleTimeString('es-ES')
+                });
             }
 
             return hasOverlap;
         });
 
-        console.log(`📊 Resultado: ${citasFiltradas.length} cita(s) en este horario`);
+        console.log(`🎯 Total citas en este slot:`, citasFiltradas.length);
         return citasFiltradas;
     } catch (error) {
-        console.error('Error en getAppointmentsForSlot:', error);
+        console.error('❌ Error en getAppointmentsForSlot:', error);
         return [];
     }
 }
