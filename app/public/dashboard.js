@@ -163,38 +163,11 @@ async function loadServicios() {
     }
 }
 
-function parseDate(fechaStr, horaStr) {
-    try {
-        let fecha;
-
-        if (fechaStr.includes('T')) {
-            // Caso ISO completo de Firebase
-            fecha = new Date(fechaStr);
-        } else if (fechaStr.includes('-')) {
-            // Caso yyyy-mm-dd
-            const [anio, mes, dia] = fechaStr.split('-').map(num => parseInt(num, 10));
-            fecha = new Date(anio, mes - 1, dia);
-        } else {
-            // Caso dd/mm/yyyy
-            const [dia, mes, anio] = fechaStr.split('/').map(num => parseInt(num, 10));
-            fecha = new Date(anio, mes - 1, dia);
-        }
-
-        // Si horaStr viene separado (ej. "14:30")
-        if (horaStr) {
-            const [hora, minuto] = horaStr.split(':').map(num => parseInt(num, 10));
-            fecha.setHours(hora || 0, minuto || 0, 0, 0);
-        }
-
-        if (isNaN(fecha.getTime())) throw new Error('Fecha inválida');
-
-        return fecha;
-    } catch (error) {
-        console.error('Error parseando fecha:', fechaStr, horaStr, error);
-        return new Date();
-    }
+function parseDate(fechaStr, horaStr) {  
+    const [dia, mes, anio] = fechaStr.split('/').map(num => parseInt(num, 10));
+    const [hora, minuto] = horaStr.split(':').map(num => parseInt(num, 10));
+    return new Date(anio, mes - 1, dia, hora, minuto, 0);
 }
-
 
 // ============================================
 // FUNCIONES AUXILIARES
@@ -381,6 +354,11 @@ async function getAppointmentsForSlot(date, hour, minute = 0) {
         const slotStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, minute, 0);
         const slotEnd = new Date(slotStart.getTime() + BUSINESS_HOURS.interval * 60000);
 
+        console.log('🔍 Buscando citas para slot:', {
+            slotStart: slotStart.toLocaleString('es-ES'),
+            slotEnd: slotEnd.toLocaleString('es-ES')
+        });
+
         // Obtener todas las citas desde Firebase
         const response = await fetch('/api/citas');
         if (!response.ok) {
@@ -389,21 +367,40 @@ async function getAppointmentsForSlot(date, hour, minute = 0) {
         }
 
         const citasFromApi = await response.json();
+        console.log('📦 Total de citas recibidas:', citasFromApi.length);
 
         // Filtrar citas que coincidan con el slot
-        return citasFromApi.filter(apt => {
+        const citasFiltradas = citasFromApi.filter(apt => {
             // Solo considerar citas activas (no canceladas)
             if (!['Reservada', 'Confirmada', 'En Proceso', 'Finalizada'].includes(apt.status)) {
                 return false;
             }
 
-            // Parsear la fecha de la cita
+            // Parsear la fecha de la cita (formato DD/MM/YYYY y HH:MM)
             const aptStart = parseDate(apt.fecha, apt.hora);
             const aptEnd = new Date(aptStart.getTime() + apt.duracion * 60000);
 
+            console.log('🔎 Evaluando cita:', {
+                client: apt.client,
+                fecha: apt.fecha,
+                hora: apt.hora,
+                aptStart: aptStart.toLocaleString('es-ES'),
+                aptEnd: aptEnd.toLocaleString('es-ES'),
+                duracion: apt.duracion + 'min'
+            });
+
             // Verificar si hay solapamiento entre el slot y la cita
-            return !(aptEnd <= slotStart || aptStart >= slotEnd);
+            const hasOverlap = !(aptEnd <= slotStart || aptStart >= slotEnd);
+            
+            if (hasOverlap) {
+                console.log('✅ ¡Cita encontrada en este slot!');
+            }
+
+            return hasOverlap;
         });
+
+        console.log(`📊 Resultado: ${citasFiltradas.length} cita(s) en este horario`);
+        return citasFiltradas;
     } catch (error) {
         console.error('Error en getAppointmentsForSlot:', error);
         return [];
