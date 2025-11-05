@@ -254,11 +254,13 @@ function getMonday(date) {
     return new Date(d.setDate(diff));
 }
 
-function handleHourClick(dateStr, hour, minute = 0) {
+async function handleHourClick(dateStr, hour, minute = 0) {
     console.log('🖱️ Click en hora:', { dateStr, hour, minute });
 
     const date = new Date(dateStr);
-    const aptsInSlot = getAppointmentsForSlot(date, hour, minute);
+    
+    // Esperar a que se obtengan las citas desde Firebase
+    const aptsInSlot = await getAppointmentsForSlot(date, hour, minute);
     console.log('📊 Citas encontradas:', aptsInSlot);
     
     const isAvailable = aptsInSlot.length === 0;
@@ -279,28 +281,34 @@ function handleHourClick(dateStr, hour, minute = 0) {
         }
 
         // Si hay MÚLTIPLES citas: Mostrar lista para elegir
-        const citasHtml = aptsInSlot.map((apt) => `
-            <div style="background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 8px; cursor: pointer; border: 2px solid #e1e5f7; transition: all 0.2s;" 
-                 onmouseover="this.style.borderColor='#667eea'; this.style.background='#f0f4ff';" 
-                 onmouseout="this.style.borderColor='#e1e5f7'; this.style.background='#f8f9fa';"
-                 onclick="event.stopPropagation(); showAppointmentDetails('${apt.id}'); Swal.close();">
-                <div style="font-size: 1.1rem; margin-bottom: 8px;">
-                    <strong>👤 ${apt.client}</strong>
+        const citasHtml = aptsInSlot.map((apt) => {
+            // Parsear fecha y hora para mostrar
+            const aptStart = parseDate(apt.fecha, apt.hora);
+            const aptEnd = new Date(aptStart.getTime() + apt.duracion * 60000);
+            
+            return `
+                <div style="background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 8px; cursor: pointer; border: 2px solid #e1e5f7; transition: all 0.2s;" 
+                     onmouseover="this.style.borderColor='#667eea'; this.style.background='#f0f4ff';" 
+                     onmouseout="this.style.borderColor='#e1e5f7'; this.style.background='#f8f9fa';"
+                     onclick="event.stopPropagation(); showAppointmentDetails('${apt.id}'); Swal.close();">
+                    <div style="font-size: 1.1rem; margin-bottom: 8px;">
+                        <strong>👤 ${apt.client}</strong>
+                    </div>
+                    <div style="margin-bottom: 5px;">
+                        ✂️ ${apt.service} (${apt.duracion}min)
+                    </div>
+                    <div style="margin-bottom: 5px; color: #666;">
+                        🕐 ${aptStart.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} - ${aptEnd.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                    <div style="margin-bottom: 5px;">
+                        📞 ${apt.telefono || 'No disponible'}
+                    </div>
+                    <div style="font-size: 0.85rem; padding: 5px 10px; background: ${getStatusColor(apt.status)}; border-radius: 4px; display: inline-block; color: white;">
+                        📊 ${apt.status}
+                    </div>
                 </div>
-                <div style="margin-bottom: 5px;">
-                    ✂️ ${apt.service} (${apt.duracion}min)
-                </div>
-                <div style="margin-bottom: 5px; color: #666;">
-                    🕐 ${apt.date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} - ${apt.endTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                </div>
-                <div style="margin-bottom: 5px;">
-                    📞 ${apt.telefono || 'No disponible'}
-                </div>
-                <div style="font-size: 0.85rem; padding: 5px 10px; background: ${getStatusColor(apt.status)}; border-radius: 4px; display: inline-block; color: white;">
-                    📊 ${apt.status}
-                </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
 
         Swal.fire({
             title: `📋 Citas en este horario (${aptsInSlot.length})`,
@@ -363,6 +371,7 @@ function handleHourClick(dateStr, hour, minute = 0) {
         }
     });
 }
+
 
 // ============================================
 // FUNCIÓN AUXILIAR: Obtener citas en un slot específico
@@ -583,19 +592,31 @@ function createDayCard(date, esLaborable = true) {
     const hoursContainer = document.createElement('div');
     hoursContainer.className = 'hours-container';
 
-    // Generar slots de horas
+     // Generar slots de horas
     for (let hour = BUSINESS_HOURS.start; hour < BUSINESS_HOURS.end; hour++) {
         for (let minute = 0; minute < 60; minute += BUSINESS_HOURS.interval) {
-            const aptsInSlot = getAppointmentsForSlot(date, hour, minute);
+            // Contar citas localmente desde el array appointments para el renderizado inicial
+            const slotStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, minute, 0);
+            const slotEnd = new Date(slotStart.getTime() + BUSINESS_HOURS.interval * 60000);
+            
+            const aptsInSlot = appointments.filter(apt => {
+                if (!['Reservada', 'Confirmada', 'En Proceso', 'Finalizada'].includes(apt.status)) {
+                    return false;
+                }
+                const aptStart = apt.date;
+                const aptEnd = apt.endTime;
+                return !(aptEnd <= slotStart || aptStart >= slotEnd);
+            });
+            
             const isAvailable = aptsInSlot.length === 0;
 
             const slotDiv = document.createElement('div');
             slotDiv.className = `hour-slot ${isAvailable ? 'available' : 'fully-booked'}`;
             
             // Agregar event listener en lugar de onclick inline
-            slotDiv.addEventListener('click', () => {
-                console.log('🖱️ Click en slot:', { date, hour, minute, aptsInSlot });
-                handleHourClick(date.toISOString().split('T')[0], hour, minute);
+            slotDiv.addEventListener('click', async () => {
+                console.log('🖱️ Click en slot:', { date, hour, minute });
+                await handleHourClick(date.toISOString().split('T')[0], hour, minute);
             });
 
             const hourStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
