@@ -3168,47 +3168,105 @@ async function editarGasto(id) {
         Swal.fire({
             title: '✏️ Editar Gasto',
             html: `
-                <div style="text-align: left;">
-                    <label for="edit-descripcion">Descripción:</label>
-                    <input id="edit-descripcion" class="swal2-input" value="${gasto.descripcion}">
+                <div style="text-align: left; padding: 20px;">
+                    <div style="margin-bottom: 20px;">
+                        <label for="edit-descripcion" style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">
+                            📝 Descripción
+                        </label>
+                        <input id="edit-descripcion" 
+                               class="swal2-input" 
+                               placeholder="Ej: Comida, Gasolina, etc."
+                               value="${gasto.descripcion}"
+                               style="width: 100%; margin: 0; padding: 12px; border: 2px solid #e1e5f7; border-radius: 8px; font-size: 1rem;">
+                    </div>
                     
-                    <label for="edit-monto">Monto:</label>
-                    <input id="edit-monto" type="number" step="0.01" class="swal2-input" value="${gasto.monto}">
+                    <div style="margin-bottom: 20px;">
+                        <label for="edit-monto" style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">
+                            💵 Monto
+                        </label>
+                        <input id="edit-monto" 
+                               type="number" 
+                               step="0.01" 
+                               class="swal2-input" 
+                               placeholder="0.00"
+                               value="${gasto.monto}"
+                               style="width: 100%; margin: 0; padding: 12px; border: 2px solid #e1e5f7; border-radius: 8px; font-size: 1rem;">
+                    </div>
                     
-                    <label for="edit-categoria">Categoría:</label>
-                    <select id="edit-categoria" class="swal2-select">
-                        <option value="Comida" ${gasto.categoria === 'Comida' ? 'selected' : ''}>🍔 Comida</option>
-                        <option value="Transporte" ${gasto.categoria === 'Transporte' ? 'selected' : ''}>🚗 Transporte</option>
-                        <option value="Entretenimiento" ${gasto.categoria === 'Entretenimiento' ? 'selected' : ''}>🎬 Entretenimiento</option>
-                        <option value="Salud" ${gasto.categoria === 'Salud' ? 'selected' : ''}>💊 Salud</option>
-                        <option value="Educación" ${gasto.categoria === 'Educación' ? 'selected' : ''}>📚 Educación</option>
-                        <option value="Hogar" ${gasto.categoria === 'Hogar' ? 'selected' : ''}>🏠 Hogar</option>
-                        <option value="Ropa" ${gasto.categoria === 'Ropa' ? 'selected' : ''}>👕 Ropa</option>
-                        <option value="Servicios" ${gasto.categoria === 'Servicios' ? 'selected' : ''}>🔧 Servicios</option>
-                        <option value="Otros" ${gasto.categoria === 'Otros' ? 'selected' : ''}>📦 Otros</option>
-                    </select>
+                    <div style="margin-bottom: 20px;">
+                        <label for="edit-categoria" style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">
+                            🏷️ Categoría
+                        </label>
+                        <select id="edit-categoria" 
+                                class="swal2-select"
+                                style="width: 100%; margin: 0; padding: 12px; border: 2px solid #e1e5f7; border-radius: 8px; font-size: 1rem; background: white;">
+                            <option value="Comida" ${gasto.categoria === 'Comida' ? 'selected' : ''}>🍔 Comida</option>
+                            <option value="Transporte" ${gasto.categoria === 'Transporte' ? 'selected' : ''}>🚗 Transporte</option>
+                            <option value="Entretenimiento" ${gasto.categoria === 'Entretenimiento' ? 'selected' : ''}>🎬 Entretenimiento</option>
+                            <option value="Salud" ${gasto.categoria === 'Salud' ? 'selected' : ''}>💊 Salud</option>
+                            <option value="Educación" ${gasto.categoria === 'Educación' ? 'selected' : ''}>📚 Educación</option>
+                            <option value="Hogar" ${gasto.categoria === 'Hogar' ? 'selected' : ''}>🏠 Hogar</option>
+                            <option value="Ropa" ${gasto.categoria === 'Ropa' ? 'selected' : ''}>👕 Ropa</option>
+                            <option value="Servicios" ${gasto.categoria === 'Servicios' ? 'selected' : ''}>🔧 Servicios</option>
+                            <option value="Otros" ${gasto.categoria === 'Otros' ? 'selected' : ''}>📦 Otros</option>
+                        </select>
+                    </div>
                     
-                    <label for="edit-fecha">Fecha:</label>
-                    <input id="edit-fecha" type="date" class="swal2-input" value="${gasto.fecha}">
+                    <div style="margin-bottom: 20px;">
+                        <label for="edit-fecha" style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">
+                            📅 Fecha
+                        </label>
+                        <input id="edit-fecha" 
+                               type="date" 
+                               class="swal2-input" 
+                               value="${gasto.fecha}"
+                               style="width: 100%; margin: 0; padding: 12px; border: 2px solid #e1e5f7; border-radius: 8px; font-size: 1rem;">
+                    </div>
                     
-                    <label for="edit-notas">Notas:</label>
-                    <textarea id="edit-notas" class="swal2-textarea">${gasto.notas || ''}</textarea>
+                    <div style="margin-bottom: 0;">
+                        <label for="edit-notas" style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">
+                            📋 Notas <span style="font-weight: normal; color: #999;">(opcional)</span>
+                        </label>
+                        <textarea id="edit-notas" 
+                                  class="swal2-textarea" 
+                                  placeholder="Notas adicionales"
+                                  style="width: 100%; margin: 0; padding: 12px; border: 2px solid #e1e5f7; border-radius: 8px; font-size: 1rem; min-height: 80px; resize: vertical;">${gasto.notas || ''}</textarea>
+                    </div>
                 </div>
             `,
             confirmButtonText: '💾 Guardar Cambios',
             showCancelButton: true,
-            cancelButtonText: 'Cancelar',
+            cancelButtonText: '❌ Cancelar',
+            confirmButtonColor: '#28a745',
+            cancelButtonColor: '#6c757d',
             width: '600px',
             customClass: {
                 container: 'swal-on-top'
             },
-            preConfirm: () => ({
-                descripcion: document.getElementById('edit-descripcion').value.trim(),
-                monto: parseFloat(document.getElementById('edit-monto').value || 0),
-                categoria: document.getElementById('edit-categoria').value,
-                fecha: document.getElementById('edit-fecha').value,
-                notas: document.getElementById('edit-notas').value.trim()
-            })
+            preConfirm: () => {
+                const descripcion = document.getElementById('edit-descripcion').value.trim();
+                const monto = parseFloat(document.getElementById('edit-monto').value || 0);
+                const categoria = document.getElementById('edit-categoria').value;
+                const fecha = document.getElementById('edit-fecha').value;
+                const notas = document.getElementById('edit-notas').value.trim();
+
+                if (!descripcion) {
+                    Swal.showValidationMessage('❗ Por favor ingresa una descripción');
+                    return false;
+                }
+
+                if (!categoria) {
+                    Swal.showValidationMessage('❗ Por favor selecciona una categoría');
+                    return false;
+                }
+
+                if (!monto || monto <= 0) {
+                    Swal.showValidationMessage('❗ El monto debe ser mayor a 0');
+                    return false;
+                }
+
+                return { descripcion, monto, categoria, fecha, notas };
+            }
         }).then(async (r) => {
             if (r.isConfirmed) {
                 const res = await fetch(`/api/gastos/${id}`, {
@@ -3223,6 +3281,7 @@ async function editarGasto(id) {
                         title: '✅ Actualizado',
                         text: 'Gasto modificado exitosamente',
                         timer: 2000,
+                        showConfirmButton: false,
                         customClass: { container: 'swal-on-top' }
                     });
                     cargarGastos();
@@ -3231,6 +3290,7 @@ async function editarGasto(id) {
                         icon: 'error',
                         title: '❌ Error',
                         text: data.error || 'No se pudo actualizar',
+                        confirmButtonColor: '#dc3545',
                         customClass: { container: 'swal-on-top' }
                     });
                 }
@@ -3241,6 +3301,7 @@ async function editarGasto(id) {
             icon: 'error',
             title: '❌ Error',
             text: 'No se pudo editar el gasto',
+            confirmButtonColor: '#dc3545',
             customClass: { container: 'swal-on-top' }
         });
     }
