@@ -2470,36 +2470,58 @@ async function editarDeuda(id) {
             html: `
                 <div class="text-start" style="max-width: 500px; margin: 0 auto;">
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Nombre del Pago *</label>
-                        <input type="text" id="nombre-deuda" class="form-control" value="${deuda.nombre}">
+                        <label class="form-label fw-bold text-dark">Nombre del Pago *</label>
+                        <input type="text" id="nombre-deuda" class="form-control form-control-lg shadow-sm" 
+                               value="${deuda.nombre}" placeholder="Ej: Renta de departamento">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Tipo de Pago *</label>
-                        <select id="tipo-deuda" class="form-control">${opcionesTipo}</select>
+                        <label class="form-label fw-bold text-dark">Tipo de Pago *</label>
+                        <select id="tipo-deuda" class="form-select form-select-lg shadow-sm">
+                            ${opcionesTipo}
+                        </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Día de Pago (1-31) *</label>
-                        <input type="number" id="dia-pago" class="form-control" min="1" max="31" value="${deuda.diaPago}">
+                        <label class="form-label fw-bold text-dark">Día de Pago (1-31) *</label>
+                        <input type="number" id="dia-pago" class="form-control form-control-lg shadow-sm" 
+                               min="1" max="31" value="${deuda.diaPago}" placeholder="Ej: 15">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Monto *</label>
-                        <input type="number" id="monto-deuda" class="form-control" step="0.01" value="${deuda.monto}">
+                        <label class="form-label fw-bold text-dark">Monto *</label>
+                        <div class="input-group input-group-lg shadow-sm">
+                            <span class="input-group-text bg-light">$</span>
+                            <input type="number" id="monto-deuda" class="form-control" 
+                                   step="0.01" value="${deuda.monto}" placeholder="0.00">
+                        </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Notas (opcional)</label>
-                        <textarea id="notas-deuda" class="form-control" rows="2">${deuda.notas || ''}</textarea>
+                        <label class="form-label fw-bold text-dark">Notas (opcional)</label>
+                        <textarea id="notas-deuda" class="form-control shadow-sm" rows="3" 
+                                  placeholder="Añade información adicional...">${deuda.notas || ''}</textarea>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Pagado</label>
-                        <input type="checkbox" id="pagado-deuda" ${deuda.pagado ? 'checked' : ''}>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" 
+                                   id="pagado-deuda" ${deuda.pagado ? 'checked' : ''} 
+                                   style="width: 3em; height: 1.5em; cursor: pointer;">
+                            <label class="form-check-label fw-bold text-dark ms-2" for="pagado-deuda" 
+                                   style="cursor: pointer;">
+                                Marcar como pagado
+                            </label>
+                        </div>
                     </div>
                 </div>
             `,
             confirmButtonText: '💾 Guardar Cambios',
+            confirmButtonColor: '#198754',
             showCancelButton: true,
             cancelButtonText: 'Cancelar',
+            cancelButtonColor: '#6c757d',
             width: '600px',
-            customClass: { container: 'swal-on-top' },
+            customClass: { 
+                container: 'swal-on-top',
+                confirmButton: 'btn btn-success btn-lg px-4',
+                cancelButton: 'btn btn-secondary btn-lg px-4'
+            },
             preConfirm: () => {
                 const nombre = document.getElementById('nombre-deuda').value.trim();
                 const tipo = document.getElementById('tipo-deuda').value;
@@ -2545,6 +2567,7 @@ async function editarDeuda(id) {
                     title: '✅ Actualizado',
                     text: 'Pago modificado exitosamente',
                     timer: 2000,
+                    showConfirmButton: false,
                     customClass: { container: 'swal-on-top' }
                 });
                 cargarDeudas();
@@ -2553,6 +2576,7 @@ async function editarDeuda(id) {
                     icon: 'error',
                     title: '❌ Error',
                     text: data.error || 'No se pudo actualizar',
+                    confirmButtonColor: '#dc3545',
                     customClass: { container: 'swal-on-top' }
                 });
             }
