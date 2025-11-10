@@ -2468,43 +2468,97 @@ async function editarDeuda(id) {
         const { value: formValues } = await Swal.fire({
             title: '✏️ Editar Pago',
             html: `
+                <style>
+                    .swal2-html-container input.form-control,
+                    .swal2-html-container select.form-select,
+                    .swal2-html-container textarea.form-control {
+                        padding: 0.75rem 1rem !important;
+                        font-size: 1.1rem !important;
+                        border: 1px solid #ced4da !important;
+                        border-radius: 0.5rem !important;
+                        transition: all 0.2s !important;
+                        width: 100% !important;
+                        box-sizing: border-box !important;
+                    }
+                    
+                    .swal2-html-container input.form-control:focus,
+                    .swal2-html-container select.form-select:focus,
+                    .swal2-html-container textarea.form-control:focus {
+                        border-color: #86b7fe !important;
+                        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+                        outline: 0 !important;
+                    }
+                    
+                    .swal2-html-container .input-group-text {
+                        padding: 0.75rem 1rem !important;
+                        font-size: 1.1rem !important;
+                        background-color: #e9ecef !important;
+                        border: 1px solid #ced4da !important;
+                        border-radius: 0.5rem 0 0 0.5rem !important;
+                    }
+                    
+                    .swal2-html-container .input-group input {
+                        border-radius: 0 0.5rem 0.5rem 0 !important;
+                    }
+                    
+                    .swal2-html-container .form-check-input {
+                        width: 3em !important;
+                        height: 1.5em !important;
+                        cursor: pointer !important;
+                        border: 1px solid #ced4da !important;
+                    }
+                    
+                    .swal2-html-container .form-check-label {
+                        cursor: pointer !important;
+                        font-size: 1rem !important;
+                        margin-left: 0.5rem !important;
+                    }
+                    
+                    .swal2-html-container .form-label {
+                        margin-bottom: 0.5rem !important;
+                        font-size: 0.95rem !important;
+                        color: #212529 !important;
+                    }
+                    
+                    .swal2-html-container .shadow-sm {
+                        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075) !important;
+                    }
+                </style>
                 <div class="text-start" style="max-width: 500px; margin: 0 auto;">
                     <div class="mb-3">
-                        <label class="form-label fw-bold text-dark">Nombre del Pago *</label>
-                        <input type="text" id="nombre-deuda" class="form-control form-control-lg shadow-sm" 
+                        <label class="form-label fw-bold">Nombre del Pago *</label>
+                        <input type="text" id="nombre-deuda" class="form-control shadow-sm" 
                                value="${deuda.nombre}" placeholder="Ej: Renta de departamento">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-bold text-dark">Tipo de Pago *</label>
-                        <select id="tipo-deuda" class="form-select form-select-lg shadow-sm">
+                        <label class="form-label fw-bold">Tipo de Pago *</label>
+                        <select id="tipo-deuda" class="form-select shadow-sm">
                             ${opcionesTipo}
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-bold text-dark">Día de Pago (1-31) *</label>
-                        <input type="number" id="dia-pago" class="form-control form-control-lg shadow-sm" 
+                        <label class="form-label fw-bold">Día de Pago (1-31) *</label>
+                        <input type="number" id="dia-pago" class="form-control shadow-sm" 
                                min="1" max="31" value="${deuda.diaPago}" placeholder="Ej: 15">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-bold text-dark">Monto *</label>
-                        <div class="input-group input-group-lg shadow-sm">
-                            <span class="input-group-text bg-light">$</span>
+                        <label class="form-label fw-bold">Monto *</label>
+                        <div class="input-group shadow-sm">
+                            <span class="input-group-text">$</span>
                             <input type="number" id="monto-deuda" class="form-control" 
                                    step="0.01" value="${deuda.monto}" placeholder="0.00">
                         </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-bold text-dark">Notas (opcional)</label>
+                        <label class="form-label fw-bold">Notas (opcional)</label>
                         <textarea id="notas-deuda" class="form-control shadow-sm" rows="3" 
                                   placeholder="Añade información adicional...">${deuda.notas || ''}</textarea>
                     </div>
                     <div class="mb-3">
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" role="switch" 
-                                   id="pagado-deuda" ${deuda.pagado ? 'checked' : ''} 
-                                   style="width: 3em; height: 1.5em; cursor: pointer;">
-                            <label class="form-check-label fw-bold text-dark ms-2" for="pagado-deuda" 
-                                   style="cursor: pointer;">
+                                   id="pagado-deuda" ${deuda.pagado ? 'checked' : ''}>
+                            <label class="form-check-label fw-bold" for="pagado-deuda">
                                 Marcar como pagado
                             </label>
                         </div>
@@ -2516,11 +2570,9 @@ async function editarDeuda(id) {
             showCancelButton: true,
             cancelButtonText: 'Cancelar',
             cancelButtonColor: '#6c757d',
-            width: '600px',
+            width: '650px',
             customClass: { 
-                container: 'swal-on-top',
-                confirmButton: 'btn btn-success btn-lg px-4',
-                cancelButton: 'btn btn-secondary btn-lg px-4'
+                container: 'swal-on-top'
             },
             preConfirm: () => {
                 const nombre = document.getElementById('nombre-deuda').value.trim();
@@ -2548,7 +2600,6 @@ async function editarDeuda(id) {
         });
 
         if (formValues) {
-            // Enviar solo campos definidos al PUT
             const datosActualizar = {};
             for (const key in formValues) {
                 if (formValues[key] !== undefined) datosActualizar[key] = formValues[key];
