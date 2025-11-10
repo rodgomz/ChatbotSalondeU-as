@@ -9,6 +9,7 @@ let clientes = [];
 let servicios = [];
 let deudas = [];
 let notificacionesPendientes = [];
+let deudasBackup = null;
 
 // ============================================
 // CONFIGURACIONES GLOBALES
@@ -2138,7 +2139,6 @@ async function agregarDeuda() {
                 <div class="mb-3">
                     <label class="form-label fw-bold">Monto *</label>
                     <div class="input-group shadow-sm">
-                        <span class="input-group-text">$</span>
                         <input type="number" id="monto-deuda" class="form-control" 
                                step="0.01" placeholder="0.00">
                     </div>
@@ -2368,8 +2368,10 @@ function filtrarPorTipo(tipo) {
     const deudasFiltradas = deudas.filter(d => d.tipo === tipo);
     const contenedor = document.getElementById('deudas-grid');
 
-    // Usar la función renderizarDeudas pero con datos filtrados
-    const deudasBackup = [...deudas];
+    // Guardar backup antes de filtrar
+    deudasBackup = [...deudas];
+    
+    // Filtrar y renderizar
     deudas = deudasFiltradas;
     renderizarDeudas();
 
@@ -2379,13 +2381,23 @@ function filtrarPorTipo(tipo) {
     btnVerTodos.style.textAlign = 'center';
     btnVerTodos.style.marginTop = '20px';
     btnVerTodos.innerHTML = `
-        <button class="btn btn-secondary" onclick="deudas = ${JSON.stringify(deudasBackup)}; renderizarDeudas(); cargarResumenDeudas();">
+        <button class="btn btn-secondary btn-lg" onclick="restaurarTodosLosPagos()">
             🔙 Ver Todos los Pagos
         </button>
     `;
     contenedor.appendChild(btnVerTodos);
 
     Swal.close();
+}
+
+
+// Función global para restaurar todos los pagos
+function restaurarTodosLosPagos() {
+    if (deudasBackup) {
+        deudas = [...deudasBackup];
+        deudasBackup = null;
+    }
+    cargarDeudas();
 }
 
 // Resetear todos los pagos del mes
