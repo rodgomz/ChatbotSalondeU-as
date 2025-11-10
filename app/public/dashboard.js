@@ -2074,36 +2074,88 @@ async function agregarDeuda() {
     Swal.fire({
         title: '➕ Agregar Nuevo Pago',
         html: `
+            <style>
+                .swal2-html-container input.form-control,
+                .swal2-html-container select.form-select,
+                .swal2-html-container textarea.form-control {
+                    padding: 0.75rem 1rem !important;
+                    font-size: 1.1rem !important;
+                    border: 1px solid #ced4da !important;
+                    border-radius: 0.5rem !important;
+                    transition: all 0.2s !important;
+                    width: 100% !important;
+                    box-sizing: border-box !important;
+                }
+                
+                .swal2-html-container input.form-control:focus,
+                .swal2-html-container select.form-select:focus,
+                .swal2-html-container textarea.form-control:focus {
+                    border-color: #86b7fe !important;
+                    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+                    outline: 0 !important;
+                }
+                
+                .swal2-html-container .input-group-text {
+                    padding: 0.75rem 1rem !important;
+                    font-size: 1.1rem !important;
+                    background-color: #e9ecef !important;
+                    border: 1px solid #ced4da !important;
+                    border-radius: 0.5rem 0 0 0.5rem !important;
+                }
+                
+                .swal2-html-container .input-group input {
+                    border-radius: 0 0.5rem 0.5rem 0 !important;
+                }
+                
+                .swal2-html-container .form-label {
+                    margin-bottom: 0.5rem !important;
+                    font-size: 0.95rem !important;
+                    color: #212529 !important;
+                }
+                
+                .swal2-html-container .shadow-sm {
+                    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075) !important;
+                }
+            </style>
             <div class="text-start" style="max-width: 500px; margin: 0 auto;">
                 <div class="mb-3">
                     <label class="form-label fw-bold">Nombre del Pago *</label>
-                    <input type="text" id="nombre-deuda" class="form-control" placeholder="Ej: Renta departamento">
+                    <input type="text" id="nombre-deuda" class="form-control shadow-sm" 
+                           placeholder="Ej: Renta departamento">
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-bold">Tipo de Pago *</label>
-                    <select id="tipo-deuda" class="form-control">
+                    <select id="tipo-deuda" class="form-select shadow-sm">
                         <option value="">Seleccionar tipo...</option>
                         ${opcionesTipo}
                     </select>
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-bold">Día de Pago (1-31) *</label>
-                    <input type="number" id="dia-pago" class="form-control" min="1" max="31" placeholder="15">
+                    <input type="number" id="dia-pago" class="form-control shadow-sm" 
+                           min="1" max="31" placeholder="Ej: 15">
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-bold">Monto *</label>
-                    <input type="number" id="monto-deuda" class="form-control" step="0.01" placeholder="0.00">
+                    <div class="input-group shadow-sm">
+                        <span class="input-group-text">$</span>
+                        <input type="number" id="monto-deuda" class="form-control" 
+                               step="0.01" placeholder="0.00">
+                    </div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-bold">Notas (opcional)</label>
-                    <textarea id="notas-deuda" class="form-control" rows="2" placeholder="Información adicional..."></textarea>
+                    <textarea id="notas-deuda" class="form-control shadow-sm" rows="3" 
+                              placeholder="Añade información adicional..."></textarea>
                 </div>
             </div>
         `,
         confirmButtonText: '💾 Guardar Pago',
+        confirmButtonColor: '#198754',
         showCancelButton: true,
         cancelButtonText: 'Cancelar',
-        width: '600px',
+        cancelButtonColor: '#6c757d',
+        width: '650px',
         customClass: {
             container: 'swal-on-top'
         },
@@ -2138,6 +2190,7 @@ async function agregarDeuda() {
                     title: '✅ ¡Guardado!',
                     text: 'Pago agregado exitosamente',
                     timer: 2000,
+                    showConfirmButton: false,
                     customClass: { container: 'swal-on-top' }
                 });
                 cargarDeudas();
@@ -2146,6 +2199,7 @@ async function agregarDeuda() {
                     icon: 'error',
                     title: '❌ Error',
                     text: data.error || 'No se pudo guardar',
+                    confirmButtonColor: '#dc3545',
                     customClass: { container: 'swal-on-top' }
                 });
             }
@@ -2544,7 +2598,6 @@ async function editarDeuda(id) {
                     <div class="mb-3">
                         <label class="form-label fw-bold">Monto *</label>
                         <div class="input-group shadow-sm">
-                            <span class="input-group-text">$</span>
                             <input type="number" id="monto-deuda" class="form-control" 
                                    step="0.01" value="${deuda.monto}" placeholder="0.00">
                         </div>
