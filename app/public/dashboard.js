@@ -8,14 +8,7 @@ let appointments = [];
 let clientes = [];
 let servicios = [];
 let deudas = [];
-let MAX_APPOINTMENTS_PER_SLOT = 1; // Default
-let configuracionLimites = {
-    limitePorSlot: 1,
-    limitesPorDia: {}, // Opcional: límites específicos por día de la semana
-    limitesPorHora: {} // Opcional: límites específicos por hora
-};
 let notificacionesPendientes = [];
-let deudasBackup = null;
 
 // ============================================
 // CONFIGURACIONES GLOBALES
@@ -43,17 +36,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Renderizar interfaz
     renderWeek();
     updateCalendarDisplay();
-    loadWeeklyEarnings();
-    loadDailyEarnings();
     updateAppointmentList();
     inicializarDeudas();
     verificarNotificaciones();
-    actualizarHeaderDesdeFirebase();
+    
     // Configurar intervalos
     setInterval(loadBotStatus, 10000);
     setInterval(loadAppointments, 120000);
     setInterval(verificarNotificaciones, 3600000);
-
+    
     // Event listeners globales
     document.addEventListener('click', (e) => {
         const profileMenu = document.getElementById('profile-dropdown');
@@ -62,9 +53,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             profileMenu.classList.remove('show');
         }
     });
-
+    
     // Event listeners para gastos
-    document.addEventListener('keydown', function (e) {
+    document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             const gastosPage = document.getElementById('gastos-page');
             if (gastosPage && gastosPage.classList.contains('active')) {
@@ -72,258 +63,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
     });
-
-    document.addEventListener('click', function (e) {
+    
+    document.addEventListener('click', function(e) {
         const gastosPage = document.getElementById('gastos-page');
         if (e.target === gastosPage) {
             cerrarGastos();
         }
     });
-
+    
     // Agregar estilos CSS
     agregarEstilosCSS();
 });
 
 
-async function cargarConfiguracionLimites() {
-    try {
-        const response = await fetch('/api/configuracion/limites');
-        if (response.ok) {
-            const config = await response.json();
-            configuracionLimites = config;
-            MAX_APPOINTMENTS_PER_SLOT = config.limitePorSlot || 1;
-            console.log('✅ Configuración de límites cargada:', configuracionLimites);
-        }
-    } catch (error) {
-        console.warn('⚠️ No se pudo cargar configuración de límites, usando default:', error);
-    }
-}
-
-async function guardarConfiguracionLimites(config) {
-    try {
-        const response = await fetch('/api/configuracion/limites', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(config)
-        });
-        
-        if (response.ok) {
-            configuracionLimites = config;
-            MAX_APPOINTMENTS_PER_SLOT = config.limitePorSlot;
-            return true;
-        }
-        return false;
-    } catch (error) {
-        console.error('❌ Error guardando configuración:', error);
-        return false;
-    }
-}
-function obtenerLimiteParaSlot(fecha, hora) {
-    // 1. Verificar si hay límite específico para esta hora
-    const horaKey = `${hora}:00`;
-    if (configuracionLimites.limitesPorHora && configuracionLimites.limitesPorHora[horaKey]) {
-        return configuracionLimites.limitesPorHora[horaKey];
-    }
-    
-    // 2. Verificar si hay límite específico para este día de la semana
-    const diaSemana = fecha.getDay(); // 0 = Domingo, 1 = Lunes, etc.
-    if (configuracionLimites.limitesPorDia && configuracionLimites.limitesPorDia[diaSemana]) {
-        return configuracionLimites.limitesPorDia[diaSemana];
-    }
-    
-    // 3. Usar límite general
-    return configuracionLimites.limitePorSlot || MAX_APPOINTMENTS_PER_SLOT;
-}
 
 
-
-// ============================================
-// MODAL DE CONFIGURACIÓN
-// ============================================
-
-function mostrarConfiguracionLimites() {
-    const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-    
-    // Generar opciones de días
-    const diasHtml = diasSemana.map((dia, index) => {
-        const limite = configuracionLimites.limitesPorDia?.[index] || '';
-        return `
-            <div class="form-row" style="display: flex; align-items: center; margin-bottom: 10px;">
-                <label style="flex: 1; margin: 0;">${dia}:</label>
-                <input type="number" 
-                       id="limite-dia-${index}" 
-                       class="form-control" 
-                       min="1" 
-                       max="20" 
-                       placeholder="Usar general"
-                       value="${limite}"
-                       style="width: 100px;">
-            </div>
-        `;
-    }).join('');
-    
-    // Generar opciones de horas pico
-    const horasPicoHtml = `
-        <div style="margin-top: 15px;">
-            <h6>⏰ Horas Pico (opcional)</h6>
-            <p style="font-size: 0.9em; color: #666;">Define límites específicos para horas con alta demanda</p>
-            <div id="horas-pico-container">
-                ${generarFilasHorasPico()}
-            </div>
-            <button type="button" onclick="agregarHoraPico()" class="btn btn-sm btn-secondary" style="margin-top: 10px;">
-                ➕ Agregar Hora Pico
-            </button>
-        </div>
-    `;
-    
-    Swal.fire({
-        title: '⚙️ Configuración de Límites',
-        html: `
-            <div style="text-align: left;">
-                <div style="background: #e7f3ff; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                    <h6 style="margin-top: 0;">📊 Límite General</h6>
-                    <p style="margin-bottom: 10px; font-size: 0.9em; color: #666;">
-                        Número máximo de citas simultáneas por horario
-                    </p>
-                    <input type="number" 
-                           id="limite-general" 
-                           class="form-control" 
-                           min="1" 
-                           max="20" 
-                           value="${configuracionLimites.limitePorSlot || 1}"
-                           style="width: 100%; padding: 8px; font-size: 1.2em; text-align: center;">
-                </div>
-                
-                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                    <h6 style="margin-top: 0;">📅 Límites por Día de la Semana</h6>
-                    <p style="margin-bottom: 15px; font-size: 0.9em; color: #666;">
-                        Deja en blanco para usar el límite general
-                    </p>
-                    ${diasHtml}
-                </div>
-                
-                ${horasPicoHtml}
-            </div>
-        `,
-        width: '650px',
-        showCancelButton: true,
-        confirmButtonText: '💾 Guardar',
-        cancelButtonText: '❌ Cancelar',
-        confirmButtonColor: '#28a745',
-        preConfirm: () => {
-            const limiteGeneral = parseInt(document.getElementById('limite-general').value) || 1;
-            
-            // Recopilar límites por día
-            const limitesPorDia = {};
-            for (let i = 0; i < 7; i++) {
-                const valor = document.getElementById(`limite-dia-${i}`).value;
-                if (valor) {
-                    limitesPorDia[i] = parseInt(valor);
-                }
-            }
-            
-            // Recopilar límites por hora
-            const limitesPorHora = {};
-            document.querySelectorAll('.hora-pico-row').forEach(row => {
-                const hora = row.querySelector('.hora-pico').value;
-                const limite = row.querySelector('.limite-pico').value;
-                if (hora && limite) {
-                    limitesPorHora[hora] = parseInt(limite);
-                }
-            });
-            
-            return {
-                limitePorSlot: limiteGeneral,
-                limitesPorDia: Object.keys(limitesPorDia).length > 0 ? limitesPorDia : {},
-                limitesPorHora: Object.keys(limitesPorHora).length > 0 ? limitesPorHora : {}
-            };
-        }
-    }).then(async (result) => {
-        if (result.isConfirmed) {
-            const exito = await guardarConfiguracionLimites(result.value);
-            
-            if (exito) {
-                Swal.fire({
-                    icon: 'success',
-                    title: '✅ Configuración Guardada',
-                    text: 'Los límites se han actualizado correctamente',
-                    timer: 2000,
-                    showConfirmButton: false
-                });
-                
-                // Recargar vista para reflejar cambios
-                renderWeek();
-            } else {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: 'No se pudo guardar la configuración'
-                });
-            }
-        }
-    });
-}
-
-function generarFilasHorasPico() {
-    if (!configuracionLimites.limitesPorHora || Object.keys(configuracionLimites.limitesPorHora).length === 0) {
-        return '';
-    }
-    
-    return Object.entries(configuracionLimites.limitesPorHora).map(([hora, limite]) => `
-        <div class="hora-pico-row" style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
-            <select class="form-control hora-pico" style="flex: 1;">
-                ${generarOpcionesHoras(hora)}
-            </select>
-            <input type="number" 
-                   class="form-control limite-pico" 
-                   min="1" 
-                   max="20" 
-                   value="${limite}"
-                   style="width: 100px;">
-            <button type="button" 
-                    onclick="this.parentElement.remove()" 
-                    class="btn btn-sm btn-danger">
-                🗑️
-            </button>
-        </div>
-    `).join('');
-}
-
-function agregarHoraPico() {
-    const container = document.getElementById('horas-pico-container');
-    const nuevaFila = document.createElement('div');
-    nuevaFila.className = 'hora-pico-row';
-    nuevaFila.style.cssText = 'display: flex; gap: 10px; align-items: center; margin-bottom: 10px;';
-    nuevaFila.innerHTML = `
-        <select class="form-control hora-pico" style="flex: 1;">
-            ${generarOpcionesHoras()}
-        </select>
-        <input type="number" 
-               class="form-control limite-pico" 
-               min="1" 
-               max="20" 
-               placeholder="Límite"
-               style="width: 100px;">
-        <button type="button" 
-                onclick="this.parentElement.remove()" 
-                class="btn btn-sm btn-danger">
-            🗑️
-        </button>
-    `;
-    container.appendChild(nuevaFila);
-}
-
-function generarOpcionesHoras(horaSeleccionada = '') {
-    const opciones = [];
-    for (let h = BUSINESS_HOURS.start; h < BUSINESS_HOURS.end; h++) {
-        for (let m = 0; m < 60; m += BUSINESS_HOURS.interval) {
-            const hora = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-            const selected = hora === horaSeleccionada ? 'selected' : '';
-            opciones.push(`<option value="${hora}" ${selected}>${hora}</option>`);
-        }
-    }
-    return opciones.join('');
-}
 // ============================================
 // FUNCIONES DE CARGA
 // ============================================
@@ -331,17 +85,17 @@ async function loadBotStatus() {
     try {
         const response = await fetch('/api/bot-status');
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
+        
         const data = await response.json();
-
+        
         const statusElement = document.getElementById('bot-status');
         statusElement.textContent = data.isConnected ? '✅ Conectado' : '❌ Desconectado';
         statusElement.className = `status ${data.isConnected ? 'text-success' : 'text-danger'}`;
-
+        
         document.getElementById('chats-activos').textContent = data.chatsActivos || 0;
         document.getElementById('mensajes-enviados').textContent = data.mensajesEnviados || 0;
         document.getElementById('mensajes-recibidos').textContent = data.mensajesRecibidos || 0;
-
+        
         const qrContainer = document.getElementById('qr-container');
         if (data.qrCode) {
             qrContainer.innerHTML = `<img src="${data.qrCode}" class="qr-img">`;
@@ -361,13 +115,13 @@ async function loadAppointments() {
     try {
         const response = await fetch('/api/citas');
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
+        
         const data = await response.json();
-
+        
         appointments = data.map(apt => {
             const fecha = parseDate(apt.fecha, apt.hora);
             const duracion = apt.duracion || 60;
-
+            
             return {
                 ...apt,
                 date: fecha,
@@ -408,16 +162,35 @@ async function loadServicios() {
 }
 
 function parseDate(fechaStr, horaStr) {
-    // fechaStr puede venir como "5/11/2025" o "05/11/2025" (D/M/YYYY o DD/MM/YYYY)
-    // horaStr viene como "08:00" o "8:00" (HH:MM o H:MM)
-    
-    const [dia, mes, anio] = fechaStr.split('/').map(num => parseInt(num, 10));
-    const [hora, minuto] = horaStr.split(':').map(num => parseInt(num, 10));
-    
-    // Los meses en JavaScript van de 0-11, por eso restamos 1
-    const dateObj = new Date(anio, mes - 1, dia, hora, minuto, 0, 0);
-    
-    return dateObj;
+    try {
+        let fecha;
+        
+        if (fechaStr.includes('T')) {
+            // Caso ISO completo de Firebase
+            fecha = new Date(fechaStr);
+        } else if (fechaStr.includes('-')) {
+            // Caso yyyy-mm-dd
+            const [anio, mes, dia] = fechaStr.split('-').map(num => parseInt(num, 10));
+            fecha = new Date(anio, mes - 1, dia);
+        } else {
+            // Caso dd/mm/yyyy
+            const [dia, mes, anio] = fechaStr.split('/').map(num => parseInt(num, 10));
+            fecha = new Date(anio, mes - 1, dia);
+        }
+
+        // Si horaStr viene separado (ej. "14:30")
+        if (horaStr) {
+            const [hora, minuto] = horaStr.split(':').map(num => parseInt(num, 10));
+            fecha.setHours(hora || 0, minuto || 0, 0, 0);
+        }
+
+        if (isNaN(fecha.getTime())) throw new Error('Fecha inválida');
+
+        return fecha;
+    } catch (error) {
+        console.error('Error parseando fecha:', fechaStr, horaStr, error);
+        return new Date();
+    }
 }
 
 
@@ -428,7 +201,7 @@ function calcularDiasRestantes(diaPago) {
     const hoy = new Date();
     const mesActual = hoy.getMonth();
     const anioActual = hoy.getFullYear();
-
+    
     let fechaPago = new Date(anioActual, mesActual, diaPago);
     if (fechaPago < hoy) {
         fechaPago = new Date(anioActual, mesActual + 1, diaPago);
@@ -531,18 +304,18 @@ function handleHourClick(dateStr, hour, minute = 0) {
         `).join('');
         
         Swal.fire({
-            title: `📋 Citas en este horario (${aptsInSlot.length}/${limiteSlot})`,
+            title: `📋 Citas en este horario (${aptsInSlot.length})`,
             html: `
                 <div style="text-align: left; max-height: 400px; overflow-y: auto;">
                     ${citasHtml}
                 </div>
+                <div style="margin-top: 15px; padding: 10px; background: #f8f9ff; border-radius: 6px; font-size: 0.9rem; color: #666;">
+                    💡 Haz clic en una cita para ver todos sus detalles
+                </div>
             `,
             width: '600px',
             showConfirmButton: false,
-            showCloseButton: true,
-            customClass: {
-                container: 'swal-on-top'
-            }
+            showCloseButton: true
         });
         return;
     }
@@ -559,38 +332,32 @@ function handleHourClick(dateStr, hour, minute = 0) {
         month: 'long', 
         day: 'numeric' 
     });
-
+    
     Swal.fire({
         title: `📅 ${dateFormatted}`,
         html: `
-            <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); border-radius: 12px;">
+            <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
                 <div style="font-size: 3rem; margin-bottom: 15px;">✅</div>
                 <p style="margin-bottom: 15px; font-size: 1.2rem; color: #155724;">
                     <strong>Horario Disponible</strong>
                 </p>
-                <p style="margin-bottom: 10px; font-size: 1.4rem; color: #155724; font-weight: 600;">
+                <p style="margin-bottom: 20px; font-size: 1.4rem; color: #155724; font-weight: 600;">
                     🕐 ${hourStr}
-                </p>
-                <p style="margin-bottom: 20px; font-size: 0.9rem; color: #155724;">
-                    ${aptsInSlot.length}/${limiteSlot} citas agendadas
                 </p>
                 <button onclick="showNewAppointmentForm('${dateStr}', '${hourStr}'); Swal.close();" 
                         class="btn btn-success"
-                        style="padding: 12px 30px; font-size: 1.1rem;">
+                        style="padding: 12px 30px; font-size: 1.1rem; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.15); transition: all 0.3s;"
+                        onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 15px rgba(0,0,0,0.2)';"
+                        onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 10px rgba(0,0,0,0.15)';">
                     ➕ Agregar Nueva Cita
                 </button>
             </div>
         `,
         width: '600px',
         showConfirmButton: false,
-        showCloseButton: true,
-        customClass: {
-            container: 'swal-on-top'
-        }
+        showCloseButton: true
     });
 }
-
-
 
 // ============================================
 // FUNCIÓN AUXILIAR: Obtener citas en un slot específico
@@ -613,13 +380,6 @@ function getAppointmentsForSlot(date, hour, minute = 0) {
     });
 }
 
-function isSlotAvailable(date, hour, minute = 0) {
-    const citasEnSlot = getAppointmentsForSlot(date, hour, minute);
-    const limiteSlot = obtenerLimiteParaSlot(date, hour);
-    return citasEnSlot.length < limiteSlot;
-}
-
-
 // ============================================
 // FUNCIÓN AUXILIAR: Obtener color según estado
 // ============================================
@@ -638,19 +398,19 @@ function getStatusColor(status) {
 
 function getHoursOccupiedInDay(date) {
     let minutosOcupados = 0;
-
+    
     const citasDelDia = appointments.filter(apt => {
         const aptDate = new Date(apt.date);
         return aptDate.getFullYear() === date.getFullYear() &&
-            aptDate.getMonth() === date.getMonth() &&
-            aptDate.getDate() === date.getDate() &&
-            ['Reservada', 'Confirmada', 'En Proceso', 'Finalizada'].includes(apt.status);
+               aptDate.getMonth() === date.getMonth() &&
+               aptDate.getDate() === date.getDate() &&
+               ['Reservada', 'Confirmada', 'En Proceso', 'Finalizada'].includes(apt.status);
     });
-
+    
     citasDelDia.forEach(apt => {
         minutosOcupados += apt.duracion;
     });
-
+    
     return Math.ceil(minutosOcupados / 60);
 }
 
@@ -660,50 +420,12 @@ function getHoursAvailableInDay(date) {
     return Math.max(0, HOURS_PER_DAY - occupied);
 }
 
-async function renderWeek() {
-    // Cargar configuración de horas y días laborales desde Firebase
-    let diasLaborales = {
-        0: false, // Domingo
-        1: true,  // Lunes
-        2: true,  // Martes
-        3: true,  // Miércoles
-        4: true,  // Jueves
-        5: true,  // Viernes
-        6: true   // Sábado
-    };
-
-    try {
-        const response = await fetch('/api/configuracion');
-        if (!response.ok) throw new Error('Error al cargar configuración');
-        const config = await response.json();
-
-        if (config) {
-            BUSINESS_HOURS.start = parseInt(config.horarioInicio ?? 8);
-            BUSINESS_HOURS.end = parseInt(config.horarioFin ?? 22);
-            BUSINESS_HOURS.interval = parseInt(config.intervalo ?? 30);
-
-            // Convertir días laborales de config a mapa por número de día
-            if (config.diasLaborales) {
-                diasLaborales = {
-                    0: config.diasLaborales.domingo || false,
-                    1: config.diasLaborales.lunes !== false,
-                    2: config.diasLaborales.martes !== false,
-                    3: config.diasLaborales.miercoles !== false,
-                    4: config.diasLaborales.jueves !== false,
-                    5: config.diasLaborales.viernes !== false,
-                    6: config.diasLaborales.sabado !== false
-                };
-            }
-        }
-    } catch (error) {
-        console.error('Error cargando horas desde Firebase:', error);
-    }
-
+function renderWeek() {
     const weekEnd = new Date(currentWeekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
 
     document.getElementById('week-range').textContent =
-        `${currentWeekStart.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} - ${weekEnd.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+        `${currentWeekStart.toLocaleDateString('es-ES', {day: 'numeric', month: 'short'})} - ${weekEnd.toLocaleDateString('es-ES', {day: 'numeric', month: 'short', year: 'numeric'})}`;
 
     const grid = document.getElementById('availability-grid');
     grid.innerHTML = '';
@@ -716,10 +438,7 @@ async function renderWeek() {
         const date = new Date(currentWeekStart);
         date.setDate(date.getDate() + i);
 
-        const dayOfWeek = date.getDay();
-        const esLaborable = diasLaborales[dayOfWeek];
-
-        const dayCard = createDayCard(date, esLaborable);
+        const dayCard = createDayCard(date);
         const { available, booked, appointments: dayAppointments } = dayCard.stats;
 
         totalAvailable += available;
@@ -738,71 +457,16 @@ async function renderWeek() {
     document.getElementById('stat-appointments').textContent = totalAppointments;
 }
 
-function createDayCard(date, esLaborable = true) {
+function createDayCard(date) {
     const dayOfWeek = DAYS[date.getDay()];
     const dateStr = date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
-    const isToday = date.toDateString() === new Date().toDateString();
 
-    // Si no es día laborable, mostrar como CERRADO
-    if (!esLaborable) {
-        const dayCardHtml = `
-            <div class="day-card" style="opacity: 0.6;">
-                <div class="day-header" style="background: linear-gradient(135deg, #6c757d 0%, #495057 100%);">
-                    <h3>${dayOfWeek} ${isToday ? '(Hoy)' : ''}</h3>
-                    <p>${dateStr}</p>
-                </div>
-                <div class="day-status" style="background: #f8d7da; color: #721c24;">
-                    🚫 CERRADO
-                </div>
-                <div class="hours-container" style="padding: 2rem; text-align: center; color: #999;">
-                    <p>No hay horarios disponibles</p>
-                    <p style="font-size: 0.85rem; margin-top: 10px;">Día no laborable</p>
-                </div>
-            </div>
-        `;
-
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = dayCardHtml;
-
-        return {
-            element: tempDiv.firstElementChild,
-            stats: {
-                available: 0,
-                booked: 0,
-                appointments: 0
-            }
-        };
-    }
-
-    // Si es día laborable, generar horarios normalmente
     const HOURS_PER_DAY = BUSINESS_HOURS.end - BUSINESS_HOURS.start;
     const hoursOccupied = getHoursOccupiedInDay(date);
     const hoursAvailable = Math.max(0, HOURS_PER_DAY - hoursOccupied);
 
-    const dayCardElement = document.createElement('div');
-    dayCardElement.className = 'day-card';
+    const hoursHtml = [];
 
-    // Crear header
-    const header = document.createElement('div');
-    header.className = 'day-header';
-    if (isToday) {
-        header.style.background = 'linear-gradient(135deg, #28a745 0%, #20c997 100%)';
-    }
-    header.innerHTML = `
-        <h3>${dayOfWeek} ${isToday ? '(Hoy)' : ''}</h3>
-        <p>${dateStr}</p>
-    `;
-
-    // Crear status
-    const status = document.createElement('div');
-    status.className = 'day-status status-open';
-    status.innerHTML = `${BUSINESS_HOURS.start.toString().padStart(2, '0')}:00 - ${BUSINESS_HOURS.end.toString().padStart(2, '0')}:00 | ${hoursAvailable}h disponibles`;
-
-    // Crear contenedor de horas
-    const hoursContainer = document.createElement('div');
-    hoursContainer.className = 'hours-container';
-
-     // Generar slots de horas
     for (let hour = BUSINESS_HOURS.start; hour < BUSINESS_HOURS.end; hour++) {
         for (let minute = 0; minute < 60; minute += BUSINESS_HOURS.interval) {
             const aptsInSlot = getAppointmentsForSlot(date, hour, minute);
@@ -812,26 +476,37 @@ function createDayCard(date, esLaborable = true) {
             slotClass += isAvailable ? ' available' : ' fully-booked';
 
             const hourStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-            const capacity = `${aptsInSlot.length}/${limiteSlot}`;
+            const capacity = `${aptsInSlot.length}/1`;
 
-            slotDiv.innerHTML = `
-                <div class="hour-time">${hourStr}</div>
-                <div class="hour-availability">
-                    <span class="availability-text">${capacity}</span>
+            hoursHtml.push(`
+                <div class="${slotClass}" onclick="handleHourClick('${date.toISOString().split('T')[0]}', ${hour}, ${minute})">
+                    <div class="hour-time">${hourStr}</div>
+                    <div class="hour-availability">
+                        <span class="availability-text">${capacity}</span>
+                    </div>
                 </div>
-            `;
-
-            hoursContainer.appendChild(slotDiv);
+            `);
         }
     }
 
-    // Ensamblar la tarjeta
-    dayCardElement.appendChild(header);
-    dayCardElement.appendChild(status);
-    dayCardElement.appendChild(hoursContainer);
+    const isToday = date.toDateString() === new Date().toDateString();
+
+    const dayCardHtml = `
+        <div class="day-card">
+            <div class="day-header" style="${isToday ? 'background: linear-gradient(135deg, #28a745 0%, #20c997 100%);' : ''}">
+                <h3>${dayOfWeek} ${isToday ? '(Hoy)' : ''}</h3>
+                <p>${dateStr}</p>
+            </div>
+            <div class="day-status status-open">08:00 - 22:00 | ${hoursAvailable}h disponibles</div>
+            <div class="hours-container">${hoursHtml.join('')}</div>
+        </div>
+    `;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = dayCardHtml;
 
     return {
-        element: dayCardElement,
+        element: tempDiv.firstElementChild,
         stats: {
             available: hoursAvailable,
             booked: hoursOccupied,
@@ -845,15 +520,11 @@ function createDayCard(date, esLaborable = true) {
 function previousWeek() {
     currentWeekStart.setDate(currentWeekStart.getDate() - 7);
     renderWeek();
-    loadWeeklyEarnings();
-    loadDailyEarnings();
 }
 
 function nextWeek() {
     currentWeekStart.setDate(currentWeekStart.getDate() + 7);
     renderWeek();
-    loadWeeklyEarnings();
-    loadDailyEarnings();
 }
 
 // ============================================
@@ -862,14 +533,14 @@ function nextWeek() {
 function updateCalendarDisplay() {
     const monthYear = document.getElementById('calendar-month-year');
     const calendarGrid = document.getElementById('calendar-grid');
-
+    
     const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-
+                  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    
     monthYear.textContent = `${months[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
-
+    
     calendarGrid.innerHTML = '';
-
+    
     const dayHeaders = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     dayHeaders.forEach(day => {
         const dayElement = document.createElement('div');
@@ -877,30 +548,30 @@ function updateCalendarDisplay() {
         dayElement.textContent = day;
         calendarGrid.appendChild(dayElement);
     });
-
+    
     const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
     const startDate = new Date(firstDay);
     startDate.setDate(startDate.getDate() - firstDay.getDay());
-
+    
     for (let i = 0; i < 42; i++) {
         const date = new Date(startDate);
         date.setDate(startDate.getDate() + i);
-
+        
         const dayElement = document.createElement('div');
         dayElement.className = 'calendar-day';
         dayElement.textContent = date.getDate();
         dayElement.onclick = () => selectDate(date);
-
+        
         if (date.getMonth() !== currentDate.getMonth()) {
             dayElement.classList.add('other-month');
         }
-
+        
         const today = new Date();
         if (date.toDateString() === today.toDateString()) {
             dayElement.classList.add('today');
         }
-
-        const hasAppointments = appointments.some(apt =>
+        
+        const hasAppointments = appointments.some(apt => 
             apt.date.toDateString() === date.toDateString()
         );
         if (hasAppointments) {
@@ -909,32 +580,32 @@ function updateCalendarDisplay() {
             dot.className = 'appointment-dot';
             dayElement.appendChild(dot);
         }
-
+        
         calendarGrid.appendChild(dayElement);
     }
 }
 
 function updateAppointmentList() {
     const appointmentList = document.getElementById('appointment-list');
-
+    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const nextTwoWeeks = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
-
+    
     const upcomingAppointments = appointments
         .filter(apt => {
             const aptDate = new Date(apt.date);
             aptDate.setHours(0, 0, 0, 0);
-            return aptDate >= today && aptDate <= nextTwoWeeks &&
-                ['Reservada', 'Confirmada', 'En Proceso'].includes(apt.status);
+            return aptDate >= today && aptDate <= nextTwoWeeks && 
+                   ['Reservada', 'Confirmada', 'En Proceso'].includes(apt.status);
         })
         .sort((a, b) => a.date - b.date);
-
+    
     if (upcomingAppointments.length === 0) {
         appointmentList.innerHTML = '<p class="text-muted text-center">No hay servicios próximos</p>';
         return;
     }
-
+    
     appointmentList.innerHTML = upcomingAppointments
         .map(apt => {
             const timeStr = apt.date.toLocaleTimeString('es-ES', {
@@ -946,7 +617,7 @@ function updateAppointmentList() {
                 day: 'numeric',
                 month: 'short'
             });
-
+            
             return `
                 <div class="appointment-item" onclick="showAppointmentDetails('${apt.id}')">
                     <div class="appointment-time">${timeStr} - ${dateStr}</div>
@@ -965,19 +636,19 @@ function changeMonth(direction) {
 
 function selectDate(date) {
     selectedDate = date;
-    const dayAppointments = appointments.filter(apt =>
+    const dayAppointments = appointments.filter(apt => 
         apt.date.toDateString() === date.toDateString()
     );
-
+    
     let existingAppointmentsHtml = '';
     if (dayAppointments.length > 0) {
-        existingAppointmentsHtml = '<h6>Citas existentes:</h6>' +
-            dayAppointments
-                .sort((a, b) => a.date - b.date)
-                .map(apt => `
+        existingAppointmentsHtml = '<h6>Citas existentes:</h6>' + 
+        dayAppointments
+            .sort((a, b) => a.date - b.date)
+            .map(apt => `
                 <div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <strong style="color: #007bff;">${apt.date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} - ${apt.endTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</strong>
+                        <strong style="color: #007bff;">${apt.date.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})} - ${apt.endTime.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}</strong>
                         <span style="font-size: 0.8em; color: #666;">⏱️ ${apt.duracion}min</span>
                     </div>
                     <div style="margin: 5px 0;"><strong>👤 ${apt.client}</strong></div>
@@ -988,11 +659,11 @@ function selectDate(date) {
                     <div style="margin: 5px 0; padding: 4px 8px; border-radius: 12px; display: inline-block;">${apt.status}</div>
                 </div>
             `)
-                .join('') + '<hr>';
+            .join('') + '<hr>';
     }
-
+    
     const dateStr = date.toLocaleDateString('es-ES');
-
+    
     Swal.fire({
         title: `📅 ${dateStr}`,
         html: `
@@ -1018,9 +689,9 @@ function showAppointmentDetails(appointmentId) {
     console.log('🔍 showAppointmentDetails llamado con ID:', appointmentId);
     console.log('📚 Total de citas en el sistema:', appointments.length);
     console.log('📋 IDs disponibles:', appointments.map(a => a.id));
-
+    
     const apt = appointments.find(a => a.id === appointmentId || a.id === String(appointmentId));
-
+    
     if (!apt) {
         console.error('❌ Cita no encontrada con ID:', appointmentId);
         Swal.fire({
@@ -1031,11 +702,11 @@ function showAppointmentDetails(appointmentId) {
         });
         return;
     }
-
+    
     console.log('✅ Cita encontrada:', apt);
 
     const estados = ['Reservada', 'Confirmada', 'En Proceso', 'Finalizada', 'Cancelada'];
-    const estadosOptions = estados.map(estado =>
+    const estadosOptions = estados.map(estado => 
         `<option value="${estado}" ${apt.status === estado ? 'selected' : ''}>${estado}</option>`
     ).join('');
 
@@ -1043,7 +714,7 @@ function showAppointmentDetails(appointmentId) {
         <div style="text-align: left; padding: 10px;">
             <div style="background: #f8f9ff; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
                 <p style="margin: 8px 0;"><strong>📅 Fecha:</strong> ${apt.date.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                <p style="margin: 8px 0;"><strong>🕐 Hora:</strong> ${apt.date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} - ${apt.endTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</p>
+                <p style="margin: 8px 0;"><strong>🕐 Hora:</strong> ${apt.date.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})} - ${apt.endTime.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}</p>
             </div>
             
             <div style="background: white; padding: 15px; border: 1px solid #e1e5f7; border-radius: 8px; margin-bottom: 15px;">
@@ -1199,8 +870,9 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
     let fecha = parseDateWithoutTimezone(dateStr);
     console.log('📅 Fecha procesada:', fecha);
 
-    const fechaFormateada = `${fecha.getDate().toString().padStart(2, '0')}/${(fecha.getMonth() + 1).toString().padStart(2, '0')
-        }/${fecha.getFullYear()}`;
+    const fechaFormateada = `${fecha.getDate().toString().padStart(2, '0')}/${
+        (fecha.getMonth() + 1).toString().padStart(2, '0')
+    }/${fecha.getFullYear()}`;
 
     const clientesOptions = clientes
         .map(cliente => `<option value="${cliente.id}">${cliente.nombre} (${cliente.telefono})</option>`)
@@ -1220,7 +892,7 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
     }
 
     $('.select2-container').remove();
-
+    
     setTimeout(() => {
         $(document).off('click.closeModal');
         $(document).off('mousedown.closeModal');
@@ -1228,8 +900,8 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
 
     setTimeout(() => {
         Swal.fire({
-            title: `➕ Nueva Cita - ${fecha.toLocaleDateString('es-ES')}`,
-            html: `
+        title: `➕ Nueva Cita - ${fecha.toLocaleDateString('es-ES')}`,
+        html: `
             <div class="new-appointment-form" style="text-align: left;">
                 <div class="form-group" style="margin-bottom: 15px;">
                     <label for="cliente" style="display: block; margin-bottom: 5px; font-weight: bold;">Cliente:</label>
@@ -1272,122 +944,122 @@ function showNewAppointmentForm(dateStr, defaultHour = '') {
                 </div>
             </div>
         `,
-            width: '550px',
-            showCancelButton: true,
-            confirmButtonText: '💾 Crear Cita',
-            cancelButtonText: '❌ Cancelar',
-            confirmButtonColor: '#28a745',
-            cancelButtonColor: '#6c757d',
-            allowOutsideClick: false,
-            allowEscapeKey: true,
-            focusConfirm: false,
-            didOpen: () => {
-                console.log('✅ Modal abierto - inicializando Select2...');
-
-                const popup = Swal.getPopup();
-
-                if (popup) {
-                    popup.style.pointerEvents = 'auto';
-                }
-
-                setTimeout(() => {
-                    try {
-                        // Cliente
-                        if ($('#cliente').length && !$('#cliente').hasClass('select2-hidden-accessible')) {
-                            $('#cliente').select2({
-                                dropdownParent: popup ? $(popup) : $('.swal2-popup'),
-                                placeholder: 'Buscar cliente...',
-                                allowClear: true,
-                                width: '100%',
-                                language: {
-                                    noResults: function () { return "No se encontraron resultados"; },
-                                    searching: function () { return "Buscando..."; }
-                                }
-                            });
-                            console.log('✅ Select2 de #cliente inicializado');
-                        }
-
-                        // Servicio
-                        if ($('#servicio').length && !$('#servicio').hasClass('select2-hidden-accessible')) {
-                            $('#servicio').select2({
-                                dropdownParent: popup ? $(popup) : $('.swal2-popup'),
-                                placeholder: 'Buscar servicio...',
-                                allowClear: true,
-                                width: '100%',
-                                language: {
-                                    noResults: function () { return "No se encontraron resultados"; },
-                                    searching: function () { return "Buscando..."; }
-                                }
-                            });
-                            console.log('✅ Select2 de #servicio inicializado');
-                        }
-
-                        // Hora
-                        if ($('#hora').length && !$('#hora').hasClass('select2-hidden-accessible')) {
-                            $('#hora').select2({
-                                dropdownParent: popup ? $(popup) : $('.swal2-popup'),
-                                placeholder: 'Seleccionar hora...',
-                                allowClear: true,
-                                width: '100%',
-                                language: {
-                                    noResults: function () { return "No se encontraron resultados"; },
-                                    searching: function () { return "Buscando..."; }
-                                }
-                            });
-                            console.log('✅ Select2 de #hora inicializado');
-                        }
-                    } catch (e) {
-                        console.error('❌ Error al inicializar Select2:', e);
-                    }
-                }, 300);
-            },
-            preConfirm: () => {
-                console.log('📝 Validando formulario...');
-
-                const clienteId = document.getElementById('cliente').value;
-                const servicioId = document.getElementById('servicio').value;
-                const hora = document.getElementById('hora').value;
-                const manicurista = document.getElementById('manicurista').value;
-                const notas = document.getElementById('notas').value;
-
-                console.log('Valores del formulario:', { clienteId, servicioId, hora, manicurista, notas });
-
-                if (!clienteId || !servicioId || !hora) {
-                    Swal.showValidationMessage('Por favor completa todos los campos obligatorios');
-                    return false;
-                }
-
-                return {
-                    clienteId,
-                    servicioId,
-                    fecha: fechaFormateada,
-                    hora,
-                    manicuristaId: manicurista || 'Sin asignar',
-                    notas
-                };
-            },
-            willClose: () => {
-                console.log('🔒 Cerrando modal - destruyendo Select2...');
+        width: '550px',
+        showCancelButton: true,
+        confirmButtonText: '💾 Crear Cita',
+        cancelButtonText: '❌ Cancelar',
+        confirmButtonColor: '#28a745',
+        cancelButtonColor: '#6c757d',
+        allowOutsideClick: false,
+        allowEscapeKey: true,
+        focusConfirm: false,
+        didOpen: () => {
+            console.log('✅ Modal abierto - inicializando Select2...');
+            
+            const popup = Swal.getPopup();
+            
+            if (popup) {
+                popup.style.pointerEvents = 'auto';
+            }
+            
+            setTimeout(() => {
                 try {
-                    ['#cliente', '#servicio', '#hora'].forEach(selector => {
-                        const element = $(selector);
-                        if (element.length && element.hasClass('select2-hidden-accessible')) {
-                            element.select2('destroy');
-                            console.log(`✅ Select2 de ${selector} destruido`);
-                        }
-                    });
+                    // Cliente
+                    if ($('#cliente').length && !$('#cliente').hasClass('select2-hidden-accessible')) {
+                        $('#cliente').select2({
+                            dropdownParent: popup ? $(popup) : $('.swal2-popup'),
+                            placeholder: 'Buscar cliente...',
+                            allowClear: true,
+                            width: '100%',
+                            language: {
+                                noResults: function() { return "No se encontraron resultados"; },
+                                searching: function() { return "Buscando..."; }
+                            }
+                        });
+                        console.log('✅ Select2 de #cliente inicializado');
+                    }
+
+                    // Servicio
+                    if ($('#servicio').length && !$('#servicio').hasClass('select2-hidden-accessible')) {
+                        $('#servicio').select2({
+                            dropdownParent: popup ? $(popup) : $('.swal2-popup'),
+                            placeholder: 'Buscar servicio...',
+                            allowClear: true,
+                            width: '100%',
+                            language: {
+                                noResults: function() { return "No se encontraron resultados"; },
+                                searching: function() { return "Buscando..."; }
+                            }
+                        });
+                        console.log('✅ Select2 de #servicio inicializado');
+                    }
+
+                    // Hora
+                    if ($('#hora').length && !$('#hora').hasClass('select2-hidden-accessible')) {
+                        $('#hora').select2({
+                            dropdownParent: popup ? $(popup) : $('.swal2-popup'),
+                            placeholder: 'Seleccionar hora...',
+                            allowClear: true,
+                            width: '100%',
+                            language: {
+                                noResults: function() { return "No se encontraron resultados"; },
+                                searching: function() { return "Buscando..."; }
+                            }
+                        });
+                        console.log('✅ Select2 de #hora inicializado');
+                    }
                 } catch (e) {
-                    console.warn('⚠️ Error al destruir Select2:', e);
+                    console.error('❌ Error al inicializar Select2:', e);
                 }
+            }, 300);
+        },
+        preConfirm: () => {
+            console.log('📝 Validando formulario...');
+            
+            const clienteId = document.getElementById('cliente').value;
+            const servicioId = document.getElementById('servicio').value;
+            const hora = document.getElementById('hora').value;
+            const manicurista = document.getElementById('manicurista').value;
+            const notas = document.getElementById('notas').value;
+
+            console.log('Valores del formulario:', { clienteId, servicioId, hora, manicurista, notas });
+
+            if (!clienteId || !servicioId || !hora) {
+                Swal.showValidationMessage('Por favor completa todos los campos obligatorios');
+                return false;
             }
-        }).then(async (result) => {
-            console.log('📊 Resultado del modal:', result);
-            if (result.isConfirmed) {
-                console.log('✅ Confirmado - creando cita...');
-                await createNewAppointment(result.value);
-            } else {
-                console.log('❌ Cancelado');
+
+            return {
+                clienteId,
+                servicioId,
+                fecha: fechaFormateada,
+                hora,
+                manicuristaId: manicurista || 'Sin asignar',
+                notas
+            };
+        },
+        willClose: () => {
+            console.log('🔒 Cerrando modal - destruyendo Select2...');
+            try {
+                ['#cliente', '#servicio', '#hora'].forEach(selector => {
+                    const element = $(selector);
+                    if (element.length && element.hasClass('select2-hidden-accessible')) {
+                        element.select2('destroy');
+                        console.log(`✅ Select2 de ${selector} destruido`);
+                    }
+                });
+            } catch (e) {
+                console.warn('⚠️ Error al destruir Select2:', e);
             }
+        }
+    }).then(async (result) => {
+        console.log('📊 Resultado del modal:', result);
+        if (result.isConfirmed) {
+            console.log('✅ Confirmado - creando cita...');
+            await createNewAppointment(result.value);
+        } else {
+            console.log('❌ Cancelado');
+        }
         }).catch(error => {
             console.error('❌ Error en SweetAlert:', error);
         });
@@ -1405,9 +1077,9 @@ async function createNewAppointment(appointmentData) {
             },
             body: JSON.stringify(appointmentData)
         });
-
+        
         const result = await response.json();
-
+        
         if (result.success) {
             Swal.fire({
                 icon: 'success',
@@ -1416,7 +1088,7 @@ async function createNewAppointment(appointmentData) {
                 timer: 2000,
                 showConfirmButton: false
             });
-
+            
             await loadAppointments();
         } else {
             throw new Error(result.error || 'Error desconocido');
@@ -1469,7 +1141,7 @@ function agregarClienteRapido() {
                 const result = await response.json();
                 if (result.success) {
                     await loadClientes();
-
+                    
                     const nuevoClienteOption = new Option(
                         `${nombre} (${telefono})`,
                         result.id || result.clienteId,
@@ -1477,7 +1149,7 @@ function agregarClienteRapido() {
                         true
                     );
                     $('#cliente').append(nuevoClienteOption).trigger('change');
-
+                    
                     Swal.fire('Éxito', 'Cliente agregado correctamente', 'success');
                     return { nombre, telefono };
                 } else {
@@ -1534,7 +1206,7 @@ function agregarServicioRapido() {
                 const result = await response.json();
                 if (result.success) {
                     await loadServicios();
-
+                    
                     const nuevoServicioOption = new Option(
                         `${nombre} - ${precio} (${duracion}min)`,
                         result.id || result.servicioId,
@@ -1542,7 +1214,7 @@ function agregarServicioRapido() {
                         true
                     );
                     $('#servicio').append(nuevoServicioOption).trigger('change');
-
+                    
                     Swal.fire('Éxito', 'Servicio agregado correctamente', 'success');
                     return { nombre, precio, duracion };
                 } else {
@@ -1598,61 +1270,11 @@ function cerrarGastos() {
 
 function verNotificaciones() {
     document.getElementById('profile-dropdown').classList.remove('show');
+    cargarNotificaciones();
+}
 
-    Swal.fire({
-        title: '🔔 Centro de Notificaciones',
-        html: `
-            <div style="text-align: left;">
-                <p style="margin-bottom: 15px; color: #666;">Cargando notificaciones...</p>
-                <div id="lista-notificaciones-modal"></div>
-            </div>
-        `,
-        width: '600px',
-        showConfirmButton: false,
-        showCloseButton: true,
-        customClass: { container: 'swal-on-top' },
-        didOpen: async () => {
-            try {
-                const res = await fetch('/api/deudas/notificaciones');
-                const data = await res.json();
-
-                const contenedor = document.getElementById('lista-notificaciones-modal');
-
-                if (data.success && data.notificaciones && data.notificaciones.length > 0) {
-                    contenedor.innerHTML = data.notificaciones.map(notif => `
-                        <div style="background: ${notif.urgente ? '#fee' : '#f8f9ff'}; 
-                                    padding: 15px; 
-                                    margin-bottom: 10px; 
-                                    border-radius: 8px;
-                                    border-left: 4px solid ${notif.urgente ? '#dc3545' : '#667eea'};">
-                            <div style="display: flex; align-items: start; gap: 10px;">
-                                <span style="font-size: 1.5rem;">${notif.urgente ? '⚠️' : '🔔'}</span>
-                                <div style="flex: 1;">
-                                    <strong style="display: block; margin-bottom: 5px;">${notif.titulo}</strong>
-                                    <p style="margin: 0; color: #666; font-size: 0.9rem;">${notif.mensaje}</p>
-                                    ${notif.monto ? `<small style="display: block; margin-top: 5px; color: #999;">Monto: $${notif.monto.toFixed(2)}</small>` : ''}
-                                </div>
-                            </div>
-                        </div>
-                    `).join('');
-                } else {
-                    contenedor.innerHTML = `
-                        <div style="text-align: center; padding: 40px; color: #999;">
-                            <div style="font-size: 3rem; margin-bottom: 10px;">🔕</div>
-                            <p>No hay notificaciones pendientes</p>
-                        </div>
-                    `;
-                }
-            } catch (error) {
-                console.error('Error cargando notificaciones:', error);
-                document.getElementById('lista-notificaciones-modal').innerHTML = `
-                    <div style="text-align: center; padding: 20px; color: #dc3545;">
-                        <p>❌ Error al cargar notificaciones</p>
-                    </div>
-                `;
-            }
-        }
-    });
+function configuracion() {
+    Swal.fire('⚙️ Configuración', 'Función en desarrollo', 'info');
 }
 
 function cerrarSesion() {
@@ -1676,58 +1298,25 @@ function cerrarSesion() {
 // Verificar notificaciones de pagos próximos
 async function verificarNotificaciones() {
     try {
-        console.log('🔔 Verificando notificaciones...');
         const res = await fetch('/api/deudas/notificaciones');
         const data = await res.json();
-
-        console.log('📊 Respuesta de notificaciones:', data);
-
-        if (data.success && data.notificaciones && data.notificaciones.length > 0) {
-            console.log('✅ Notificaciones encontradas:', data.notificaciones.length);
+        
+        if (data.success && data.notificaciones.length > 0) {
             mostrarNotificaciones(data.notificaciones);
-        } else {
-            console.log('❌ No hay notificaciones para mostrar');
         }
     } catch (error) {
-        console.error('❌ Error verificando notificaciones:', error);
+        console.error('Error verificando notificaciones:', error);
     }
-}
-
-// Obtener las notificaciones con la fecha más próxima
-function obtenerPagosMasProximos(notificaciones) {
-    // Convertir fechas a Date para comparar
-    const hoy = new Date();
-    const futuras = notificaciones
-        .map(n => ({ ...n, fechaPago: new Date(n.fecha) }))
-        .filter(n => n.fechaPago >= hoy);
-
-    if (futuras.length === 0) return [];
-
-    // Encontrar la fecha mínima
-    const minFecha = futuras.reduce((min, n) => n.fechaPago < min ? n.fechaPago : min, futuras[0].fechaPago);
-
-    // Devolver todas las notificaciones con esa fecha
-    return futuras.filter(n => n.fechaPago.getTime() === minFecha.getTime());
 }
 
 // Mostrar notificaciones en pantalla
 function mostrarNotificaciones(notificaciones) {
-    let contenedor = document.getElementById('notification-container');
-
-    // Si no existe el contenedor, crearlo
-    if (!contenedor) {
-        contenedor = crearContenedorNotificaciones();
-    }
-
-    // Hacer visible el contenedor
-    contenedor.style.display = 'block';
-
+    const contenedor = document.getElementById('notification-container') || crearContenedorNotificaciones();
+    
     notificaciones.forEach((notif, index) => {
         setTimeout(() => {
             const notifElement = document.createElement('div');
             notifElement.className = `notification-item ${notif.urgente ? 'urgent' : ''}`;
-            notifElement.style.animation = 'slideIn 0.5s ease forwards';
-
             notifElement.innerHTML = `
                 <div class="notification-icon">${notif.urgente ? '⚠️' : '🔔'}</div>
                 <div class="notification-content">
@@ -1740,71 +1329,28 @@ function mostrarNotificaciones(notificaciones) {
             // Remover notificación al hacer click
             notifElement.addEventListener('click', () => {
                 notifElement.classList.add('removing');
-                setTimeout(() => {
-                    notifElement.remove();
-                    // Si no hay más notificaciones, ocultar el contenedor
-                    if (contenedor.children.length === 0) {
-                        contenedor.style.display = 'none';
-                    }
-                }, 300);
+                setTimeout(() => notifElement.remove(), 300);
             });
 
             contenedor.appendChild(notifElement);
-
+            
             // Auto-remover después de 5 segundos
             setTimeout(() => {
-                if (notifElement.parentElement) {
-                    notifElement.classList.add('removing');
-                    setTimeout(() => {
-                        if (notifElement.parentElement) {
-                            notifElement.remove();
-                            // Si no hay más notificaciones, ocultar el contenedor
-                            if (contenedor.children.length === 0) {
-                                contenedor.style.display = 'none';
-                            }
-                        }
-                    }, 300);
-                }
+                notifElement.classList.add('removing');
+                setTimeout(() => notifElement.remove(), 300);
             }, 5000);
-        }, index * 300);
+        }, index * 500);
     });
-}
-
-// Función principal para cargar las notificaciones desde el backend
-async function cargarNotificaciones() {
-    try {
-        const response = await fetch('/api/deudas/notificaciones'); // tu endpoint de notificaciones
-        if (!response.ok) throw new Error('No se pudo cargar las notificaciones');
-
-        const data = await response.json();
-
-        if (data.success && data.notificaciones.length > 0) {
-            mostrarNotificaciones(data.notificaciones);
-        } else {
-            // Si no hay notificaciones, limpiar el contenedor
-            const contenedor = document.getElementById('notification-container');
-            if (contenedor) contenedor.innerHTML = '';
-        }
-    } catch (error) {
-        console.error('Error cargando notificaciones:', error);
-    }
 }
 
 function crearContenedorNotificaciones() {
     const contenedor = document.createElement('div');
     contenedor.id = 'notification-container';
     contenedor.className = 'notification-container';
-    contenedor.style.cssText = `
-        position: fixed;
-        top: 80px;
-        right: 20px;
-        z-index: 9999;
-        max-width: 400px;
-        pointer-events: none;
-    `;
     document.body.appendChild(contenedor);
     return contenedor;
 }
+
 
 // ============================================
 // FUNCIONES DE DEUDAS
@@ -1829,7 +1375,7 @@ async function inicializarDeudas() {
 async function cargarDeudas() {
     const contenedor = document.getElementById('deudas-grid');
     if (!contenedor) return;
-
+    
     contenedor.innerHTML = `
         <div class="deudas-loading">
             <div class="deudas-icon">💳</div>
@@ -1882,10 +1428,10 @@ function renderizarDeudas() {
         const hoy = new Date();
         const fechaPago = new Date(hoy.getFullYear(), hoy.getMonth(), deuda.diaPago);
         const diasRestantes = Math.ceil((fechaPago - hoy) / (1000 * 60 * 60 * 24));
-
+        
         let claseEstado = '';
         let textoEstado = '';
-
+        
         if (deuda.pagado) {
             claseEstado = 'pagado';
             textoEstado = '✅ Pagado';
@@ -1943,7 +1489,7 @@ function cargarResumenDeudas() {
     const totalPendientes = totalDeudas - totalPagadas;
     const montoTotal = deudas.reduce((sum, d) => sum + d.monto, 0);
     const montoPendiente = deudas.filter(d => !d.pagado).reduce((sum, d) => sum + d.monto, 0);
-
+    
     const hoy = new Date();
     const proximasVencer = deudas.filter(d => {
         if (d.pagado) return false;
@@ -2013,11 +1559,11 @@ async function verHistorial(id) {
                         transition: background 0.5s;
                         ${index === 0 ? 'background: #d1e7dd; border-left-color: #28a745;' : ''}
                     ">
-                        <strong>📅 ${new Date(h.fecha).toLocaleDateString('es-MX', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                })}</strong><br>
+                        <strong>📅 ${new Date(h.fecha).toLocaleDateString('es-MX', { 
+                            year: 'numeric', 
+                            month: 'long', 
+                            day: 'numeric' 
+                        })}</strong><br>
                         <span>💰 Monto: $${h.deuda?.monto?.toFixed(2) ?? '0.00'}</span><br>
                         <span>📝 Mensaje: ${h.mensaje || '-'}</span><br>
                         ${h.deuda?.notas ? `<small style="color: #666;">📝 ${h.deuda.notas}</small>` : ''}
@@ -2069,93 +1615,42 @@ async function verHistorial(id) {
 
 // Agregar una sola deuda
 async function agregarDeuda() {
-    const tipos = ['Arrendamiento', 'Luz', 'Agua', 'Internet', 'Teléfono', 'Gas', 'Tarjeta de Crédito 1', 'Tarjeta de Crédito 2', 'Netflix', 'Spotify', 'Gimnasio', 'Seguro', 'Otro'];
+    const tipos = ['Arrendamiento','Luz','Agua','Internet','Teléfono','Gas','Tarjeta de Crédito 1','Tarjeta de Crédito 2','Netflix','Spotify','Gimnasio','Seguro','Otro'];
     const opcionesTipo = tipos.map(t => `<option value="${t}">${t}</option>`).join('');
 
     Swal.fire({
         title: '➕ Agregar Nuevo Pago',
         html: `
-            <style>
-                .swal2-html-container input.form-control,
-                .swal2-html-container select.form-select,
-                .swal2-html-container textarea.form-control {
-                    padding: 0.75rem 1rem !important;
-                    font-size: 1.1rem !important;
-                    border: 1px solid #ced4da !important;
-                    border-radius: 0.5rem !important;
-                    transition: all 0.2s !important;
-                    width: 100% !important;
-                    box-sizing: border-box !important;
-                }
-                
-                .swal2-html-container input.form-control:focus,
-                .swal2-html-container select.form-select:focus,
-                .swal2-html-container textarea.form-control:focus {
-                    border-color: #86b7fe !important;
-                    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
-                    outline: 0 !important;
-                }
-                
-                .swal2-html-container .input-group-text {
-                    padding: 0.75rem 1rem !important;
-                    font-size: 1.1rem !important;
-                    background-color: #e9ecef !important;
-                    border: 1px solid #ced4da !important;
-                    border-radius: 0.5rem 0 0 0.5rem !important;
-                }
-                
-                .swal2-html-container .input-group input {
-                    border-radius: 0 0.5rem 0.5rem 0 !important;
-                }
-                
-                .swal2-html-container .form-label {
-                    margin-bottom: 0.5rem !important;
-                    font-size: 0.95rem !important;
-                    color: #212529 !important;
-                }
-                
-                .swal2-html-container .shadow-sm {
-                    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075) !important;
-                }
-            </style>
             <div class="text-start" style="max-width: 500px; margin: 0 auto;">
                 <div class="mb-3">
                     <label class="form-label fw-bold">Nombre del Pago *</label>
-                    <input type="text" id="nombre-deuda" class="form-control shadow-sm" 
-                           placeholder="Ej: Renta departamento">
+                    <input type="text" id="nombre-deuda" class="form-control" placeholder="Ej: Renta departamento">
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-bold">Tipo de Pago *</label>
-                    <select id="tipo-deuda" class="form-select shadow-sm">
+                    <select id="tipo-deuda" class="form-control">
                         <option value="">Seleccionar tipo...</option>
                         ${opcionesTipo}
                     </select>
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-bold">Día de Pago (1-31) *</label>
-                    <input type="number" id="dia-pago" class="form-control shadow-sm" 
-                           min="1" max="31" placeholder="Ej: 15">
+                    <input type="number" id="dia-pago" class="form-control" min="1" max="31" placeholder="15">
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-bold">Monto *</label>
-                    <div class="input-group shadow-sm">
-                        <input type="number" id="monto-deuda" class="form-control" 
-                               step="0.01" placeholder="0.00">
-                    </div>
+                    <input type="number" id="monto-deuda" class="form-control" step="0.01" placeholder="0.00">
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-bold">Notas (opcional)</label>
-                    <textarea id="notas-deuda" class="form-control shadow-sm" rows="3" 
-                              placeholder="Añade información adicional..."></textarea>
+                    <textarea id="notas-deuda" class="form-control" rows="2" placeholder="Información adicional..."></textarea>
                 </div>
             </div>
         `,
         confirmButtonText: '💾 Guardar Pago',
-        confirmButtonColor: '#198754',
         showCancelButton: true,
         cancelButtonText: 'Cancelar',
-        cancelButtonColor: '#6c757d',
-        width: '650px',
+        width: '600px',
         customClass: {
             container: 'swal-on-top'
         },
@@ -2165,7 +1660,7 @@ async function agregarDeuda() {
             const diaPago = parseInt(document.getElementById('dia-pago').value);
             const monto = parseFloat(document.getElementById('monto-deuda').value || 0);
             const notas = document.getElementById('notas-deuda').value.trim();
-
+            
             if (!nombre || !tipo || !diaPago || !monto) {
                 Swal.showValidationMessage('Por favor completa todos los campos obligatorios');
                 return false;
@@ -2190,7 +1685,6 @@ async function agregarDeuda() {
                     title: '✅ ¡Guardado!',
                     text: 'Pago agregado exitosamente',
                     timer: 2000,
-                    showConfirmButton: false,
                     customClass: { container: 'swal-on-top' }
                 });
                 cargarDeudas();
@@ -2199,7 +1693,6 @@ async function agregarDeuda() {
                     icon: 'error',
                     title: '❌ Error',
                     text: data.error || 'No se pudo guardar',
-                    confirmButtonColor: '#dc3545',
                     customClass: { container: 'swal-on-top' }
                 });
             }
@@ -2239,23 +1732,23 @@ async function agregarDeudasLote() {
                 Swal.showValidationMessage('Ingresa al menos un pago');
                 return false;
             }
-
+            
             const lineas = texto.split('\n').filter(l => l.trim());
             const pagos = [];
-
+            
             for (let i = 0; i < lineas.length; i++) {
                 const partes = lineas[i].split(',').map(p => p.trim());
                 if (partes.length < 4) {
                     Swal.showValidationMessage(`Error en línea ${i + 1}: formato incorrecto`);
                     return false;
                 }
-
+                
                 const diaPago = parseInt(partes[2]);
                 if (diaPago < 1 || diaPago > 31) {
                     Swal.showValidationMessage(`Error en línea ${i + 1}: día debe estar entre 1 y 31`);
                     return false;
                 }
-
+                
                 pagos.push({
                     nombre: partes[0],
                     tipo: partes[1],
@@ -2264,7 +1757,7 @@ async function agregarDeudasLote() {
                     notas: partes[4] || ''
                 });
             }
-
+            
             return pagos;
         }
     }).then(async (result) => {
@@ -2275,7 +1768,7 @@ async function agregarDeudasLote() {
                 body: JSON.stringify({ deudas: result.value })
             });
             const data = await res.json();
-
+            
             if (data.success) {
                 Swal.fire({
                     icon: 'success',
@@ -2301,7 +1794,7 @@ async function agregarDeudasLote() {
 async function verDeudasPorTipo() {
     try {
         const tiposUnicos = [...new Set(deudas.map(d => d.tipo))];
-
+        
         if (tiposUnicos.length === 0) {
             Swal.fire({
                 icon: 'info',
@@ -2325,8 +1818,8 @@ async function verDeudasPorTipo() {
         const html = `
             <div style="text-align: left;">
                 ${Object.keys(deudasPorTipo).map(tipo => {
-            const data = deudasPorTipo[tipo];
-            return `
+                    const data = deudasPorTipo[tipo];
+                    return `
                         <div class="tipo-item-modal" onclick="filtrarPorTipo('${tipo}'); Swal.close();" 
                             style="display: flex; align-items: center; gap: 1rem; padding: 1rem; margin: 0.5rem 0; 
                             background: #f8f9fa; border-radius: 8px; cursor: pointer; transition: all 0.2s;"
@@ -2341,7 +1834,7 @@ async function verDeudasPorTipo() {
                             </div>
                         </div>
                     `;
-        }).join('')}
+                }).join('')}
             </div>
         `;
 
@@ -2367,37 +1860,25 @@ async function verDeudasPorTipo() {
 function filtrarPorTipo(tipo) {
     const deudasFiltradas = deudas.filter(d => d.tipo === tipo);
     const contenedor = document.getElementById('deudas-grid');
-
-    // Guardar backup antes de filtrar
-    deudasBackup = [...deudas];
     
-    // Filtrar y renderizar
+    // Usar la función renderizarDeudas pero con datos filtrados
+    const deudasBackup = [...deudas];
     deudas = deudasFiltradas;
     renderizarDeudas();
-
+    
     // Agregar botón para ver todos
     const btnVerTodos = document.createElement('div');
     btnVerTodos.style.gridColumn = '1 / -1';
     btnVerTodos.style.textAlign = 'center';
     btnVerTodos.style.marginTop = '20px';
     btnVerTodos.innerHTML = `
-        <button class="btn btn-secondary btn-lg" onclick="restaurarTodosLosPagos()">
+        <button class="btn btn-secondary" onclick="deudas = ${JSON.stringify(deudasBackup)}; renderizarDeudas(); cargarResumenDeudas();">
             🔙 Ver Todos los Pagos
         </button>
     `;
     contenedor.appendChild(btnVerTodos);
-
+    
     Swal.close();
-}
-
-
-// Función global para restaurar todos los pagos
-function restaurarTodosLosPagos() {
-    if (deudasBackup) {
-        deudas = [...deudasBackup];
-        deudasBackup = null;
-    }
-    cargarDeudas();
 }
 
 // Resetear todos los pagos del mes
@@ -2412,7 +1893,7 @@ async function resetearPagos() {
         confirmButtonColor: '#ffc107',
         customClass: { container: 'swal-on-top' }
     });
-
+    
     if (!result.isConfirmed) return;
 
     try {
@@ -2421,7 +1902,7 @@ async function resetearPagos() {
             headers: { 'Content-Type': 'application/json' }
         });
         const data = await res.json();
-
+        
         if (data.success) {
             Swal.fire({
                 icon: 'success',
@@ -2522,123 +2003,50 @@ async function editarDeuda(id) {
         if (!deuda) return;
 
         const tipos = [
-            'Arrendamiento', 'Luz', 'Agua', 'Internet', 'Teléfono', 'Gas',
-            'Tarjeta de Crédito 1', 'Tarjeta de Crédito 2',
-            'Netflix', 'Spotify', 'Gimnasio', 'Seguro', 'Otro'
+            'Arrendamiento','Luz','Agua','Internet','Teléfono','Gas',
+            'Tarjeta de Crédito 1','Tarjeta de Crédito 2',
+            'Netflix','Spotify','Gimnasio','Seguro','Otro'
         ];
 
-        const opcionesTipo = tipos.map(t =>
+        const opcionesTipo = tipos.map(t => 
             `<option value="${t}" ${deuda.tipo === t ? 'selected' : ''}>${t}</option>`
         ).join('');
 
         const { value: formValues } = await Swal.fire({
             title: '✏️ Editar Pago',
             html: `
-                <style>
-                    .swal2-html-container input.form-control,
-                    .swal2-html-container select.form-select,
-                    .swal2-html-container textarea.form-control {
-                        padding: 0.75rem 1rem !important;
-                        font-size: 1.1rem !important;
-                        border: 1px solid #ced4da !important;
-                        border-radius: 0.5rem !important;
-                        transition: all 0.2s !important;
-                        width: 100% !important;
-                        box-sizing: border-box !important;
-                    }
-                    
-                    .swal2-html-container input.form-control:focus,
-                    .swal2-html-container select.form-select:focus,
-                    .swal2-html-container textarea.form-control:focus {
-                        border-color: #86b7fe !important;
-                        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
-                        outline: 0 !important;
-                    }
-                    
-                    .swal2-html-container .input-group-text {
-                        padding: 0.75rem 1rem !important;
-                        font-size: 1.1rem !important;
-                        background-color: #e9ecef !important;
-                        border: 1px solid #ced4da !important;
-                        border-radius: 0.5rem 0 0 0.5rem !important;
-                    }
-                    
-                    .swal2-html-container .input-group input {
-                        border-radius: 0 0.5rem 0.5rem 0 !important;
-                    }
-                    
-                    .swal2-html-container .form-check-input {
-                        width: 3em !important;
-                        height: 1.5em !important;
-                        cursor: pointer !important;
-                        border: 1px solid #ced4da !important;
-                    }
-                    
-                    .swal2-html-container .form-check-label {
-                        cursor: pointer !important;
-                        font-size: 1rem !important;
-                        margin-left: 0.5rem !important;
-                    }
-                    
-                    .swal2-html-container .form-label {
-                        margin-bottom: 0.5rem !important;
-                        font-size: 0.95rem !important;
-                        color: #212529 !important;
-                    }
-                    
-                    .swal2-html-container .shadow-sm {
-                        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075) !important;
-                    }
-                </style>
                 <div class="text-start" style="max-width: 500px; margin: 0 auto;">
                     <div class="mb-3">
                         <label class="form-label fw-bold">Nombre del Pago *</label>
-                        <input type="text" id="nombre-deuda" class="form-control shadow-sm" 
-                               value="${deuda.nombre}" placeholder="Ej: Renta de departamento">
+                        <input type="text" id="nombre-deuda" class="form-control" value="${deuda.nombre}">
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-bold">Tipo de Pago *</label>
-                        <select id="tipo-deuda" class="form-select shadow-sm">
-                            ${opcionesTipo}
-                        </select>
+                        <select id="tipo-deuda" class="form-control">${opcionesTipo}</select>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-bold">Día de Pago (1-31) *</label>
-                        <input type="number" id="dia-pago" class="form-control shadow-sm" 
-                               min="1" max="31" value="${deuda.diaPago}" placeholder="Ej: 15">
+                        <input type="number" id="dia-pago" class="form-control" min="1" max="31" value="${deuda.diaPago}">
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-bold">Monto *</label>
-                        <div class="input-group shadow-sm">
-                            <input type="number" id="monto-deuda" class="form-control" 
-                                   step="0.01" value="${deuda.monto}" placeholder="0.00">
-                        </div>
+                        <input type="number" id="monto-deuda" class="form-control" step="0.01" value="${deuda.monto}">
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-bold">Notas (opcional)</label>
-                        <textarea id="notas-deuda" class="form-control shadow-sm" rows="3" 
-                                  placeholder="Añade información adicional...">${deuda.notas || ''}</textarea>
+                        <textarea id="notas-deuda" class="form-control" rows="2">${deuda.notas || ''}</textarea>
                     </div>
                     <div class="mb-3">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" role="switch" 
-                                   id="pagado-deuda" ${deuda.pagado ? 'checked' : ''}>
-                            <label class="form-check-label fw-bold" for="pagado-deuda">
-                                Marcar como pagado
-                            </label>
-                        </div>
+                        <label class="form-label fw-bold">Pagado</label>
+                        <input type="checkbox" id="pagado-deuda" ${deuda.pagado ? 'checked' : ''}>
                     </div>
                 </div>
             `,
             confirmButtonText: '💾 Guardar Cambios',
-            confirmButtonColor: '#198754',
             showCancelButton: true,
             cancelButtonText: 'Cancelar',
-            cancelButtonColor: '#6c757d',
-            width: '650px',
-            customClass: { 
-                container: 'swal-on-top'
-            },
+            width: '600px',
+            customClass: { container: 'swal-on-top' },
             preConfirm: () => {
                 const nombre = document.getElementById('nombre-deuda').value.trim();
                 const tipo = document.getElementById('tipo-deuda').value;
@@ -2665,6 +2073,7 @@ async function editarDeuda(id) {
         });
 
         if (formValues) {
+            // Enviar solo campos definidos al PUT
             const datosActualizar = {};
             for (const key in formValues) {
                 if (formValues[key] !== undefined) datosActualizar[key] = formValues[key];
@@ -2683,7 +2092,6 @@ async function editarDeuda(id) {
                     title: '✅ Actualizado',
                     text: 'Pago modificado exitosamente',
                     timer: 2000,
-                    showConfirmButton: false,
                     customClass: { container: 'swal-on-top' }
                 });
                 cargarDeudas();
@@ -2692,7 +2100,6 @@ async function editarDeuda(id) {
                     icon: 'error',
                     title: '❌ Error',
                     text: data.error || 'No se pudo actualizar',
-                    confirmButtonColor: '#dc3545',
                     customClass: { container: 'swal-on-top' }
                 });
             }
@@ -2716,13 +2123,13 @@ async function eliminarDeuda(id) {
         confirmButtonColor: '#dc3545',
         customClass: { container: 'swal-on-top' }
     });
-
+    
     if (!result.isConfirmed) return;
 
     try {
         const res = await fetch(`/api/deudas/${id}`, { method: 'DELETE' });
         const data = await res.json();
-
+        
         if (data.success) {
             Swal.fire({
                 icon: 'success',
@@ -2748,13 +2155,13 @@ async function eliminarDeuda(id) {
 // Ver resumen
 async function verResumenDeudas() {
     cargarResumenDeudas();
-
+    
     const totalDeudas = deudas.length;
     const totalPagadas = deudas.filter(d => d.pagado).length;
     const totalPendientes = totalDeudas - totalPagadas;
     const montoTotal = deudas.reduce((sum, d) => sum + d.monto, 0);
     const montoPendiente = deudas.filter(d => !d.pagado).reduce((sum, d) => sum + d.monto, 0);
-
+    
     Swal.fire({
         title: '📊 Resumen de Pagos',
         html: `
@@ -2791,7 +2198,7 @@ async function exportarDeudas() {
 
         const csv = [
             ['Nombre', 'Tipo', 'Monto', 'Día de Pago', 'Estado', 'Notas'].join(','),
-            ...deudas.map(d =>
+            ...deudas.map(d => 
                 [
                     `"${d.nombre}"`,
                     `"${d.tipo}"`,
@@ -2902,7 +2309,7 @@ async function cargarResumenGastos() {
 
 function mostrarGastos(gastos) {
     const gastosGrid = document.getElementById('gastos-grid');
-
+    
     if (!gastos || gastos.length === 0) {
         gastosGrid.innerHTML = `
             <div class="gastos-loading">
@@ -3105,17 +2512,17 @@ function agregarGastosLote() {
                 Swal.showValidationMessage('Ingresa al menos un gasto');
                 return false;
             }
-
+            
             const lineas = texto.split('\n').filter(l => l.trim());
             const gastos = [];
-
+            
             for (let i = 0; i < lineas.length; i++) {
                 const partes = lineas[i].split(',').map(p => p.trim());
                 if (partes.length < 3) {
                     Swal.showValidationMessage(`Error en línea ${i + 1}: formato incorrecto`);
                     return false;
                 }
-
+                
                 gastos.push({
                     descripcion: partes[0],
                     monto: parseFloat(partes[1]),
@@ -3124,7 +2531,7 @@ function agregarGastosLote() {
                     notas: partes[4] || ''
                 });
             }
-
+            
             return gastos;
         }
     }).then(async (result) => {
@@ -3135,7 +2542,7 @@ function agregarGastosLote() {
                 body: JSON.stringify({ gastos: result.value })
             });
             const data = await res.json();
-
+            
             if (data.success) {
                 Swal.fire({
                     icon: 'success',
@@ -3168,105 +2575,47 @@ async function editarGasto(id) {
         Swal.fire({
             title: '✏️ Editar Gasto',
             html: `
-                <div style="text-align: left; padding: 20px;">
-                    <div style="margin-bottom: 20px;">
-                        <label for="edit-descripcion" style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">
-                            📝 Descripción
-                        </label>
-                        <input id="edit-descripcion" 
-                               class="swal2-input" 
-                               placeholder="Ej: Comida, Gasolina, etc."
-                               value="${gasto.descripcion}"
-                               style="width: 100%; margin: 0; padding: 12px; border: 2px solid #e1e5f7; border-radius: 8px; font-size: 1rem;">
-                    </div>
+                <div style="text-align: left;">
+                    <label for="edit-descripcion">Descripción:</label>
+                    <input id="edit-descripcion" class="swal2-input" value="${gasto.descripcion}">
                     
-                    <div style="margin-bottom: 20px;">
-                        <label for="edit-monto" style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">
-                            💵 Monto
-                        </label>
-                        <input id="edit-monto" 
-                               type="number" 
-                               step="0.01" 
-                               class="swal2-input" 
-                               placeholder="0.00"
-                               value="${gasto.monto}"
-                               style="width: 100%; margin: 0; padding: 12px; border: 2px solid #e1e5f7; border-radius: 8px; font-size: 1rem;">
-                    </div>
+                    <label for="edit-monto">Monto:</label>
+                    <input id="edit-monto" type="number" step="0.01" class="swal2-input" value="${gasto.monto}">
                     
-                    <div style="margin-bottom: 20px;">
-                        <label for="edit-categoria" style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">
-                            🏷️ Categoría
-                        </label>
-                        <select id="edit-categoria" 
-                                class="swal2-select"
-                                style="width: 100%; margin: 0; padding: 12px; border: 2px solid #e1e5f7; border-radius: 8px; font-size: 1rem; background: white;">
-                            <option value="Comida" ${gasto.categoria === 'Comida' ? 'selected' : ''}>🍔 Comida</option>
-                            <option value="Transporte" ${gasto.categoria === 'Transporte' ? 'selected' : ''}>🚗 Transporte</option>
-                            <option value="Entretenimiento" ${gasto.categoria === 'Entretenimiento' ? 'selected' : ''}>🎬 Entretenimiento</option>
-                            <option value="Salud" ${gasto.categoria === 'Salud' ? 'selected' : ''}>💊 Salud</option>
-                            <option value="Educación" ${gasto.categoria === 'Educación' ? 'selected' : ''}>📚 Educación</option>
-                            <option value="Hogar" ${gasto.categoria === 'Hogar' ? 'selected' : ''}>🏠 Hogar</option>
-                            <option value="Ropa" ${gasto.categoria === 'Ropa' ? 'selected' : ''}>👕 Ropa</option>
-                            <option value="Servicios" ${gasto.categoria === 'Servicios' ? 'selected' : ''}>🔧 Servicios</option>
-                            <option value="Otros" ${gasto.categoria === 'Otros' ? 'selected' : ''}>📦 Otros</option>
-                        </select>
-                    </div>
+                    <label for="edit-categoria">Categoría:</label>
+                    <select id="edit-categoria" class="swal2-select">
+                        <option value="Comida" ${gasto.categoria === 'Comida' ? 'selected' : ''}>🍔 Comida</option>
+                        <option value="Transporte" ${gasto.categoria === 'Transporte' ? 'selected' : ''}>🚗 Transporte</option>
+                        <option value="Entretenimiento" ${gasto.categoria === 'Entretenimiento' ? 'selected' : ''}>🎬 Entretenimiento</option>
+                        <option value="Salud" ${gasto.categoria === 'Salud' ? 'selected' : ''}>💊 Salud</option>
+                        <option value="Educación" ${gasto.categoria === 'Educación' ? 'selected' : ''}>📚 Educación</option>
+                        <option value="Hogar" ${gasto.categoria === 'Hogar' ? 'selected' : ''}>🏠 Hogar</option>
+                        <option value="Ropa" ${gasto.categoria === 'Ropa' ? 'selected' : ''}>👕 Ropa</option>
+                        <option value="Servicios" ${gasto.categoria === 'Servicios' ? 'selected' : ''}>🔧 Servicios</option>
+                        <option value="Otros" ${gasto.categoria === 'Otros' ? 'selected' : ''}>📦 Otros</option>
+                    </select>
                     
-                    <div style="margin-bottom: 20px;">
-                        <label for="edit-fecha" style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">
-                            📅 Fecha
-                        </label>
-                        <input id="edit-fecha" 
-                               type="date" 
-                               class="swal2-input" 
-                               value="${gasto.fecha}"
-                               style="width: 100%; margin: 0; padding: 12px; border: 2px solid #e1e5f7; border-radius: 8px; font-size: 1rem;">
-                    </div>
+                    <label for="edit-fecha">Fecha:</label>
+                    <input id="edit-fecha" type="date" class="swal2-input" value="${gasto.fecha}">
                     
-                    <div style="margin-bottom: 0;">
-                        <label for="edit-notas" style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">
-                            📋 Notas <span style="font-weight: normal; color: #999;">(opcional)</span>
-                        </label>
-                        <textarea id="edit-notas" 
-                                  class="swal2-textarea" 
-                                  placeholder="Notas adicionales"
-                                  style="width: 100%; margin: 0; padding: 12px; border: 2px solid #e1e5f7; border-radius: 8px; font-size: 1rem; min-height: 80px; resize: vertical;">${gasto.notas || ''}</textarea>
-                    </div>
+                    <label for="edit-notas">Notas:</label>
+                    <textarea id="edit-notas" class="swal2-textarea">${gasto.notas || ''}</textarea>
                 </div>
             `,
             confirmButtonText: '💾 Guardar Cambios',
             showCancelButton: true,
-            cancelButtonText: '❌ Cancelar',
-            confirmButtonColor: '#28a745',
-            cancelButtonColor: '#6c757d',
+            cancelButtonText: 'Cancelar',
             width: '600px',
             customClass: {
                 container: 'swal-on-top'
             },
-            preConfirm: () => {
-                const descripcion = document.getElementById('edit-descripcion').value.trim();
-                const monto = parseFloat(document.getElementById('edit-monto').value || 0);
-                const categoria = document.getElementById('edit-categoria').value;
-                const fecha = document.getElementById('edit-fecha').value;
-                const notas = document.getElementById('edit-notas').value.trim();
-
-                if (!descripcion) {
-                    Swal.showValidationMessage('❗ Por favor ingresa una descripción');
-                    return false;
-                }
-
-                if (!categoria) {
-                    Swal.showValidationMessage('❗ Por favor selecciona una categoría');
-                    return false;
-                }
-
-                if (!monto || monto <= 0) {
-                    Swal.showValidationMessage('❗ El monto debe ser mayor a 0');
-                    return false;
-                }
-
-                return { descripcion, monto, categoria, fecha, notas };
-            }
+            preConfirm: () => ({
+                descripcion: document.getElementById('edit-descripcion').value.trim(),
+                monto: parseFloat(document.getElementById('edit-monto').value || 0),
+                categoria: document.getElementById('edit-categoria').value,
+                fecha: document.getElementById('edit-fecha').value,
+                notas: document.getElementById('edit-notas').value.trim()
+            })
         }).then(async (r) => {
             if (r.isConfirmed) {
                 const res = await fetch(`/api/gastos/${id}`, {
@@ -3281,7 +2630,6 @@ async function editarGasto(id) {
                         title: '✅ Actualizado',
                         text: 'Gasto modificado exitosamente',
                         timer: 2000,
-                        showConfirmButton: false,
                         customClass: { container: 'swal-on-top' }
                     });
                     cargarGastos();
@@ -3290,7 +2638,6 @@ async function editarGasto(id) {
                         icon: 'error',
                         title: '❌ Error',
                         text: data.error || 'No se pudo actualizar',
-                        confirmButtonColor: '#dc3545',
                         customClass: { container: 'swal-on-top' }
                     });
                 }
@@ -3301,7 +2648,6 @@ async function editarGasto(id) {
             icon: 'error',
             title: '❌ Error',
             text: 'No se pudo editar el gasto',
-            confirmButtonColor: '#dc3545',
             customClass: { container: 'swal-on-top' }
         });
     }
@@ -3320,12 +2666,12 @@ async function eliminarGasto(id) {
             container: 'swal-on-top'
         }
     });
-
+    
     if (!result.isConfirmed) return;
 
     const res = await fetch(`/api/gastos/${id}`, { method: 'DELETE' });
     const data = await res.json();
-
+    
     if (data.success) {
         Swal.fire({
             icon: 'success',
@@ -3352,7 +2698,7 @@ async function verGastosPorCategoria() {
 
         if (data.success) {
             const categorias = data.resumen.gastosPorCategoria;
-
+            
             if (Object.keys(categorias).length === 0) {
                 Swal.fire({
                     icon: 'info',
@@ -3366,9 +2712,9 @@ async function verGastosPorCategoria() {
             const html = `
                 <div style="text-align: left;">
                     ${Object.keys(categorias).map(cat => {
-                const emoji = obtenerEmojiCategoria(cat);
-                const porcentaje = ((categorias[cat].monto / data.resumen.totalMonto) * 100).toFixed(1);
-                return `
+                        const emoji = obtenerEmojiCategoria(cat);
+                        const porcentaje = ((categorias[cat].monto / data.resumen.totalMonto) * 100).toFixed(1);
+                        return `
                             <div class="categoria-item-modal" onclick="filtrarPorCategoria('${cat}'); Swal.close();" 
                                 style="display: flex; align-items: center; gap: 1rem; padding: 1rem; margin: 0.5rem 0; 
                                 background: #f8f9fa; border-radius: 8px; cursor: pointer; transition: all 0.2s;"
@@ -3386,7 +2732,7 @@ async function verGastosPorCategoria() {
                                 </div>
                             </div>
                         `;
-            }).join('')}
+                    }).join('')}
                 </div>
             `;
 
@@ -3417,7 +2763,7 @@ async function exportarGastos() {
         if (data.success && data.gastos.length > 0) {
             const csv = [
                 ['Descripción', 'Monto', 'Categoría', 'Fecha', 'Notas'].join(','),
-                ...data.gastos.map(g =>
+                ...data.gastos.map(g => 
                     [
                         `"${g.descripcion}"`,
                         g.monto,
@@ -3470,7 +2816,7 @@ async function filtrarPorCategoria(categoria) {
 
         if (data.success) {
             mostrarGastos(data.gastos);
-
+            
             const gastosGrid = document.getElementById('gastos-grid');
             const btnVerTodos = document.createElement('div');
             btnVerTodos.className = 'text-center mt-3';
@@ -3480,7 +2826,7 @@ async function filtrarPorCategoria(categoria) {
                 </button>
             `;
             gastosGrid.appendChild(btnVerTodos);
-
+            
             Swal.close();
         }
     } catch (error) {
@@ -3497,7 +2843,7 @@ async function filtrarPorCategoria(categoria) {
 // ============================================
 function agregarEstilosCSS() {
     if (document.getElementById('dashboard-styles')) return;
-
+    
     const style = document.createElement('style');
     style.id = 'dashboard-styles';
     style.textContent = `
@@ -3666,7 +3012,7 @@ function agregarEstilosCSS() {
         }
     `;
     document.head.appendChild(style);
-
+    
     // Estilos de Select2
     if (!document.getElementById('select2-custom-styles')) {
         const select2Style = document.createElement('style');
@@ -3720,13 +3066,12 @@ function agregarEstilosCSS() {
 // ============================================
 // FUNCIONES DEL BOT
 // ============================================
-function reconectarBot() {
-    fetch('/reiniciar');
-    Swal.fire('Reconectando...', '', 'info');
+function reconectarBot() { 
+    fetch('/reiniciar'); 
+    Swal.fire('Reconectando...', '', 'info'); 
 }
-agregarEstilosLimites();
 
-function reiniciarServidor() {
-    fetch('/reiniciar');
-    Swal.fire('Servidor reiniciado', '', 'success');
+function reiniciarServidor() { 
+    fetch('/reiniciar'); 
+    Swal.fire('Servidor reiniciado', '', 'success'); 
 }
