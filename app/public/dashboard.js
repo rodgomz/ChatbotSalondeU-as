@@ -8,6 +8,12 @@ let appointments = [];
 let clientes = [];
 let servicios = [];
 let deudas = [];
+let MAX_APPOINTMENTS_PER_SLOT = 1; // Default
+let configuracionLimites = {
+    limitePorSlot: 1,
+    limitesPorDia: {}, // Opcional: límites específicos por día de la semana
+    limitesPorHora: {} // Opcional: límites específicos por hora
+};
 let notificacionesPendientes = [];
 let deudasBackup = null;
 
@@ -33,7 +39,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadClientes();
     await loadServicios();
     await loadAppointments();
-
+    
     // Renderizar interfaz
     renderWeek();
     updateCalendarDisplay();
@@ -79,8 +85,245 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 
+async function cargarConfiguracionLimites() {
+    try {
+        const response = await fetch('/api/configuracion/limites');
+        if (response.ok) {
+            const config = await response.json();
+            configuracionLimites = config;
+            MAX_APPOINTMENTS_PER_SLOT = config.limitePorSlot || 1;
+            console.log('✅ Configuración de límites cargada:', configuracionLimites);
+        }
+    } catch (error) {
+        console.warn('⚠️ No se pudo cargar configuración de límites, usando default:', error);
+    }
+}
+
+async function guardarConfiguracionLimites(config) {
+    try {
+        const response = await fetch('/api/configuracion/limites', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        
+        if (response.ok) {
+            configuracionLimites = config;
+            MAX_APPOINTMENTS_PER_SLOT = config.limitePorSlot;
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error('❌ Error guardando configuración:', error);
+        return false;
+    }
+}
+function obtenerLimiteParaSlot(fecha, hora) {
+    // 1. Verificar si hay límite específico para esta hora
+    const horaKey = `${hora}:00`;
+    if (configuracionLimites.limitesPorHora && configuracionLimites.limitesPorHora[horaKey]) {
+        return configuracionLimites.limitesPorHora[horaKey];
+    }
+    
+    // 2. Verificar si hay límite específico para este día de la semana
+    const diaSemana = fecha.getDay(); // 0 = Domingo, 1 = Lunes, etc.
+    if (configuracionLimites.limitesPorDia && configuracionLimites.limitesPorDia[diaSemana]) {
+        return configuracionLimites.limitesPorDia[diaSemana];
+    }
+    
+    // 3. Usar límite general
+    return configuracionLimites.limitePorSlot || MAX_APPOINTMENTS_PER_SLOT;
+}
 
 
+
+// ============================================
+// MODAL DE CONFIGURACIÓN
+// ============================================
+
+function mostrarConfiguracionLimites() {
+    const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    
+    // Generar opciones de días
+    const diasHtml = diasSemana.map((dia, index) => {
+        const limite = configuracionLimites.limitesPorDia?.[index] || '';
+        return `
+            <div class="form-row" style="display: flex; align-items: center; margin-bottom: 10px;">
+                <label style="flex: 1; margin: 0;">${dia}:</label>
+                <input type="number" 
+                       id="limite-dia-${index}" 
+                       class="form-control" 
+                       min="1" 
+                       max="20" 
+                       placeholder="Usar general"
+                       value="${limite}"
+                       style="width: 100px;">
+            </div>
+        `;
+    }).join('');
+    
+    // Generar opciones de horas pico
+    const horasPicoHtml = `
+        <div style="margin-top: 15px;">
+            <h6>⏰ Horas Pico (opcional)</h6>
+            <p style="font-size: 0.9em; color: #666;">Define límites específicos para horas con alta demanda</p>
+            <div id="horas-pico-container">
+                ${generarFilasHorasPico()}
+            </div>
+            <button type="button" onclick="agregarHoraPico()" class="btn btn-sm btn-secondary" style="margin-top: 10px;">
+                ➕ Agregar Hora Pico
+            </button>
+        </div>
+    `;
+    
+    Swal.fire({
+        title: '⚙️ Configuración de Límites',
+        html: `
+            <div style="text-align: left;">
+                <div style="background: #e7f3ff; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <h6 style="margin-top: 0;">📊 Límite General</h6>
+                    <p style="margin-bottom: 10px; font-size: 0.9em; color: #666;">
+                        Número máximo de citas simultáneas por horario
+                    </p>
+                    <input type="number" 
+                           id="limite-general" 
+                           class="form-control" 
+                           min="1" 
+                           max="20" 
+                           value="${configuracionLimites.limitePorSlot || 1}"
+                           style="width: 100%; padding: 8px; font-size: 1.2em; text-align: center;">
+                </div>
+                
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <h6 style="margin-top: 0;">📅 Límites por Día de la Semana</h6>
+                    <p style="margin-bottom: 15px; font-size: 0.9em; color: #666;">
+                        Deja en blanco para usar el límite general
+                    </p>
+                    ${diasHtml}
+                </div>
+                
+                ${horasPicoHtml}
+            </div>
+        `,
+        width: '650px',
+        showCancelButton: true,
+        confirmButtonText: '💾 Guardar',
+        cancelButtonText: '❌ Cancelar',
+        confirmButtonColor: '#28a745',
+        preConfirm: () => {
+            const limiteGeneral = parseInt(document.getElementById('limite-general').value) || 1;
+            
+            // Recopilar límites por día
+            const limitesPorDia = {};
+            for (let i = 0; i < 7; i++) {
+                const valor = document.getElementById(`limite-dia-${i}`).value;
+                if (valor) {
+                    limitesPorDia[i] = parseInt(valor);
+                }
+            }
+            
+            // Recopilar límites por hora
+            const limitesPorHora = {};
+            document.querySelectorAll('.hora-pico-row').forEach(row => {
+                const hora = row.querySelector('.hora-pico').value;
+                const limite = row.querySelector('.limite-pico').value;
+                if (hora && limite) {
+                    limitesPorHora[hora] = parseInt(limite);
+                }
+            });
+            
+            return {
+                limitePorSlot: limiteGeneral,
+                limitesPorDia: Object.keys(limitesPorDia).length > 0 ? limitesPorDia : {},
+                limitesPorHora: Object.keys(limitesPorHora).length > 0 ? limitesPorHora : {}
+            };
+        }
+    }).then(async (result) => {
+        if (result.isConfirmed) {
+            const exito = await guardarConfiguracionLimites(result.value);
+            
+            if (exito) {
+                Swal.fire({
+                    icon: 'success',
+                    title: '✅ Configuración Guardada',
+                    text: 'Los límites se han actualizado correctamente',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+                
+                // Recargar vista para reflejar cambios
+                renderWeek();
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'No se pudo guardar la configuración'
+                });
+            }
+        }
+    });
+}
+
+function generarFilasHorasPico() {
+    if (!configuracionLimites.limitesPorHora || Object.keys(configuracionLimites.limitesPorHora).length === 0) {
+        return '';
+    }
+    
+    return Object.entries(configuracionLimites.limitesPorHora).map(([hora, limite]) => `
+        <div class="hora-pico-row" style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+            <select class="form-control hora-pico" style="flex: 1;">
+                ${generarOpcionesHoras(hora)}
+            </select>
+            <input type="number" 
+                   class="form-control limite-pico" 
+                   min="1" 
+                   max="20" 
+                   value="${limite}"
+                   style="width: 100px;">
+            <button type="button" 
+                    onclick="this.parentElement.remove()" 
+                    class="btn btn-sm btn-danger">
+                🗑️
+            </button>
+        </div>
+    `).join('');
+}
+
+function agregarHoraPico() {
+    const container = document.getElementById('horas-pico-container');
+    const nuevaFila = document.createElement('div');
+    nuevaFila.className = 'hora-pico-row';
+    nuevaFila.style.cssText = 'display: flex; gap: 10px; align-items: center; margin-bottom: 10px;';
+    nuevaFila.innerHTML = `
+        <select class="form-control hora-pico" style="flex: 1;">
+            ${generarOpcionesHoras()}
+        </select>
+        <input type="number" 
+               class="form-control limite-pico" 
+               min="1" 
+               max="20" 
+               placeholder="Límite"
+               style="width: 100px;">
+        <button type="button" 
+                onclick="this.parentElement.remove()" 
+                class="btn btn-sm btn-danger">
+            🗑️
+        </button>
+    `;
+    container.appendChild(nuevaFila);
+}
+
+function generarOpcionesHoras(horaSeleccionada = '') {
+    const opciones = [];
+    for (let h = BUSINESS_HOURS.start; h < BUSINESS_HOURS.end; h++) {
+        for (let m = 0; m < 60; m += BUSINESS_HOURS.interval) {
+            const hora = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+            const selected = hora === horaSeleccionada ? 'selected' : '';
+            opciones.push(`<option value="${hora}" ${selected}>${hora}</option>`);
+        }
+    }
+    return opciones.join('');
+}
 // ============================================
 // FUNCIONES DE CARGA
 // ============================================
@@ -236,77 +479,62 @@ function getMonday(date) {
     return new Date(d.setDate(diff));
 }
 
-async function handleHourClick(dateStr, hour, minute = 0) {
+function handleHourClick(dateStr, hour, minute = 0) {
     console.log('🖱️ Click en hora:', { dateStr, hour, minute });
-
-    // Crear fecha sin problemas de zona horaria
-    const [year, month, day] = dateStr.split('-').map(num => parseInt(num, 10));
-    const date = new Date(year, month - 1, day); // Usar constructor local en lugar de string
     
-    console.log('📅 Fecha corregida:', {
-        original: dateStr,
-        dateObj: date,
-        formatted: date.toLocaleDateString('es-ES')
-    });
-    
-    // Esperar a que se obtengan las citas desde Firebase
-    const aptsInSlot = await getAppointmentsForSlot(date, hour, minute);
+    const date = new Date(dateStr);
+    const aptsInSlot = getAppointmentsForSlot(date, hour, minute);
     console.log('📊 Citas encontradas:', aptsInSlot);
-    
     const isAvailable = aptsInSlot.length === 0;
-
+    
     // ========================================
     // CASO 1: HORARIO OCUPADO (ROJO) 🔴
     // ========================================
     if (!isAvailable) {
         console.log('🔴 Horario ocupado con', aptsInSlot.length, 'cita(s)');
-
+        
         // Si hay UNA sola cita: Mostrar detalles directamente
         if (aptsInSlot.length === 1) {
             const aptId = aptsInSlot[0].id;
-            console.log('📋 Mostrando detalles de cita ID:', aptId);
-            showAppointmentDetails(aptId);
+            console.log('📋 Intentando mostrar detalles de cita ID:', aptId);
+            console.log('📋 Datos completos de la cita:', aptsInSlot[0]);
+            
+            // Verificar si la función existe
+            if (typeof showAppointmentDetails === 'function') {
+                showAppointmentDetails(aptId);
+            } else {
+                console.error('❌ La función showAppointmentDetails no existe');
+                alert('Error: La función para mostrar detalles no está disponible');
+            }
             return;
         }
-
+        
         // Si hay MÚLTIPLES citas: Mostrar lista para elegir
-        const citasHtml = aptsInSlot.map((apt) => {
-            // Parsear fecha y hora para mostrar
-            const aptStart = parseDate(apt.fecha, apt.hora);
-            const aptEnd = new Date(aptStart.getTime() + apt.duracion * 60000);
-            
-            return `
-                <div style="background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 8px; cursor: pointer; border: 2px solid #e1e5f7; transition: all 0.2s;" 
-                     onmouseover="this.style.borderColor='#667eea'; this.style.background='#f0f4ff';" 
-                     onmouseout="this.style.borderColor='#e1e5f7'; this.style.background='#f8f9fa';"
-                     onclick="event.stopPropagation(); showAppointmentDetails('${apt.id}'); Swal.close();">
-                    <div style="font-size: 1.1rem; margin-bottom: 8px;">
-                        <strong>👤 ${apt.client}</strong>
-                    </div>
-                    <div style="margin-bottom: 5px;">
-                        ✂️ ${apt.service} (${apt.duracion}min)
-                    </div>
-                    <div style="margin-bottom: 5px; color: #666;">
-                        🕐 ${aptStart.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} - ${aptEnd.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                    <div style="margin-bottom: 5px;">
-                        📞 ${apt.telefono || 'No disponible'}
-                    </div>
-                    <div style="font-size: 0.85rem; padding: 5px 10px; background: ${getStatusColor(apt.status)}; border-radius: 4px; display: inline-block; color: white;">
-                        📊 ${apt.status}
-                    </div>
+        const citasHtml = aptsInSlot.map((apt) => `
+            <div style="background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 8px; cursor: pointer; border: 2px solid #e1e5f7; transition: all 0.2s;" 
+                 onmouseover="this.style.borderColor='#667eea'; this.style.background='#f0f4ff';" 
+                 onmouseout="this.style.borderColor='#e1e5f7'; this.style.background='#f8f9fa';"
+                 onclick="event.stopPropagation(); showAppointmentDetails('${apt.id}'); Swal.close();">
+                <div style="font-size: 1.1rem; margin-bottom: 8px;">
+                    <strong>👤 ${apt.client}</strong>
                 </div>
-            `;
-        }).join('');
-
+                <div style="margin-bottom: 5px;">
+                    ✂️ ${apt.service} (${apt.duracion}min)
+                </div>
+                <div style="margin-bottom: 5px; color: #666;">
+                    🕐 ${apt.date.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})} - ${apt.endTime.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}
+                </div>
+                <div style="font-size: 0.85rem; padding: 5px 10px; background: ${getStatusColor(apt.status)}; border-radius: 4px; display: inline-block; color: white;">
+                    📊 ${apt.status}
+                </div>
+            </div>
+        `).join('');
+        
         Swal.fire({
-            title: `📋 Citas en este horario (${aptsInSlot.length})`,
+            title: `📋 Citas en este horario (${aptsInSlot.length}/${limiteSlot})`,
             html: `
                 <div style="text-align: left; max-height: 400px; overflow-y: auto;">
                     ${citasHtml}
-                </div>
-                <div style="margin-top: 15px; padding: 10px; background: #f8f9ff; border-radius: 6px; font-size: 0.9rem; color: #666;">
-                    💡 Haz clic en una cita para ver todos sus detalles
                 </div>
             `,
             width: '600px',
@@ -318,36 +546,37 @@ async function handleHourClick(dateStr, hour, minute = 0) {
         });
         return;
     }
-
+    
     // ========================================
     // CASO 2: HORARIO DISPONIBLE (VERDE) 🟢
     // ========================================
     console.log('🟢 Horario disponible');
-
+    
     const hourStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-    const dateFormatted = date.toLocaleDateString('es-ES', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
+    const dateFormatted = date.toLocaleDateString('es-ES', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
     });
 
     Swal.fire({
         title: `📅 ${dateFormatted}`,
         html: `
-            <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+            <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); border-radius: 12px;">
                 <div style="font-size: 3rem; margin-bottom: 15px;">✅</div>
                 <p style="margin-bottom: 15px; font-size: 1.2rem; color: #155724;">
                     <strong>Horario Disponible</strong>
                 </p>
-                <p style="margin-bottom: 20px; font-size: 1.4rem; color: #155724; font-weight: 600;">
+                <p style="margin-bottom: 10px; font-size: 1.4rem; color: #155724; font-weight: 600;">
                     🕐 ${hourStr}
+                </p>
+                <p style="margin-bottom: 20px; font-size: 0.9rem; color: #155724;">
+                    ${aptsInSlot.length}/${limiteSlot} citas agendadas
                 </p>
                 <button onclick="showNewAppointmentForm('${dateStr}', '${hourStr}'); Swal.close();" 
                         class="btn btn-success"
-                        style="padding: 12px 30px; font-size: 1.1rem; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.15); transition: all 0.3s;"
-                        onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 15px rgba(0,0,0,0.2)';"
-                        onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 10px rgba(0,0,0,0.15)';">
+                        style="padding: 12px 30px; font-size: 1.1rem;">
                     ➕ Agregar Nueva Cita
                 </button>
             </div>
@@ -366,74 +595,30 @@ async function handleHourClick(dateStr, hour, minute = 0) {
 // ============================================
 // FUNCIÓN AUXILIAR: Obtener citas en un slot específico
 // ============================================
-async function getAppointmentsForSlot(date, hour, minute = 0) {
-    try {
-        const slotStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, minute, 0, 0);
-        const slotEnd = new Date(slotStart.getTime() + BUSINESS_HOURS.interval * 60000);
-
-        console.log('🔍 Buscando citas para:', {
-            fecha: date.toLocaleDateString('es-ES'),
-            hora: `${hour}:${String(minute).padStart(2, '0')}`,
-            slotStart: slotStart.toLocaleString('es-ES'),
-            slotEnd: slotEnd.toLocaleString('es-ES')
-        });
-
-        // Obtener todas las citas desde Firebase
-        const response = await fetch('/api/citas');
-        if (!response.ok) {
-            console.error('Error al obtener citas:', response.statusText);
-            return [];
+function getAppointmentsForSlot(date, hour, minute = 0) {
+    const slotStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, minute, 0);
+    const slotEnd = new Date(slotStart.getTime() + BUSINESS_HOURS.interval * 60000);
+    
+    return appointments.filter(apt => {
+        // Solo considerar citas activas (no canceladas)
+        if (!['Reservada', 'Confirmada', 'En Proceso', 'Finalizada'].includes(apt.status)) {
+            return false;
         }
-
-        const citasFromApi = await response.json();
-        console.log('📦 Total de citas:', citasFromApi.length);
-
-        // Filtrar solo las del mismo día primero
-        const citasDelDia = citasFromApi.filter(apt => {
-            const aptStart = parseDate(apt.fecha, apt.hora);
-            const mismoAnio = aptStart.getFullYear() === date.getFullYear();
-            const mismoMes = aptStart.getMonth() === date.getMonth();
-            const mismoDia = aptStart.getDate() === date.getDate();
-            
-            return mismoAnio && mismoMes && mismoDia;
-        });
-
-        console.log(`📅 Citas del día ${date.toLocaleDateString('es-ES')}:`, citasDelDia.length);
-
-        // Ahora filtrar por hora y solapamiento
-        const citasFiltradas = citasDelDia.filter(apt => {
-            // Solo considerar citas activas (no canceladas)
-            if (!['Reservada', 'Confirmada', 'En Proceso', 'Finalizada'].includes(apt.status)) {
-                return false;
-            }
-
-            // Parsear la fecha de la cita
-            const aptStart = parseDate(apt.fecha, apt.hora);
-            const aptEnd = new Date(aptStart.getTime() + apt.duracion * 60000);
-
-            // Verificar si hay solapamiento entre el slot y la cita
-            const hasOverlap = !(aptEnd <= slotStart || aptStart >= slotEnd);
-            
-            if (hasOverlap) {
-                console.log('✅ Cita encontrada:', {
-                    client: apt.client,
-                    hora: apt.hora,
-                    duracion: apt.duracion + 'min',
-                    inicio: aptStart.toLocaleTimeString('es-ES'),
-                    fin: aptEnd.toLocaleTimeString('es-ES')
-                });
-            }
-
-            return hasOverlap;
-        });
-
-        console.log(`🎯 Total citas en este slot:`, citasFiltradas.length);
-        return citasFiltradas;
-    } catch (error) {
-        console.error('❌ Error en getAppointmentsForSlot:', error);
-        return [];
-    }
+        
+        const aptStart = apt.date;
+        const aptEnd = apt.endTime;
+        
+        // Verificar si hay solapamiento entre el slot y la cita
+        return !(aptEnd <= slotStart || aptStart >= slotEnd);
+    });
 }
+
+function isSlotAvailable(date, hour, minute = 0) {
+    const citasEnSlot = getAppointmentsForSlot(date, hour, minute);
+    const limiteSlot = obtenerLimiteParaSlot(date, hour);
+    return citasEnSlot.length < limiteSlot;
+}
+
 
 // ============================================
 // FUNCIÓN AUXILIAR: Obtener color según estado
@@ -620,32 +805,14 @@ function createDayCard(date, esLaborable = true) {
      // Generar slots de horas
     for (let hour = BUSINESS_HOURS.start; hour < BUSINESS_HOURS.end; hour++) {
         for (let minute = 0; minute < 60; minute += BUSINESS_HOURS.interval) {
-            // Contar citas localmente desde el array appointments para el renderizado inicial
-            const slotStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, minute, 0);
-            const slotEnd = new Date(slotStart.getTime() + BUSINESS_HOURS.interval * 60000);
-            
-            const aptsInSlot = appointments.filter(apt => {
-                if (!['Reservada', 'Confirmada', 'En Proceso', 'Finalizada'].includes(apt.status)) {
-                    return false;
-                }
-                const aptStart = apt.date;
-                const aptEnd = apt.endTime;
-                return !(aptEnd <= slotStart || aptStart >= slotEnd);
-            });
-            
+            const aptsInSlot = getAppointmentsForSlot(date, hour, minute);
             const isAvailable = aptsInSlot.length === 0;
 
-            const slotDiv = document.createElement('div');
-            slotDiv.className = `hour-slot ${isAvailable ? 'available' : 'fully-booked'}`;
-            
-            // Agregar event listener en lugar de onclick inline
-            slotDiv.addEventListener('click', async () => {
-                console.log('🖱️ Click en slot:', { date, hour, minute });
-                await handleHourClick(date.toISOString().split('T')[0], hour, minute);
-            });
+            let slotClass = 'hour-slot';
+            slotClass += isAvailable ? ' available' : ' fully-booked';
 
             const hourStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-            const capacity = `${aptsInSlot.length}/1`;
+            const capacity = `${aptsInSlot.length}/${limiteSlot}`;
 
             slotDiv.innerHTML = `
                 <div class="hour-time">${hourStr}</div>
@@ -668,178 +835,11 @@ function createDayCard(date, esLaborable = true) {
         stats: {
             available: hoursAvailable,
             booked: hoursOccupied,
-            appointments: appointments.filter(apt =>
-                apt.date.toDateString() === date.toDateString() &&
-                ['Reservada', 'Confirmada', 'En Proceso', 'Finalizada'].includes(apt.status)
+            appointments: Object.values(appointments).filter(apt => 
+                apt.date.toDateString() === date.toDateString()
             ).length
         }
     };
-}
-
-function parseFechaDMY(fechaStr) {
-    if (!fechaStr) return null;
-    const [dia, mes, año] = fechaStr.split('/').map(n => parseInt(n, 10));
-    if (!dia || !mes || !año) return null;
-    return new Date(año, mes - 1, dia);
-}
-
-// Función para cargar datos semanales
-async function loadWeeklyEarnings() {
-    try {
-        const weekStart = new Date(currentWeekStart);
-        weekStart.setHours(0, 0, 0, 0);
-        const weekEnd = new Date(currentWeekStart);
-        weekEnd.setDate(weekEnd.getDate() + 6);
-        weekEnd.setHours(23, 59, 59, 999);
-
-        // Obtener ganancias (citas completadas)
-        const gananciaResponse = await fetch('/api/ganancias');
-        const gananciaData = await gananciaResponse.json();
-        
-        // Filtrar ganancias de la semana actual
-        const totalGanancias = gananciaData.citasGanancia
-            .filter(cita => {
-                const fechaCita = parseFechaDMY(cita.fecha);
-                return fechaCita && fechaCita >= weekStart && fechaCita <= weekEnd;
-            })
-            .reduce((sum, cita) => sum + (cita.precio || 0), 0);
-
-        // Obtener gastos
-        const gastosResponse = await fetch('/api/gastos');
-        const gastosData = await gastosResponse.json();
-        
-        // Filtrar gastos de la semana actual
-        const totalGastos = (gastosData.gastos || [])
-            .filter(gasto => {
-                const fechaGasto = new Date(gasto.fecha);
-                return fechaGasto >= weekStart && fechaGasto <= weekEnd;
-            })
-            .reduce((sum, gasto) => sum + (gasto.monto || 0), 0);
-
-        // Obtener deudas
-        const deudasResponse = await fetch('/api/deudas');
-        const deudasData = await deudasResponse.json();
-        
-        // Filtrar deudas pagadas en la semana actual
-        const totalDeudas = (deudasData.deudas || [])
-            .filter(deuda => {
-                if (!deuda.pagado || !deuda.fechaPago) return false;
-                const fechaPago = new Date(deuda.fechaPago);
-                return fechaPago >= weekStart && fechaPago <= weekEnd;
-            })
-            .reduce((sum, deuda) => sum + (deuda.monto || 0), 0);
-
-        // Calcular neto
-        const neto = totalGanancias - totalGastos - totalDeudas;
-
-        // Actualizar tarjetas semanales
-        document.getElementById('ganancia-semanal').textContent = `$${totalGanancias.toFixed(2)}`;
-        document.getElementById('gastos-semanal').textContent = `$${totalGastos.toFixed(2)}`;
-        document.getElementById('deudas-semanal').textContent = `$${totalDeudas.toFixed(2)}`;
-        
-        const netoElement = document.getElementById('neto-semanal');
-        netoElement.textContent = `$${neto.toFixed(2)}`;
-        netoElement.style.color = neto >= 0 ? '#28a745' : '#dc3545';
-
-    } catch (error) {
-        console.error('Error cargando datos semanales:', error);
-    }
-}
-
-// Función para cargar datos diarios
-async function loadDailyEarnings() {
-    const grid = document.getElementById('daily-earnings-grid');
-    grid.innerHTML = '';
-
-    for (let i = 0; i < 7; i++) {
-        const date = new Date(currentWeekStart);
-        date.setDate(date.getDate() + i);
-        
-        const dayCard = await createDailyEarningCard(date);
-        grid.appendChild(dayCard);
-    }
-}
-
-async function createDailyEarningCard(date) {
-    const dayOfWeek = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][date.getDay()];
-    const dateStr = date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-    const isToday = date.toDateString() === new Date().toDateString();
-
-    const dayStart = new Date(date);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(date);
-    dayEnd.setHours(23, 59, 59, 999);
-
-    let ganancia = 0, gastos = 0, deudas = 0;
-
-    try {
-        // Obtener ganancias del día
-        const gananciaResponse = await fetch('/api/ganancias');
-        const gananciaData = await gananciaResponse.json();
-        ganancia = gananciaData.citasGanancia
-            .filter(cita => {
-                const fechaCita = parseFechaDMY(cita.fecha);
-                return fechaCita && fechaCita >= dayStart && fechaCita <= dayEnd;
-            })
-            .reduce((sum, cita) => sum + (cita.precio || 0), 0);
-
-        // Obtener gastos del día
-        const gastosResponse = await fetch('/api/gastos');
-        const gastosData = await gastosResponse.json();
-        gastos = (gastosData.gastos || [])
-            .filter(gasto => {
-                const fechaGasto = new Date(gasto.fecha);
-                return fechaGasto >= dayStart && fechaGasto <= dayEnd;
-            })
-            .reduce((sum, gasto) => sum + (gasto.monto || 0), 0);
-
-        // Obtener deudas del día
-        const deudasResponse = await fetch('/api/deudas');
-        const deudasData = await deudasResponse.json();
-        deudas = (deudasData.deudas || [])
-            .filter(deuda => {
-                if (!deuda.pagado || !deuda.fechaPago) return false;
-                const fechaPago = new Date(deuda.fechaPago);
-                return fechaPago >= dayStart && fechaPago <= dayEnd;
-            })
-            .reduce((sum, deuda) => sum + (deuda.monto || 0), 0);
-    } catch (error) {
-        console.error('Error cargando datos del día:', error);
-    }
-
-    const neto = ganancia - gastos - deudas;
-
-    const card = document.createElement('div');
-    card.className = `daily-card ${isToday ? 'today' : ''}`;
-    card.innerHTML = `
-        <div class="daily-card-header">
-            <div>
-                <div class="daily-card-date">${dayOfWeek}</div>
-                <div class="daily-card-day">${dateStr}</div>
-            </div>
-            ${isToday ? '<span style="color: #28a745; font-weight: bold;">HOY</span>' : ''}
-        </div>
-        <div class="daily-card-stats">
-            <div class="daily-stat positive">
-                <div class="daily-stat-label">📈 Ganancia</div>
-                <div class="daily-stat-value">$${ganancia.toFixed(2)}</div>
-            </div>
-            <div class="daily-stat negative">
-                <div class="daily-stat-label">💸 Gastos</div>
-                <div class="daily-stat-value">$${gastos.toFixed(2)}</div>
-            </div>
-            <div class="daily-stat negative">
-                <div class="daily-stat-label">💳 Deudas</div>
-                <div class="daily-stat-value">$${deudas.toFixed(2)}</div>
-            </div>
-            <div class="daily-stat neto">
-                <div class="daily-stat-label">💵 Neto</div>
-                <div class="daily-stat-value" style="color: ${neto >= 0 ? '#28a745' : '#dc3545'}">$${neto.toFixed(2)}</div>
-            </div>
-        </div>
-    `;
-
-    return card;
 }
 
 function previousWeek() {
@@ -3718,543 +3718,13 @@ function agregarEstilosCSS() {
 }
 
 // ============================================
-// CONFIGURACIONES
-// ============================================
-// Agregar esta función en tu dashboard.js (reemplaza la función configuracion() existente)
-
-// Función para actualizar el nombre y logo en el header
-async function actualizarHeaderDesdeFirebase() {
-    try {
-        const response = await fetch('/api/configuracion');
-        if (!response.ok) throw new Error('No se pudo cargar la configuración');
-
-        const config = await response.json();
-        console.log('Configuración desde Firebase:', config);
-
-        const nombreEl = document.getElementById('nombre-negocio-header');
-        const logoEl = document.getElementById('logo-negocio-header');
-        if (!nombreEl || !logoEl) return;
-
-        // Detecta el nombre del negocio
-        const nombreNegocio = config.nombreNegocio || config.nombre || '🤖 Dashboard Bot WhatsApp';
-        nombreEl.textContent = nombreNegocio;
-
-        // Logo si existe
-        if (config.logo) {
-            logoEl.src = config.logo;
-            logoEl.style.display = 'block';
-        } else {
-            logoEl.style.display = 'none';
-        }
-
-    } catch (error) {
-        console.error('Error actualizando header desde Firebase:', error);
-    }
-}
-function configuracion() {
-    document.getElementById('profile-dropdown').classList.remove('show');
-
-    Swal.fire({
-        title: '⚙️ Configuración del Sistema',
-        html: `
-            <div style="text-align: left;">
-                <!-- Información del Negocio CON LOGO -->
-                <div style="background: #e7f3ff; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-                    <h4 style="margin-bottom: 15px; color: #004085;">🏪 Información del Negocio</h4>
-                    
-                    <!-- Logo -->
-                    <div style="margin-bottom: 15px;">
-                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Logo del Negocio:</label>
-                        <div style="display: flex; align-items: center; gap: 15px;">
-                            <img id="preview-logo" src="" alt="Logo" 
-                                 style="max-height: 80px; max-width: 150px; display: none; border-radius: 8px; border: 2px solid #ddd;">
-                            <div style="flex: 1;">
-                                <input type="file" id="config-logo" accept="image/*" 
-                                       style="display: block; width: 100%; padding: 8px; border: 2px solid #ddd; border-radius: 8px; cursor: pointer;">
-                                <small style="color: #666; display: block; margin-top: 5px;">
-                                    Formatos: JPG, PNG, GIF (máx. 2MB)
-                                </small>
-                            </div>
-                        </div>
-                        <input type="hidden" id="config-logo-url" value="">
-                    </div>
-
-                    <div style="margin-bottom: 15px;">
-                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Nombre del Negocio:</label>
-                        <input type="text" id="config-nombre-negocio" class="swal2-input" 
-                               placeholder="Salón de Uñas" 
-                               style="width: 100%; margin: 0;">
-                    </div>
-                    <div style="margin-bottom: 15px;">
-                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Teléfono:</label>
-                        <input type="tel" id="config-telefono" class="swal2-input" 
-                               placeholder="+52 123 456 7890" 
-                               style="width: 100%; margin: 0;">
-                    </div>
-                    <div>
-                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Dirección:</label>
-                        <textarea id="config-direccion" class="swal2-textarea" 
-                                  placeholder="Calle, Número, Colonia, Ciudad" 
-                                  style="width: 100%; margin: 0; min-height: 80px;"></textarea>
-                    </div>
-                </div>
-
-                <!-- Horario de Negocio -->
-                <div style="background: #f8f9ff; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-                    <h4 style="margin-bottom: 15px; color: #667eea;">🕐 Horario de Negocio</h4>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                        <div>
-                            <label style="display: block; margin-bottom: 5px; font-weight: 600;">Hora de Inicio:</label>
-                            <select id="config-hora-inicio" class="swal2-input" style="width: 100%; margin: 0;">
-                                ${generarOpcionesHoras(8)}
-                            </select>
-                        </div>
-                        <div>
-                            <label style="display: block; margin-bottom: 5px; font-weight: 600;">Hora de Cierre:</label>
-                            <select id="config-hora-fin" class="swal2-input" style="width: 100%; margin: 0;">
-                                ${generarOpcionesHoras(22)}
-                            </select>
-                        </div>
-                    </div>
-                    <div style="margin-top: 15px;">
-                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Intervalo de Citas (minutos):</label>
-                        <select id="config-intervalo" class="swal2-input" style="width: 100%; margin: 0;">
-                            <option value="15">15 minutos</option>
-                            <option value="30" selected>30 minutos</option>
-                            <option value="60">60 minutos</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Límites de Citas -->
-                <div style="background: #fff3cd; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-                    <h4 style="margin-bottom: 15px; color: #856404;">📊 Límites de Citas</h4>
-                    <div>
-                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Máximo de citas simultáneas:</label>
-                        <input type="number" id="config-max-citas" class="swal2-input" 
-                               value="1" min="1" max="10" 
-                               style="width: 100%; margin: 0;">
-                        <small style="color: #666; display: block; margin-top: 5px;">
-                            Número máximo de citas que se pueden agendar en el mismo horario
-                        </small>
-                    </div>
-                </div>
-
-                <!-- Notificaciones -->
-                <div style="background: #d4edda; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-                    <h4 style="margin-bottom: 15px; color: #155724;">🔔 Notificaciones</h4>
-                    <div style="margin-bottom: 10px;">
-                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                            <input type="checkbox" id="config-notif-recordatorios" checked style="width: 20px; height: 20px;">
-                            <span>Enviar recordatorios de citas</span>
-                        </label>
-                    </div>
-                    <div style="margin-bottom: 10px;">
-                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                            <input type="checkbox" id="config-notif-pagos" checked style="width: 20px; height: 20px;">
-                            <span>Notificaciones de pagos próximos</span>
-                        </label>
-                    </div>
-                    <div>
-                        <label style="display: block; margin-bottom: 5px; margin-top: 15px; font-weight: 600;">
-                            Días de anticipación para recordatorios:
-                        </label>
-                        <input type="number" id="config-dias-anticipacion" class="swal2-input" 
-                               value="1" min="0" max="7" 
-                               style="width: 100%; margin: 0;">
-                    </div>
-                </div>
-
-                <!-- Días Laborales -->
-                <div style="background: #f8d7da; padding: 20px; border-radius: 12px;">
-                    <h4 style="margin-bottom: 15px; color: #721c24;">📅 Días Laborales</h4>
-                    <p style="margin-bottom: 15px; color: #666; font-size: 0.9rem;">
-                        ⚠️ Los días NO seleccionados aparecerán como "CERRADO" en el calendario
-                    </p>
-                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
-                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                            <input type="checkbox" id="config-dia-lunes" checked style="width: 20px; height: 20px;">
-                            <span>Lunes</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                            <input type="checkbox" id="config-dia-martes" checked style="width: 20px; height: 20px;">
-                            <span>Martes</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                            <input type="checkbox" id="config-dia-miercoles" checked style="width: 20px; height: 20px;">
-                            <span>Miércoles</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                            <input type="checkbox" id="config-dia-jueves" checked style="width: 20px; height: 20px;">
-                            <span>Jueves</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                            <input type="checkbox" id="config-dia-viernes" checked style="width: 20px; height: 20px;">
-                            <span>Viernes</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                            <input type="checkbox" id="config-dia-sabado" checked style="width: 20px; height: 20px;">
-                            <span>Sábado</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                            <input type="checkbox" id="config-dia-domingo" style="width: 20px; height: 20px;">
-                            <span>Domingo</span>
-                        </label>
-                    </div>
-                </div>
-            </div>
-        `,
-        width: '800px',
-        showCancelButton: true,
-        showDenyButton: true,
-        confirmButtonText: '💾 Guardar Configuración',
-        denyButtonText: '🔄 Restaurar Predeterminados',
-        cancelButtonText: '❌ Cancelar',
-        confirmButtonColor: '#28a745',
-        denyButtonColor: '#ffc107',
-        cancelButtonColor: '#6c757d',
-        customClass: {
-            container: 'swal-on-top',
-            popup: 'config-popup'
-        },
-        didOpen: () => {
-            // Cargar configuración guardada
-            cargarConfiguracion();
-
-            // Event listener para preview del logo
-            const logoInput = document.getElementById('config-logo');
-            const preview = document.getElementById('preview-logo');
-
-            logoInput.addEventListener('change', function (e) {
-                const file = e.target.files[0];
-                if (file) {
-                    // Validar tamaño (2MB máximo)
-                    if (file.size > 2 * 1024 * 1024) {
-                        Swal.showValidationMessage('El archivo es muy grande. Máximo 2MB');
-                        logoInput.value = '';
-                        return;
-                    }
-
-                    // Validar tipo
-                    if (!file.type.startsWith('image/')) {
-                        Swal.showValidationMessage('Solo se permiten imágenes');
-                        logoInput.value = '';
-                        return;
-                    }
-
-                    // Preview
-                    const reader = new FileReader();
-                    reader.onload = function (event) {
-                        preview.src = event.target.result;
-                        preview.style.display = 'block';
-                        document.getElementById('config-logo-url').value = event.target.result;
-                    };
-                    reader.readAsDataURL(file);
-                }
-            });
-        },
-        preConfirm: () => {
-            return {
-                logo: document.getElementById('config-logo-url').value,
-                horarioInicio: document.getElementById('config-hora-inicio').value,
-                horarioFin: document.getElementById('config-hora-fin').value,
-                intervalo: document.getElementById('config-intervalo').value,
-                maxCitas: document.getElementById('config-max-citas').value,
-                notifRecordatorios: document.getElementById('config-notif-recordatorios').checked,
-                notifPagos: document.getElementById('config-notif-pagos').checked,
-                diasAnticipacion: document.getElementById('config-dias-anticipacion').value,
-                nombreNegocio: document.getElementById('config-nombre-negocio').value,
-                telefono: document.getElementById('config-telefono').value,
-                direccion: document.getElementById('config-direccion').value,
-                diasLaborales: {
-                    lunes: document.getElementById('config-dia-lunes').checked,
-                    martes: document.getElementById('config-dia-martes').checked,
-                    miercoles: document.getElementById('config-dia-miercoles').checked,
-                    jueves: document.getElementById('config-dia-jueves').checked,
-                    viernes: document.getElementById('config-dia-viernes').checked,
-                    sabado: document.getElementById('config-dia-sabado').checked,
-                    domingo: document.getElementById('config-dia-domingo').checked
-                }
-            };
-        }
-    }).then(async (result) => {
-        if (result.isConfirmed) {
-            await guardarConfiguracion(result.value);
-        } else if (result.isDenied) {
-            await restaurarConfiguracionPredeterminada();
-        }
-    });
-}
-
-
-// Función auxiliar para generar opciones de horas
-function generarOpcionesHoras(horaSeleccionada) {
-    let options = '';
-    for (let i = 0; i <= 23; i++) {
-        const hora = i.toString().padStart(2, '0') + ':00';
-        const selected = i === horaSeleccionada ? 'selected' : '';
-        options += `<option value="${i}" ${selected}>${hora}</option>`;
-    }
-    return options;
-}
-
-// Cargar configuración guardada del localStorage
-async function cargarConfiguracion() {
-    try {
-        const response = await fetch('/api/configuracion');
-        if (!response.ok) throw new Error('Error al cargar configuración');
-        const config = await response.json();
-
-        if (!config) return;
-
-        // Cargar logo si existe
-        if (config.logo) {
-            const preview = document.getElementById('preview-logo');
-            if (preview) {
-                preview.src = config.logo;
-                preview.style.display = 'block';
-                document.getElementById('config-logo-url').value = config.logo;
-            }
-        }
-
-        // Cargar valores en el modal
-        document.getElementById('config-hora-inicio').value = config.horarioInicio || 8;
-        document.getElementById('config-hora-fin').value = config.horarioFin || 22;
-        document.getElementById('config-intervalo').value = config.intervalo || 30;
-        document.getElementById('config-max-citas').value = config.maxCitas || 1;
-        document.getElementById('config-notif-recordatorios').checked = config.notifRecordatorios !== false;
-        document.getElementById('config-notif-pagos').checked = config.notifPagos !== false;
-        document.getElementById('config-dias-anticipacion').value = config.diasAnticipacion || 1;
-        document.getElementById('config-nombre-negocio').value = config.nombreNegocio || '';
-        document.getElementById('config-telefono').value = config.telefono || '';
-        document.getElementById('config-direccion').value = config.direccion || '';
-
-        // Días laborales
-        if (config.diasLaborales) {
-            document.getElementById('config-dia-lunes').checked = config.diasLaborales.lunes !== false;
-            document.getElementById('config-dia-martes').checked = config.diasLaborales.martes !== false;
-            document.getElementById('config-dia-miercoles').checked = config.diasLaborales.miercoles !== false;
-            document.getElementById('config-dia-jueves').checked = config.diasLaborales.jueves !== false;
-            document.getElementById('config-dia-viernes').checked = config.diasLaborales.viernes !== false;
-            document.getElementById('config-dia-sabado').checked = config.diasLaborales.sabado !== false;
-            document.getElementById('config-dia-domingo').checked = config.diasLaborales.domingo || false;
-        }
-
-    } catch (error) {
-        console.error('Error cargando configuración desde Firebase:', error);
-    }
-}
-
-
-
-// Guardar configuración en localStorage y aplicar cambios
-async function guardarConfiguracion(config) {
-    try {
-        // Validaciones
-        if (parseInt(config.horarioInicio) >= parseInt(config.horarioFin)) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Error',
-                text: 'La hora de inicio debe ser menor que la hora de cierre',
-                customClass: { container: 'swal-on-top' }
-            });
-            return;
-        }
-
-        const algunDiaSeleccionado = Object.values(config.diasLaborales).some(dia => dia === true);
-        if (!algunDiaSeleccionado) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Error',
-                text: 'Debes seleccionar al menos un día laboral',
-                customClass: { container: 'swal-on-top' }
-            });
-            return;
-        }
-
-        // Mostrar loading
-        Swal.fire({
-            title: 'Guardando...',
-            html: 'Por favor espera',
-            allowOutsideClick: false,
-            didOpen: () => {
-                Swal.showLoading();
-            }
-        });
-
-        // Enviar configuración al server
-        const response = await fetch('/api/configuracion', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify(config)
-        });
-
-        // Verificar si la respuesta es JSON
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-            throw new Error('El servidor no devolvió JSON. Verifica la ruta /api/configuracion en server.js');
-        }
-
-        const data = await response.json();
-
-        if (response.ok && data.success) {
-            // Aplicar configuración localmente
-            BUSINESS_HOURS.start = parseInt(config.horarioInicio);
-            BUSINESS_HOURS.end = parseInt(config.horarioFin);
-            BUSINESS_HOURS.interval = parseInt(config.intervalo);
-
-            Swal.fire({
-                icon: 'success',
-                title: '✅ Configuración Guardada',
-                html: `
-                    <div style="text-align: left; padding: 15px;">
-                        <p><strong>✓</strong> Horario: ${config.horarioInicio}:00 - ${config.horarioFin}:00</p>
-                        <p><strong>✓</strong> Intervalo: ${config.intervalo} minutos</p>
-                        <p><strong>✓</strong> Máximo citas: ${config.maxCitas}</p>
-                        ${config.nombreNegocio ? `<p><strong>✓</strong> Negocio: ${config.nombreNegocio}</p>` : ''}
-                        <p style="margin-top: 15px; color: #666; font-size: 0.9rem;">
-                            Los cambios se aplicarán inmediatamente
-                        </p>
-                    </div>
-                `,
-                confirmButtonText: 'Aceptar',
-                customClass: { container: 'swal-on-top' }
-            }).then(() => {
-                // Recargar el header y la semana
-                actualizarHeaderDesdeFirebase();
-                renderWeek();
-            });
-        } else {
-            throw new Error(data.error || 'Error desconocido al guardar');
-        }
-
-    } catch (error) {
-        console.error('Error guardando configuración:', error);
-        Swal.fire({
-            icon: 'error',
-            title: '❌ Error',
-            html: `
-                <div style="text-align: left;">
-                    <p><strong>No se pudo guardar la configuración</strong></p>
-                    <p style="color: #666; font-size: 0.9rem; margin-top: 10px;">
-                        ${error.message}
-                    </p>
-                    <details style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
-                        <summary style="cursor: pointer; font-weight: 600;">Ver detalles técnicos</summary>
-                        <pre style="margin-top: 10px; font-size: 0.8rem; overflow-x: auto;">${error.stack || error.toString()}</pre>
-                    </details>
-                </div>
-            `,
-            customClass: { container: 'swal-on-top' },
-            width: '600px'
-        });
-    }
-}
-
-// Restaurar configuración predeterminada
-async function restaurarConfiguracionPredeterminada() {
-    const result = await Swal.fire({
-        title: '🔄 Restaurar Configuración',
-        text: '¿Estás seguro de restaurar la configuración predeterminada? Se perderán todos los cambios.',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Sí, restaurar',
-        cancelButtonText: 'Cancelar',
-        confirmButtonColor: '#ffc107',
-        customClass: { container: 'swal-on-top' }
-    });
-
-    if (result.isConfirmed) {
-        try {
-            // Mostrar loading
-            Swal.fire({
-                title: 'Restaurando...',
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
-            });
-
-            const response = await fetch('/api/configuracion', {
-                method: 'DELETE'
-            });
-
-            const data = await response.json();
-
-            if (response.ok && data.success) {
-                // Aplicar valores predeterminados localmente
-                BUSINESS_HOURS.start = 8;
-                BUSINESS_HOURS.end = 22;
-                BUSINESS_HOURS.interval = 30;
-
-                Swal.fire({
-                    icon: 'success',
-                    title: '✅ Restaurado',
-                    text: 'Configuración predeterminada restaurada exitosamente',
-                    timer: 2000,
-                    customClass: { container: 'swal-on-top' }
-                }).then(() => {
-                    actualizarHeaderDesdeFirebase();
-                    renderWeek();
-                    configuracion();
-                });
-            } else {
-                throw new Error(data.error || 'Error al restaurar');
-            }
-        } catch (error) {
-            console.error('Error restaurando configuración:', error);
-            Swal.fire({
-                icon: 'error',
-                title: 'Error',
-                text: 'No se pudo restaurar la configuración: ' + error.message,
-                customClass: { container: 'swal-on-top' }
-            });
-        }
-    }
-}
-
-
-// Función para obtener la configuración actual
-function obtenerConfiguracion() {
-    try {
-        const config = JSON.parse(localStorage.getItem('configuracionSistema') || '{}');
-        return {
-            horarioInicio: config.horarioInicio || 8,
-            horarioFin: config.horarioFin || 22,
-            intervalo: config.intervalo || 30,
-            maxCitas: config.maxCitas || 1,
-            notifRecordatorios: config.notifRecordatorios !== false,
-            notifPagos: config.notifPagos !== false,
-            diasAnticipacion: config.diasAnticipacion || 1,
-            nombreNegocio: config.nombreNegocio || '',
-            telefono: config.telefono || '',
-            direccion: config.direccion || '',
-            diasLaborales: config.diasLaborales || {
-                lunes: true,
-                martes: true,
-                miercoles: true,
-                jueves: true,
-                viernes: true,
-                sabado: true,
-                domingo: false
-            }
-        };
-    } catch (error) {
-        console.error('Error obteniendo configuración:', error);
-        return null;
-    }
-}
-
-// ============================================
 // FUNCIONES DEL BOT
 // ============================================
 function reconectarBot() {
     fetch('/reiniciar');
     Swal.fire('Reconectando...', '', 'info');
 }
+agregarEstilosLimites();
 
 function reiniciarServidor() {
     fetch('/reiniciar');
